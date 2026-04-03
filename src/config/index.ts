@@ -8,6 +8,8 @@ interface Config {
   databaseUrl: string;
   jwtSecret: string;
   redisUrl: string | undefined;
+  redisHost: string | undefined;
+  redisPort: number | undefined;
 }
 
 function getRequired(key: string): string {
@@ -33,6 +35,8 @@ const config: Config = {
   databaseUrl: getRequired('DATABASE_URL'),
   jwtSecret: getRequired('JWT_SECRET'),
   redisUrl: process.env.REDIS_URL,
+  redisHost: process.env.REDIS_HOST || 'localhost',
+  redisPort: process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT, 10) : 6379,
 };
 
 export default config;
