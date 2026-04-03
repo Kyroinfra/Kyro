@@ -14,7 +14,7 @@ router.get('/', async (req: Request, res: Response) => {
   res.status(statusCode).json({
     status,
     uptime: Math.floor((Date.now() - startTime) / 1000),
-    test: "Victor",
+    test: "Kyro",
     timestamp: new Date().toISOString(),
     database: dbHealthy ? 'connected' : 'disconnected',
   });
