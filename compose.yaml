@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: kyro_db
+    restart: always
+    environment:
+      POSTGRES_USER: kyro
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: kyro
+    ports:
+      - "5433:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+volumes:
+  pg_data:
