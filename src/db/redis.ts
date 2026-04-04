@@ -29,3 +29,12 @@ export async function closeRedis(): Promise<void> {
     redis = null;
   }
 }
+
+export async function healthCheck(): Promise<boolean> {
+  try {
+    const result = await getRedis().ping();
+    return result === 'PONG';
+  } catch {
+    return false;
+  }
+}
