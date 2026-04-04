@@ -1,7 +1,26 @@
 services:
+  api:
+    build:
+      context: ./apps/api
+    restart: on-failure
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://kyro:secret@postgres:5432/kyro
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - kyro-net
+
   postgres:
     image: postgres:16
     container_name: kyro_db
+    restart: on-failure
     environment:
       POSTGRES_USER: kyro
       POSTGRES_PASSWORD: secret
@@ -10,10 +29,13 @@ services:
       - "5433:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
+    networks:
+      - kyro-net
 
   pgadmin:
     image: dpage/pgadmin4
     container_name: pgadmin
+    restart: on-failure
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@admin.com
       PGADMIN_DEFAULT_PASSWORD: admin
@@ -21,15 +43,22 @@ services:
       - "5050:80"
     depends_on:
       - postgres
+    networks:
+      - kyro-net
 
   redis:
     image: redis:7
     container_name: kyro_redis
-    ports:
-      - "6379:6379"
+    restart: on-failure
     volumes:
       - redis_data:/data
+    networks:
+      - kyro-net
 
 volumes:
   pg_data:
   redis_data:
+
+networks:
+  kyro-net:
+    driver: bridge

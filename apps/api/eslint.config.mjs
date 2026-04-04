@@ -5,8 +5,17 @@ import tseslint from "typescript-eslint";
 export default defineConfig(
   js.configs.recommended,
   ...tseslint.configs.recommended,
-
   {
+    languageOptions: {
+      parserOptions: {
+        tsconfigRootDir: __dirname,
+        project: [
+          "./apps/api/tsconfig.json",
+          "./apps/web/tsconfig.json",  // add when web exists
+        ],
+      },
+    },
+
     rules: {
       "no-unused-vars": "off",
       "@typescript-eslint/no-unused-vars": [
