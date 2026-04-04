@@ -10,6 +10,7 @@ import keysRouter from './routes/keys';
 import filesRouter from './routes/files';
 import usageRouter from './routes/usage';
 import { usageLoggerMiddleware } from './middleware/usageLogger';
+import { rateLimitMiddleware } from './middleware/rateLimit';
 import { runMigrations } from './db/schema';
 
 const app = express();
@@ -22,7 +23,7 @@ app.use('/health', healthRouter);
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/org', orgRouter);
 app.use('/api/v1/keys', keysRouter);
-app.use('/api/v1/files', usageLoggerMiddleware, filesRouter);
+app.use('/api/v1/files', rateLimitMiddleware, usageLoggerMiddleware, filesRouter);
 app.use('/api/v1/usage', usageRouter);
 
 app.use(notFoundHandler);

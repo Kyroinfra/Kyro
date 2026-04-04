@@ -1,10 +1,35 @@
 import { RateLimiterRedis, RateLimiterMemory, RateLimiterRes } from 'rate-limiter-flexible';
-import { getRedis } from '../db/redis';
+import { getRedis, isRedisAvailable } from '../db/redis';
 import { Request, Response, NextFunction } from 'express';
 
 let rateLimiter: RateLimiterRedis | RateLimiterMemory | null = null;
+let useMemoryFallback = false;
 
 export function getRateLimiter(): RateLimiterRedis | RateLimiterMemory {
+  const redisAvailable = isRedisAvailable();
+
+  if (useMemoryFallback) {
+    if (!rateLimiter || rateLimiter instanceof RateLimiterRedis) {
+      rateLimiter = new RateLimiterMemory({
+        keyPrefix: 'rl:',
+        points: 100,
+        duration: 60,
+      });
+    }
+    return rateLimiter;
+  }
+
+  if (!redisAvailable) {
+    console.warn('Redis unavailable, using memory rate limiter');
+    useMemoryFallback = true;
+    rateLimiter = new RateLimiterMemory({
+      keyPrefix: 'rl:',
+      points: 100,
+      duration: 60,
+    });
+    return rateLimiter;
+  }
+
   if (!rateLimiter) {
     try {
       const redis = getRedis();
@@ -16,7 +41,8 @@ export function getRateLimiter(): RateLimiterRedis | RateLimiterMemory {
         blockDuration: 0,
       });
     } catch (error) {
-      console.warn('Redis not available, using memory rate limiter');
+      console.warn('Failed to create Redis rate limiter, using memory fallback');
+      useMemoryFallback = true;
       rateLimiter = new RateLimiterMemory({
         keyPrefix: 'rl:',
         points: 100,

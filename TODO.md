@@ -1,2 +1,2 @@
-- [ ] Implement Redis
-- [ ] Automate Postman more
+- [x] Implement Redis
+- [x] Automate Postman more
