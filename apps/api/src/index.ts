@@ -15,17 +15,18 @@ import { runMigrations } from './db/migrate';
 
 const app = express();
 
+// Trust NGINX proxy only 
+app.set('trust proxy', 1);
+
 app.use(cors());
 app.use(express.json());
 app.use(requestLogger);
-
 app.use('/health', healthRouter);
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/org', orgRouter);
 app.use('/api/v1/keys', keysRouter);
 app.use('/api/v1/files', rateLimitMiddleware, usageLoggerMiddleware, filesRouter);
 app.use('/api/v1/usage', usageRouter);
-
 app.use(notFoundHandler);
 app.use(errorHandler);
 
@@ -52,5 +53,4 @@ async function start() {
 }
 
 start();
-
 export default app;
