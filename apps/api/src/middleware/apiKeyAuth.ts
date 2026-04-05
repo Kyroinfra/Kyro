@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import pool from '../db';
+import { query } from '../db';
 import { hashApiKey } from '../lib/apiKey';
 
 export interface ApiKeyRequest extends Request {
@@ -23,23 +23,27 @@ export async function apiKeyAuthMiddleware(
   const hash = hashApiKey(rawKey);
 
   try {
-    const result = await pool.query(
+    const result = await query<{
+      id: string;
+      org_id: string;
+      scopes: string[];
+    }>(
       `SELECT id, org_id, scopes FROM api_keys 
        WHERE key_hash = $1 AND revoked_at IS NULL`,
       [hash]
     );
 
-    if (result.rows.length === 0) {
+    if (result.length === 0) {
       res.status(401).json({ error: 'Invalid API key' });
       return;
     }
 
-    const apiKey = result.rows[0];
+    const apiKey = result[0];
     req.orgId = apiKey.org_id;
     req.apiKeyId = apiKey.id;
     req.apiKeyScopes = apiKey.scopes || ['read'];
 
-    await pool.query(
+    await query(
       'UPDATE api_keys SET last_used_at = NOW() WHERE id = $1',
       [apiKey.id]
     );

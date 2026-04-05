@@ -1,5 +1,5 @@
 import { Router, Response, Request } from 'express';
-import pool from '../db';
+import { query } from '../db';
 import { generateApiKey } from '../lib/apiKey';
 import { authMiddleware } from '../middleware/auth';
 import { requireRole } from '../middleware/auth';
@@ -31,7 +31,13 @@ router.post('/', authMiddleware, requireRole('owner', 'admin'), async (req: Requ
     const { name, scopes } = parseResult.data;
     const { raw, hash, prefix } = generateApiKey();
 
-    const result = await pool.query(
+    const result = await query<{
+      id: string;
+      name: string;
+      key_prefix: string;
+      scopes: string[];
+      created_at: Date;
+    }>(
       `INSERT INTO api_keys (org_id, user_id, name, key_hash, key_prefix, scopes)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id, name, key_prefix, scopes, created_at`,
@@ -39,7 +45,7 @@ router.post('/', authMiddleware, requireRole('owner', 'admin'), async (req: Requ
     );
 
     res.status(201).json({
-      ...result.rows[0],
+      ...result[0],
       key: raw,
     });
   } catch (error) {
@@ -57,7 +63,15 @@ router.get('/', authMiddleware, requireRole('owner', 'admin', 'member'), async (
       return;
     }
 
-    const result = await pool.query(
+    const result = await query<{
+      id: string;
+      name: string;
+      key_prefix: string;
+      scopes: string[];
+      last_used_at: Date | null;
+      revoked_at: Date | null;
+      created_at: Date;
+    }>(
       `SELECT id, name, key_prefix, scopes, last_used_at, revoked_at, created_at
        FROM api_keys
        WHERE org_id = $1
@@ -65,7 +79,7 @@ router.get('/', authMiddleware, requireRole('owner', 'admin', 'member'), async (
       [orgId]
     );
 
-    res.json(result.rows);
+    res.json(result);
   } catch (error) {
     console.error('Error listing API keys:', error);
     res.status(500).json({ error: 'Failed to list API keys' });
@@ -82,14 +96,14 @@ router.delete('/:id', authMiddleware, requireRole('owner', 'admin'), async (req:
       return;
     }
 
-    const result = await pool.query(
+    const result = await query<{ id: string }>(
       `UPDATE api_keys SET revoked_at = NOW()
        WHERE id = $1 AND org_id = $2 AND revoked_at IS NULL
        RETURNING id`,
       [id, orgId]
     );
 
-    if (result.rows.length === 0) {
+    if (result.length === 0) {
       res.status(404).json({ error: 'API key not found or already revoked' });
       return;
     }

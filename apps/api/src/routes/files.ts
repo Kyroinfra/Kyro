@@ -1,9 +1,10 @@
 import { Router, Response, Request } from 'express';
-import pool from '../db';
+import { db } from '../db';
+import { apiKeys, organisations, files } from '../db/schema';
+import { eq, and, isNull, sql } from 'drizzle-orm';
 import { apiKeyAuthMiddleware, ApiKeyRequest, requireScope } from '../middleware/apiKeyAuth';
 import { upload } from '../middleware/upload';
 import { saveFile, deleteFile, getFilePath } from '../lib/storage';
-import { z } from 'zod';
 
 const router = Router();
 
@@ -11,59 +12,59 @@ router.use(apiKeyAuthMiddleware);
 
 router.post('/', requireScope('write'), upload.single('file'), async (req: ApiKeyRequest, res: Response) => {
   try {
-    const orgId = req.orgId;
-    const apiKeyId = req.apiKeyId;
-
-    if (!orgId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
+    const orgId = req.orgId!;
+    const apiKeyId = req.apiKeyId!;
 
     if (!req.file) {
       res.status(400).json({ error: 'No file uploaded' });
       return;
     }
 
-    const userResult = await pool.query(
-      'SELECT user_id FROM api_keys WHERE id = $1',
-      [apiKeyId]
-    );
-    const userId = userResult.rows[0]?.user_id;
+    const keyResult = await db.select({ userId: apiKeys.userId })
+      .from(apiKeys)
+      .where(eq(apiKeys.id, apiKeyId));
+    const userId = keyResult[0]?.userId;
 
-    const orgResult = await pool.query(
-      'SELECT storage_limit FROM organisations WHERE id = $1',
-      [orgId]
-    );
+    const orgResult = await db.select({ storageLimit: organisations.storageLimit })
+      .from(organisations)
+      .where(eq(organisations.id, orgId));
+    const storageLimit = orgResult[0]?.storageLimit || 1073741824;
 
-    const storageLimit = orgResult.rows[0]?.storage_limit || 1073741824;
-
-    const usageResult = await pool.query(
-      'SELECT COALESCE(SUM(size_bytes), 0) as used FROM files WHERE org_id = $1 AND deleted_at IS NULL',
-      [orgId]
-    );
-
-    const usedStorage = parseInt(usageResult.rows[0]?.used || '0', 10);
+    const usageResult = await db.select({
+      used: sql`COALESCE(SUM(${files.sizeBytes}), 0)`.mapWith(Number)
+    })
+      .from(files)
+      .where(and(eq(files.orgId, orgId), isNull(files.deletedAt)));
+    const usedStorage = usageResult[0]?.used || 0;
 
     if (usedStorage + req.file.size > storageLimit) {
       res.status(403).json({ error: 'Storage quota exceeded' });
       return;
     }
 
-    const { storageKey, fileId } = await saveFile(orgId, {
+    const { storageKey } = await saveFile(orgId, {
       originalname: req.file.originalname,
       buffer: req.file.buffer,
       mimetype: req.file.mimetype,
       size: req.file.size,
     });
 
-    const result = await pool.query(
-      `INSERT INTO files (org_id, uploaded_by, name, storage_key, mime_type, size_bytes)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, name, mime_type, size_bytes, created_at`,
-      [orgId, userId, req.file.originalname, storageKey, req.file.mimetype, req.file.size]
-    );
+    const result = await db.insert(files).values({
+      orgId,
+      uploadedBy: userId!,
+      name: req.file.originalname,
+      storageKey,
+      mimeType: req.file.mimetype,
+      sizeBytes: req.file.size,
+    }).returning({
+      id: files.id,
+      name: files.name,
+      mimeType: files.mimeType,
+      sizeBytes: files.sizeBytes,
+      createdAt: files.createdAt,
+    });
 
-    res.status(201).json(result.rows[0]);
+    res.status(201).json(result[0]);
   } catch (error) {
     console.error('Error uploading file:', error);
     res.status(500).json({ error: 'Failed to upload file' });
@@ -72,22 +73,20 @@ router.post('/', requireScope('write'), upload.single('file'), async (req: ApiKe
 
 router.get('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
   try {
-    const orgId = req.orgId;
+    const orgId = req.orgId!;
 
-    if (!orgId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
+    const result = await db.select({
+      id: files.id,
+      name: files.name,
+      mimeType: files.mimeType,
+      sizeBytes: files.sizeBytes,
+      createdAt: files.createdAt,
+    })
+      .from(files)
+      .where(and(eq(files.orgId, orgId), isNull(files.deletedAt)))
+      .orderBy(sql`${files.createdAt} DESC`);
 
-    const result = await pool.query(
-      `SELECT id, name, mime_type, size_bytes, created_at
-       FROM files
-       WHERE org_id = $1 AND deleted_at IS NULL
-       ORDER BY created_at DESC`,
-      [orgId]
-    );
-
-    res.json(result.rows);
+    res.json(result);
   } catch (error) {
     console.error('Error listing files:', error);
     res.status(500).json({ error: 'Failed to list files' });
@@ -96,32 +95,30 @@ router.get('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) 
 
 router.get('/:id', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
   try {
-    const orgId = req.orgId;
+    const orgId = req.orgId!;
     const { id } = req.params;
 
-    if (!orgId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
+    const fileResult = await db.select({
+      id: files.id,
+      name: files.name,
+      storageKey: files.storageKey,
+      mimeType: files.mimeType,
+      sizeBytes: files.sizeBytes,
+    })
+      .from(files)
+      .where(and(eq(files.id, id as string), eq(files.orgId, orgId), isNull(files.deletedAt)));
 
-    const fileResult = await pool.query(
-      `SELECT id, name, storage_key, mime_type, size_bytes
-       FROM files
-       WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL`,
-      [id, orgId]
-    );
-
-    if (fileResult.rows.length === 0) {
+    if (fileResult.length === 0) {
       res.status(404).json({ error: 'File not found' });
       return;
     }
 
-    const file = fileResult.rows[0];
-    const filePath = getFilePath(file.storage_key);
+    const file = fileResult[0];
+    const filePath = getFilePath(file.storageKey);
 
-    res.setHeader('Content-Type', file.mime_type);
+    res.setHeader('Content-Type', file.mimeType || 'application/octet-stream');
     res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
-    res.setHeader('Content-Length', file.size_bytes);
+    res.setHeader('Content-Length', file.sizeBytes);
 
     const stream = require('fs').createReadStream(filePath);
     stream.pipe(res);
@@ -133,31 +130,23 @@ router.get('/:id', requireScope('read'), async (req: ApiKeyRequest, res: Respons
 
 router.delete('/:id', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
   try {
-    const orgId = req.orgId;
+    const orgId = req.orgId!;
     const { id } = req.params;
 
-    if (!orgId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
+    const fileResult = await db.select({ storageKey: files.storageKey })
+      .from(files)
+      .where(and(eq(files.id, id as string), eq(files.orgId, orgId), isNull(files.deletedAt)));
 
-    const fileResult = await pool.query(
-      `SELECT storage_key FROM files
-       WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL`,
-      [id, orgId]
-    );
-
-    if (fileResult.rows.length === 0) {
+    if (fileResult.length === 0) {
       res.status(404).json({ error: 'File not found' });
       return;
     }
 
-    await pool.query(
-      'UPDATE files SET deleted_at = NOW() WHERE id = $1',
-      [id]
-    );
+    await db.update(files)
+      .set({ deletedAt: new Date() })
+      .where(eq(files.id, id as string));
 
-    await deleteFile(fileResult.rows[0].storage_key);
+    await deleteFile(fileResult[0].storageKey);
 
     res.json({ message: 'File deleted', id });
   } catch (error) {

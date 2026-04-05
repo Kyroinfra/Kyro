@@ -11,7 +11,7 @@ import filesRouter from './routes/files';
 import usageRouter from './routes/usage';
 import { usageLoggerMiddleware } from './middleware/usageLogger';
 import { rateLimitMiddleware } from './middleware/rateLimit';
-import { runMigrations } from './db/schema';
+import { runMigrations } from './db/migrate';
 
 const app = express();
 
