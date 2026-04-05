@@ -15,7 +15,7 @@ services:
 
   api:
     build:
-      context: ./apps/api
+      context: ./api
     restart: unless-stopped
     # No ports exposed — all traffic goes through NGINX
     environment:
