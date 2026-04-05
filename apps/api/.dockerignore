@@ -1,6 +1,7 @@
 # apps/api/.dockerignore
 node_modules
 .env
+.env.example
 p.md
 TODO.md
 dist
