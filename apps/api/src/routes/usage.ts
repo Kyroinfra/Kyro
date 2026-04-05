@@ -1,5 +1,5 @@
 import { Router, Response, Request } from 'express';
-import pool from '../db';
+import { query } from '../db';
 import { authMiddleware } from '../middleware/auth';
 
 const router = Router();
@@ -13,7 +13,11 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
-    const usageResult = await pool.query(
+    const usageResult = await query<{
+      total_requests: string;
+      total_bytes_in: string;
+      total_bytes_out: string;
+    }>(
       `SELECT 
         COUNT(*) as total_requests,
         COALESCE(SUM(bytes_in), 0) as total_bytes_in,
@@ -23,14 +27,14 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
       [orgId]
     );
 
-    const storageResult = await pool.query(
+    const storageResult = await query<{ total_storage: string }>(
       `SELECT COALESCE(SUM(size_bytes), 0) as total_storage
        FROM files
        WHERE org_id = $1 AND deleted_at IS NULL`,
       [orgId]
     );
 
-    const apiKeysResult = await pool.query(
+    const apiKeysResult = await query<{ active_keys: string }>(
       `SELECT COUNT(*) as active_keys
        FROM api_keys
        WHERE org_id = $1 AND revoked_at IS NULL`,
@@ -38,11 +42,11 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
     );
 
     res.json({
-      total_requests: parseInt(usageResult.rows[0]?.total_requests || '0', 10),
-      total_bytes_in: parseInt(usageResult.rows[0]?.total_bytes_in || '0', 10),
-      total_bytes_out: parseInt(usageResult.rows[0]?.total_bytes_out || '0', 10),
-      total_storage: parseInt(storageResult.rows[0]?.total_storage || '0', 10),
-      active_api_keys: parseInt(apiKeysResult.rows[0]?.active_keys || '0', 10),
+      total_requests: parseInt(usageResult[0]?.total_requests || '0', 10),
+      total_bytes_in: parseInt(usageResult[0]?.total_bytes_in || '0', 10),
+      total_bytes_out: parseInt(usageResult[0]?.total_bytes_out || '0', 10),
+      total_storage: parseInt(storageResult[0]?.total_storage || '0', 10),
+      active_api_keys: parseInt(apiKeysResult[0]?.active_keys || '0', 10),
     });
   } catch (error) {
     console.error('Error getting usage:', error);
@@ -73,7 +77,7 @@ router.get('/daily', authMiddleware, async (req: Request, res: Response) => {
       params.push(defaultStart);
     }
 
-    const result = await pool.query(
+    const result = await query(
       `SELECT 
         DATE(created_at) as date,
         COUNT(*) as requests,
@@ -86,7 +90,7 @@ router.get('/daily', authMiddleware, async (req: Request, res: Response) => {
       params
     );
 
-    res.json(result.rows);
+    res.json(result);
   } catch (error) {
     console.error('Error getting daily usage:', error);
     res.status(500).json({ error: 'Failed to get daily usage' });
