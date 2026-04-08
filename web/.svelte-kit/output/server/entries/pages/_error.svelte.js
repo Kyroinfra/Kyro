@@ -1,66 +1,6 @@
-import { n as noop, g as getContext, d as attr, a as attr_class, s as stringify, b as escape_html, f as derived, h as store_get, u as unsubscribe_stores } from "../../chunks/renderer.js";
-import "clsx";
-import "@sveltejs/kit/internal";
-import "../../chunks/exports.js";
-import "../../chunks/utils.js";
-import "@sveltejs/kit/internal/server";
-import "../../chunks/root.js";
-const is_legacy = noop.toString().includes("$$") || /function \w+\(\) \{\}/.test(noop.toString());
-const placeholder_url = "a:";
-if (is_legacy) {
-  ({
-    data: {},
-    form: null,
-    error: null,
-    params: {},
-    route: { id: null },
-    state: {},
-    status: -1,
-    url: new URL(placeholder_url)
-  });
-}
-const getStores = () => {
-  const stores = getContext("__svelte__");
-  return {
-    /** @type {typeof page} */
-    page: {
-      subscribe: stores.page.subscribe
-    },
-    /** @type {typeof navigating} */
-    navigating: {
-      subscribe: stores.navigating.subscribe
-    },
-    /** @type {typeof updated} */
-    updated: stores.updated
-  };
-};
-const page = {
-  subscribe(fn) {
-    const store = getStores().page;
-    return store.subscribe(fn);
-  }
-};
-function Button($$renderer, $$props) {
-  let {
-    variant = "primary",
-    size = "md",
-    disabled = false,
-    loading = false,
-    type = "button",
-    onclick,
-    children
-  } = $$props;
-  $$renderer.push(`<button${attr("type", type)}${attr("disabled", disabled, true)}${attr_class(`btn btn-${stringify(variant)} btn-${stringify(size)}`, "svelte-1xko78n", { "loading": loading })}>`);
-  if (loading) {
-    $$renderer.push("<!--[0-->");
-    $$renderer.push(`<span class="spinner svelte-1xko78n"></span>`);
-  } else {
-    $$renderer.push("<!--[-1-->");
-  }
-  $$renderer.push(`<!--]--> <span${attr_class("content svelte-1xko78n", void 0, { "hidden": loading })}>`);
-  children($$renderer);
-  $$renderer.push(`<!----></span></button>`);
-}
+import { b as escape_html, d as derived, c as store_get, u as unsubscribe_stores } from "../../chunks/renderer.js";
+import { p as page } from "../../chunks/stores.js";
+import { B as Button } from "../../chunks/Button.js";
 function _error($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
     var $$store_subs;

@@ -1,0 +1,2918 @@
+# Prompt:
+This is my current codebase
+
+# File collection from: /home/nyxox/Documents/Projects/Kyro/web/src
+# Generated: 2026-04-08 20:11:23
+------------------------------------------------------------
+
+## app.css
+
+:root {
+	--color-bg: #0d0d0f;
+	--color-bg-2: #17171a;
+	--color-bg-3: #1f1f24;
+	--color-border: #2a2a30;
+	--color-text: #e8e8ed;
+	--color-text-muted: #6b6b78;
+	--color-accent: #6366f1;
+	--color-accent-hover: #4f52d9;
+	--color-danger: #ef4444;
+	--color-success: #22c55e;
+	--color-warning: #f59e0b;
+
+	--space-1: 4px;
+	--space-2: 8px;
+	--space-3: 12px;
+	--space-4: 16px;
+	--space-5: 20px;
+	--space-6: 24px;
+	--space-8: 32px;
+	--space-10: 40px;
+	--space-12: 48px;
+
+	--font-sans: 'Inter', system-ui, sans-serif;
+	--font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+	--font-size-xs: 11px;
+	--font-size-sm: 13px;
+	--font-size-base: 14px;
+	--font-size-lg: 16px;
+	--font-size-xl: 20px;
+	--font-size-2xl: 24px;
+	--font-size-3xl: 30px;
+
+	--radius-sm: 4px;
+	--radius-md: 8px;
+	--radius-lg: 12px;
+	--radius-full: 9999px;
+
+	--shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+	--shadow-md: 0 4px 12px rgba(0,0,0,0.5);
+}
+
+*, *::before, *::after {
+	box-sizing: border-box;
+	margin: 0;
+	padding: 0;
+}
+
+html, body {
+	height: 100%;
+	font-family: var(--font-sans);
+	font-size: var(--font-size-base);
+	line-height: 1.5;
+	color: var(--color-text);
+	background-color: var(--color-bg);
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+a {
+	color: var(--color-accent);
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+button {
+	font-family: inherit;
+	cursor: pointer;
+}
+
+input, textarea, select {
+	font-family: inherit;
+	font-size: inherit;
+}
+
+code, pre {
+	font-family: var(--font-mono);
+}
+
+::selection {
+	background-color: var(--color-accent);
+	color: white;
+}
+
+::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+::-webkit-scrollbar-track {
+	background: var(--color-bg-2);
+}
+
+::-webkit-scrollbar-thumb {
+	background: var(--color-border);
+	border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: var(--color-text-muted);
+}
+------------------------------------------------------------
+
+## app.d.ts
+
+/// <reference types="@sveltejs/kit" />
+
+declare global {
+	namespace App {
+		interface Locals {
+			user: {
+				id: string;
+				orgId: string;
+				role: 'owner' | 'admin' | 'member';
+			} | null;
+		}
+	}
+}
+
+export {};
+------------------------------------------------------------
+
+## app.html
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<link rel="icon" href="%sveltekit.assets%/favicon.png" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<link rel="preconnect" href="https://fonts.googleapis.com">
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+		%sveltekit.head%
+	</head>
+	<body data-sveltekit-preload-data="hover">
+		<div style="display: contents">%sveltekit.body%</div>
+	</body>
+</html>
+------------------------------------------------------------
+
+## hooks.server.ts
+
+import jwt from 'jsonwebtoken';
+import type { Handle } from '@sveltejs/kit';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'Kyro';
+const COOKIE_NAME = 'kyro_token';
+
+export const handle: Handle = async ({ event, resolve }) => {
+	const token = event.cookies.get(COOKIE_NAME);
+
+	if (token) {
+		try {
+			const decoded = jwt.verify(token, JWT_SECRET) as {
+				userId: string;
+				orgId: string;
+				role: 'owner' | 'admin' | 'member';
+			};
+			event.locals.user = {
+				id: decoded.userId,
+				orgId: decoded.orgId,
+				role: decoded.role
+			};
+		} catch {
+			event.cookies.delete(COOKIE_NAME, { path: '/' });
+		}
+	}
+
+	return resolve(event);
+};
+------------------------------------------------------------
+
+## lib/api/auth.ts
+
+import { request, type ApiError } from './client';
+import type { User, Org } from '$lib/stores/auth';
+
+export interface RegisterInput {
+	email: string;
+	password: string;
+	orgName: string;
+}
+
+export interface LoginInput {
+	email: string;
+	password: string;
+}
+
+export interface AuthResponse {
+	token: string;
+	user: {
+		id: string;
+		email: string;
+		role: string;
+		orgId: string;
+	};
+}
+
+export interface MeResponse {
+	id: string;
+	email: string;
+	role: string;
+	orgId: string;
+}
+
+export interface OrgResponse {
+	id: string;
+	name: string;
+	slug: string;
+	plan: string;
+}
+
+export async function register(data: RegisterInput): Promise<AuthResponse> {
+	return request<AuthResponse>('/api/v1/auth/register', {
+		method: 'POST',
+		body: data
+	});
+}
+
+export async function login(data: LoginInput): Promise<AuthResponse> {
+	return request<AuthResponse>('/api/v1/auth/login', {
+		method: 'POST',
+		body: data
+	});
+}
+
+export async function getMe(): Promise<MeResponse> {
+	return request<MeResponse>('/api/v1/auth/me');
+}
+
+export async function getOrg(): Promise<OrgResponse> {
+	return request<OrgResponse>('/api/v1/org');
+}
+------------------------------------------------------------
+
+## lib/api/client.ts
+
+import { browser } from '$app/environment';
+
+export class ApiError extends Error {
+	constructor(public status: number, message: string) {
+		super(message);
+		this.name = 'ApiError';
+	}
+}
+
+type RequestOptions = {
+	method?: string;
+	body?: unknown;
+	token?: string;
+	apiKey?: string;
+};
+
+function getBaseUrl(): string {
+	if (browser) {
+		return ''; // browser uses relative URLs, nginx routes them
+	}
+	// Server-side: use internal Docker network URL
+	return process.env.INTERNAL_API_URL || 'http://api:3000';
+}
+
+export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+	const { method = 'GET', body, token, apiKey } = options;
+
+	const headers: Record<string, string> = {
+		'Content-Type': 'application/json'
+	};
+
+	if (token) headers['Authorization'] = `Bearer ${token}`;
+	if (apiKey) headers['X-API-Key'] = apiKey;
+
+	const url = `${getBaseUrl()}${path}`;
+
+	const res = await fetch(url, {
+		method,
+		headers,
+		body: body ? JSON.stringify(body) : undefined
+	});
+
+	if (!res.ok) {
+		const error = await res.json().catch(() => ({ error: res.statusText }));
+		throw new ApiError(res.status, error.error ?? 'Request failed');
+	}
+
+	return res.json();
+}
+------------------------------------------------------------
+
+## lib/api/health.ts
+
+import { request, type ApiError } from './client';
+
+export interface HealthResponse {
+	status: 'ok' | 'degraded';
+	uptime: number;
+	test: string;
+	timestamp: string;
+	database: 'connected' | 'disconnected';
+	redis: 'connected' | 'disconnected';
+}
+
+export async function getHealth(): Promise<HealthResponse> {
+	return request<HealthResponse>('/health');
+}
+
+export async function checkHealth(): Promise<{ ok: boolean; error?: string }> {
+	try {
+		await getHealth();
+		return { ok: true };
+	} catch (err) {
+		const error = err instanceof ApiError ? err.message : 'Failed to connect';
+		return { ok: false, error };
+	}
+}
+------------------------------------------------------------
+
+## lib/components/ui/Badge.svelte
+
+<script lang="ts">
+	interface Props {
+		variant?: 'default' | 'success' | 'warning' | 'danger' | 'info';
+		size?: 'sm' | 'md';
+		children: import('svelte').Snippet;
+	}
+
+	let {
+		variant = 'default',
+		size = 'sm',
+		children
+	}: Props = $props();
+</script>
+
+<span class="badge badge-{variant} badge-{size}">
+	{@render children()}
+</span>
+
+<style>
+	.badge {
+		display: inline-flex;
+		align-items: center;
+		font-weight: 500;
+		border-radius: var(--radius-full);
+		white-space: nowrap;
+	}
+
+	.badge-sm {
+		height: 20px;
+		padding: 0 var(--space-2);
+		font-size: var(--font-size-xs);
+	}
+
+	.badge-md {
+		height: 24px;
+		padding: 0 var(--space-3);
+		font-size: var(--font-size-sm);
+	}
+
+	.badge-default {
+		background: var(--color-bg-3);
+		color: var(--color-text-muted);
+	}
+
+	.badge-success {
+		background: rgba(34, 197, 94, 0.15);
+		color: var(--color-success);
+	}
+
+	.badge-warning {
+		background: rgba(245, 158, 11, 0.15);
+		color: var(--color-warning);
+	}
+
+	.badge-danger {
+		background: rgba(239, 68, 68, 0.15);
+		color: var(--color-danger);
+	}
+
+	.badge-info {
+		background: rgba(99, 102, 241, 0.15);
+		color: var(--color-accent);
+	}
+</style>
+------------------------------------------------------------
+
+## lib/components/ui/Button.svelte
+
+<script lang="ts">
+	import { type Snippet } from 'svelte';
+
+	interface Props {
+		variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
+		size?: 'sm' | 'md' | 'lg';
+		disabled?: boolean;
+		loading?: boolean;
+		type?: 'button' | 'submit' | 'reset';
+		onclick?: (e: MouseEvent) => void;
+		children: Snippet;
+	}
+
+	let {
+		variant = 'primary',
+		size = 'md',
+		disabled = false,
+		loading = false,
+		type = 'button',
+		onclick,
+		children
+	}: Props = $props();
+</script>
+
+<button
+	{type}
+	{disabled}
+	class="btn btn-{variant} btn-{size}"
+	class:loading
+	onclick={onclick}
+>
+	{#if loading}
+		<span class="spinner"></span>
+	{/if}
+	<span class="content" class:hidden={loading}>
+		{@render children()}
+	</span>
+</button>
+
+<style>
+	.btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--space-2);
+		font-weight: 500;
+		border: 1px solid transparent;
+		border-radius: var(--radius-md);
+		transition: all 0.15s ease;
+		position: relative;
+		white-space: nowrap;
+	}
+
+	.btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.btn-sm {
+		height: 32px;
+		padding: 0 var(--space-3);
+		font-size: var(--font-size-sm);
+	}
+
+	.btn-md {
+		height: 40px;
+		padding: 0 var(--space-4);
+		font-size: var(--font-size-base);
+	}
+
+	.btn-lg {
+		height: 48px;
+		padding: 0 var(--space-6);
+		font-size: var(--font-size-lg);
+	}
+
+	.btn-primary {
+		background: var(--color-accent);
+		color: white;
+	}
+
+	.btn-primary:hover:not(:disabled) {
+		background: var(--color-accent-hover);
+	}
+
+	.btn-secondary {
+		background: var(--color-bg-2);
+		color: var(--color-text);
+		border-color: var(--color-border);
+	}
+
+	.btn-secondary:hover:not(:disabled) {
+		background: var(--color-bg-3);
+		border-color: var(--color-text-muted);
+	}
+
+	.btn-danger {
+		background: var(--color-danger);
+		color: white;
+	}
+
+	.btn-danger:hover:not(:disabled) {
+		background: #dc2626;
+	}
+
+	.btn-ghost {
+		background: transparent;
+		color: var(--color-text-muted);
+	}
+
+	.btn-ghost:hover:not(:disabled) {
+		color: var(--color-text);
+		background: var(--color-bg-2);
+	}
+
+	.content {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+	}
+
+	.content.hidden {
+		visibility: hidden;
+	}
+
+	.spinner {
+		position: absolute;
+		width: 16px;
+		height: 16px;
+		border: 2px solid currentColor;
+		border-top-color: transparent;
+		border-radius: 50%;
+		animation: spin 0.6s linear infinite;
+	}
+
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+</style>
+------------------------------------------------------------
+
+## lib/components/ui/Card.svelte
+
+<script lang="ts">
+	import { type Snippet } from 'svelte';
+
+	interface Props {
+		variant?: 'default' | 'bordered' | 'flat';
+		padding?: 'none' | 'sm' | 'md' | 'lg';
+		children: Snippet;
+	}
+
+	let {
+		variant = 'default',
+		padding = 'md',
+		children
+	}: Props = $props();
+</script>
+
+<div class="card card-{variant} padding-{padding}">
+	{@render children()}
+</div>
+
+<style>
+	.card {
+		background: var(--color-bg-2);
+		border-radius: var(--radius-lg);
+	}
+
+	.card-default {
+		border: 1px solid var(--color-border);
+		box-shadow: var(--shadow-sm);
+	}
+
+	.card-bordered {
+		border: 1px solid var(--color-border);
+	}
+
+	.card-flat {
+		border: none;
+	}
+
+	.padding-none {
+		padding: 0;
+	}
+
+	.padding-sm {
+		padding: var(--space-3);
+	}
+
+	.padding-md {
+		padding: var(--space-4);
+	}
+
+	.padding-lg {
+		padding: var(--space-6);
+	}
+</style>
+------------------------------------------------------------
+
+## lib/components/ui/Input.svelte
+
+<script lang="ts">
+	interface Props {
+		label?: string;
+		type?: 'text' | 'email' | 'password' | 'number';
+		placeholder?: string;
+		value?: string;
+		error?: string;
+		disabled?: boolean;
+		required?: boolean;
+		oninput?: (e: Event) => void;
+		onchange?: (e: Event) => void;
+	}
+
+	let {
+		label,
+		type = 'text',
+		placeholder = '',
+		value = $bindable(''),
+		error,
+		disabled = false,
+		required = false,
+		oninput,
+		onchange
+	}: Props = $props();
+</script>
+
+<div class="input-wrapper">
+	{#if label}
+		<label class="label">
+			{label}
+			{#if required}<span class="required">*</span>{/if}
+		</label>
+	{/if}
+	<input
+		{type}
+		{placeholder}
+		bind:value
+		{disabled}
+		{required}
+		class="input"
+		class:error={!!error}
+		oninput={oninput}
+		onchange={onchange}
+	/>
+	{#if error}
+		<span class="error-text">{error}</span>
+	{/if}
+</div>
+
+<style>
+	.input-wrapper {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+	}
+
+	.label {
+		font-size: var(--font-size-sm);
+		font-weight: 500;
+		color: var(--color-text);
+	}
+
+	.required {
+		color: var(--color-danger);
+		margin-left: 2px;
+	}
+
+	.input {
+		height: 40px;
+		padding: 0 var(--space-3);
+		background: var(--color-bg-2);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		color: var(--color-text);
+		font-size: var(--font-size-base);
+		transition: border-color 0.15s ease, box-shadow 0.15s ease;
+	}
+
+	.input::placeholder {
+		color: var(--color-text-muted);
+	}
+
+	.input:focus {
+		outline: none;
+		border-color: var(--color-accent);
+		box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+	}
+
+	.input:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.input.error {
+		border-color: var(--color-danger);
+	}
+
+	.input.error:focus {
+		box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+	}
+
+	.error-text {
+		font-size: var(--font-size-sm);
+		color: var(--color-danger);
+	}
+</style>
+------------------------------------------------------------
+
+## lib/components/ui/Spinner.svelte
+
+<script lang="ts">
+	interface Props {
+		size?: 'sm' | 'md' | 'lg';
+	}
+
+	let { size = 'md' }: Props = $props();
+</script>
+
+<div class="spinner spinner-{size}"></div>
+
+<style>
+	.spinner {
+		border: 2px solid var(--color-bg-3);
+		border-top-color: var(--color-accent);
+		border-radius: 50%;
+		animation: spin 0.6s linear infinite;
+	}
+
+	.spinner-sm {
+		width: 16px;
+		height: 16px;
+	}
+
+	.spinner-md {
+		width: 24px;
+		height: 24px;
+	}
+
+	.spinner-lg {
+		width: 40px;
+		height: 40px;
+	}
+
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+</style>
+------------------------------------------------------------
+
+## lib/components/ui/Toast.svelte
+
+<script lang="ts">
+	import { toast, type Toast } from '$lib/stores/toast';
+
+	let toasts: Toast[] = $state([]);
+
+	toast.subscribe((value) => {
+		toasts = value;
+	});
+
+	function getIcon(type: Toast['type']) {
+		switch (type) {
+			case 'success':
+				return '✓';
+			case 'error':
+				return '✕';
+			case 'warning':
+				return '⚠';
+			case 'info':
+				return 'ℹ';
+		}
+	}
+</script>
+
+{#if toasts.length > 0}
+	<div class="toast-container">
+		{#each toasts as t (t.id)}
+			<div class="toast toast-{t.type}">
+				<span class="icon">{getIcon(t.type)}</span>
+				<span class="message">{t.message}</span>
+				<button class="close" onclick={() => toast.remove(t.id)}>✕</button>
+			</div>
+		{/each}
+	</div>
+{/if}
+
+<style>
+	.toast-container {
+		position: fixed;
+		bottom: var(--space-4);
+		right: var(--space-4);
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+		z-index: 9999;
+		max-width: 400px;
+	}
+
+	.toast {
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
+		padding: var(--space-3) var(--space-4);
+		background: var(--color-bg-2);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		box-shadow: var(--shadow-md);
+		animation: slideIn 0.2s ease;
+	}
+
+	.toast-success {
+		border-left: 3px solid var(--color-success);
+	}
+
+	.toast-error {
+		border-left: 3px solid var(--color-danger);
+	}
+
+	.toast-warning {
+		border-left: 3px solid var(--color-warning);
+	}
+
+	.toast-info {
+		border-left: 3px solid var(--color-accent);
+	}
+
+	.icon {
+		font-size: var(--font-size-sm);
+		font-weight: 600;
+	}
+
+	.toast-success .icon {
+		color: var(--color-success);
+	}
+
+	.toast-error .icon {
+		color: var(--color-danger);
+	}
+
+	.toast-warning .icon {
+		color: var(--color-warning);
+	}
+
+	.toast-info .icon {
+		color: var(--color-accent);
+	}
+
+	.message {
+		flex: 1;
+		font-size: var(--font-size-sm);
+		color: var(--color-text);
+	}
+
+	.close {
+		background: none;
+		border: none;
+		color: var(--color-text-muted);
+		font-size: var(--font-size-xs);
+		padding: var(--space-1);
+		cursor: pointer;
+		opacity: 0.7;
+		transition: opacity 0.15s;
+	}
+
+	.close:hover {
+		opacity: 1;
+	}
+
+	@keyframes slideIn {
+		from {
+			transform: translateX(100%);
+			opacity: 0;
+		}
+		to {
+			transform: translateX(0);
+			opacity: 1;
+		}
+	}
+</style>
+------------------------------------------------------------
+
+## lib/stores/auth.ts
+
+import { writable, derived } from 'svelte/store';
+
+export type UserRole = 'owner' | 'admin' | 'member';
+
+export interface User {
+	id: string;
+	email: string;
+	role: UserRole;
+	orgId: string;
+	orgName?: string;
+	plan?: string;
+}
+
+export interface Org {
+	id: string;
+	name: string;
+	slug: string;
+	plan: string;
+}
+
+export const user = writable<User | null>(null);
+export const org = writable<Org | null>(null);
+export const isAuthenticated = derived(user, ($user) => $user !== null);
+export const isOwner = derived(user, ($user) => $user?.role === 'owner');
+export const isAdmin = derived(user, ($user) => $user?.role === 'admin' || $user?.role === 'owner');
+------------------------------------------------------------
+
+## lib/stores/toast.ts
+
+import { writable } from 'svelte/store';
+
+export type ToastType = 'success' | 'error' | 'warning' | 'info';
+
+export interface Toast {
+	id: number;
+	type: ToastType;
+	message: string;
+}
+
+let toastId = 0;
+
+function createToastStore() {
+	const { subscribe, update } = writable<Toast[]>([]);
+
+	function addToast(type: ToastType, message: string, duration = 5000) {
+		const id = ++toastId;
+		update((toasts) => [...toasts, { id, type, message }]);
+
+		if (duration > 0) {
+			setTimeout(() => {
+				removeToast(id);
+			}, duration);
+		}
+
+		return id;
+	}
+
+	function removeToast(id: number) {
+		update((toasts) => toasts.filter((t) => t.id !== id));
+	}
+
+	return {
+		subscribe,
+		success: (message: string, duration?: number) => addToast('success', message, duration),
+		error: (message: string, duration?: number) => addToast('error', message, duration),
+		warning: (message: string, duration?: number) => addToast('warning', message, duration),
+		info: (message: string, duration?: number) => addToast('info', message, duration),
+		remove: removeToast
+	};
+}
+
+export const toast = createToastStore();
+------------------------------------------------------------
+
+## lib/types/index.ts
+
+export type UserRole = 'owner' | 'admin' | 'member';
+
+export interface User {
+	id: string;
+	email: string;
+	role: UserRole;
+	orgId: string;
+}
+
+export interface Org {
+	id: string;
+	name: string;
+	slug: string;
+	plan: string;
+}
+
+export interface ApiKey {
+	id: string;
+	name: string;
+	prefix: string;
+	scopes: string[];
+	createdAt: string;
+	lastUsedAt: string | null;
+}
+
+export interface FileItem {
+	id: string;
+	name: string;
+	size: number;
+	mimeType: string;
+	uploadedAt: string;
+	uploadedBy: string;
+}
+
+export interface UsageStats {
+	totalRequests: number;
+	totalBandwidth: number;
+	storageUsed: number;
+}
+
+export interface DailyUsage {
+	date: string;
+	requests: number;
+	bandwidthIn: number;
+	bandwidthOut: number;
+}
+------------------------------------------------------------
+
+## routes/+1page.svelte.bak
+
+<script lang="ts">
+	import { onMount } from 'svelte';
+
+	let status = '';
+	let loading = true;
+	let error = '';
+
+	onMount(async () => {
+		try {
+			const res = await fetch('/api/v1/health');
+
+			if (!res.ok) {
+				throw new Error(`HTTP error: ${res.status}`);
+			}
+
+			status = await res.text(); // or res.json() if your API returns JSON
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Unknown error';
+		} finally {
+			loading = false;
+		}
+	});
+</script>
+
+<svelte:head>
+	<title>Health Check</title>
+</svelte:head>
+
+<main>
+	<h1>Backend Health</h1>
+
+	{#if loading}
+		<p>Checking...</p>
+	{:else if error}
+		<p style="color: red;">Error: {error}</p>
+	{:else}
+		<p style="color: green;">Status: {status}</p>
+	{/if}
+</main>
+------------------------------------------------------------
+
+## routes/(app)/dashboard/+page.svelte
+
+<script lang="ts">
+	import Card from '$lib/components/ui/Card.svelte';
+	import Badge from '$lib/components/ui/Badge.svelte';
+	import { user } from '$lib/stores/auth';
+</script>
+
+<svelte:head>
+	<title>Dashboard - Kyro</title>
+</svelte:head>
+
+<div class="dashboard">
+	<header class="dashboard-header">
+		<div>
+			<h1>Welcome back</h1>
+			<p class="subtitle">Here's what's happening with your API</p>
+		</div>
+	</header>
+
+	<div class="stats-grid">
+		<Card>
+			<div class="stat-card">
+				<span class="stat-icon">🔑</span>
+				<div class="stat-info">
+					<span class="stat-value">0</span>
+					<span class="stat-label">API Keys</span>
+				</div>
+			</div>
+		</Card>
+		<Card>
+			<div class="stat-card">
+				<span class="stat-icon">📊</span>
+				<div class="stat-info">
+					<span class="stat-value">0</span>
+					<span class="stat-label">API Requests</span>
+				</div>
+			</div>
+		</Card>
+		<Card>
+			<div class="stat-card">
+				<span class="stat-icon">📁</span>
+				<div class="stat-info">
+					<span class="stat-value">0 MB</span>
+					<span class="stat-label">Storage Used</span>
+				</div>
+			</div>
+		</Card>
+		<Card>
+			<div class="stat-card">
+				<span class="stat-icon">👥</span>
+				<div class="stat-info">
+					<span class="stat-value">1</span>
+					<span class="stat-label">Team Members</span>
+				</div>
+			</div>
+		</Card>
+	</div>
+
+	<div class="quick-actions">
+		<h2>Quick Actions</h2>
+		<div class="actions-grid">
+			<a href="/dashboard/keys" class="action-card">
+				<span class="action-icon">🔑</span>
+				<span class="action-label">Create API Key</span>
+			</a>
+			<a href="/dashboard/files" class="action-card">
+				<span class="action-icon">📤</span>
+				<span class="action-label">Upload File</span>
+			</a>
+			<a href="/dashboard/usage" class="action-card">
+				<span class="action-icon">📈</span>
+				<span class="action-label">View Analytics</span>
+			</a>
+			<a href="/dashboard/settings" class="action-card">
+				<span class="action-icon">⚙️</span>
+				<span class="action-label">Settings</span>
+			</a>
+		</div>
+	</div>
+</div>
+
+<style>
+	.dashboard {
+		max-width: 1200px;
+	}
+
+	.dashboard-header {
+		margin-bottom: var(--space-6);
+	}
+
+	.dashboard-header h1 {
+		font-size: var(--font-size-2xl);
+		font-weight: 600;
+		color: var(--color-text);
+	}
+
+	.subtitle {
+		color: var(--color-text-muted);
+		margin-top: var(--space-1);
+	}
+
+	.stats-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+		gap: var(--space-4);
+		margin-bottom: var(--space-8);
+	}
+
+	.stat-card {
+		display: flex;
+		align-items: center;
+		gap: var(--space-4);
+	}
+
+	.stat-icon {
+		font-size: 32px;
+	}
+
+	.stat-info {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.stat-value {
+		font-size: var(--font-size-2xl);
+		font-weight: 600;
+		color: var(--color-text);
+	}
+
+	.stat-label {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+	}
+
+	.quick-actions h2 {
+		font-size: var(--font-size-lg);
+		font-weight: 600;
+		color: var(--color-text);
+		margin-bottom: var(--space-4);
+	}
+
+	.actions-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+		gap: var(--space-4);
+	}
+
+	.action-card {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: var(--space-2);
+		padding: var(--space-6);
+		background: var(--color-bg-2);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-lg);
+		text-decoration: none;
+		transition: all 0.15s ease;
+	}
+
+	.action-card:hover {
+		background: var(--color-bg-3);
+		border-color: var(--color-accent);
+	}
+
+	.action-icon {
+		font-size: 24px;
+	}
+
+	.action-label {
+		font-size: var(--font-size-sm);
+		font-weight: 500;
+		color: var(--color-text);
+	}
+</style>
+------------------------------------------------------------
+
+## routes/(app)/+layout.server.ts
+
+import { redirect } from '@sveltejs/kit';
+import type { LayoutServerLoad } from './$types';
+
+export const load = (async ({ locals }) => {
+	if (!locals.user) {
+		throw redirect(302, '/login');
+	}
+	return {
+		user: locals.user
+	};
+}) satisfies LayoutServerLoad;
+------------------------------------------------------------
+
+## routes/(app)/+layout.svelte
+
+<script lang="ts">
+	import type { Snippet } from 'svelte';
+	import { page } from '$app/stores';
+	import { user } from '$lib/stores/auth';
+
+	interface Props {
+		data: { user: { id: string; orgId: string; role: string } };
+		children: Snippet;
+	}
+
+	let { data, children }: Props = $props();
+
+	$effect(() => {
+		user.set({
+			id: data.user.id,
+			email: '',
+			role: data.user.role as 'owner' | 'admin' | 'member',
+			orgId: data.user.orgId
+		});
+	});
+
+	const navItems = [
+		{ href: '/dashboard', label: 'Dashboard', icon: '🏠' },
+		{ href: '/dashboard/keys', label: 'API Keys', icon: '🔑' },
+		{ href: '/dashboard/files', label: 'Files', icon: '📁' },
+		{ href: '/dashboard/usage', label: 'Usage', icon: '📊' },
+		{ href: '/dashboard/settings', label: 'Settings', icon: '⚙️' }
+	];
+
+	function getInitials(email: string): string {
+		return email ? email.substring(0, 2).toUpperCase() : 'U';
+	}
+
+	function handleLogout() {
+		fetch('/logout', { method: 'POST' }).then(() => {
+			window.location.href = '/login';
+		});
+	}
+</script>
+
+<div class="app-layout">
+	<aside class="sidebar">
+		<div class="sidebar-header">
+			<a href="/" class="logo">
+				<span class="logo-icon">K</span>
+				<span class="logo-text">Kyro</span>
+			</a>
+		</div>
+
+		<nav class="sidebar-nav">
+			{#each navItems as item}
+				<a href={item.href} class="nav-item" class:active={$page.url.pathname === item.href || ($page.url.pathname.startsWith(item.href) && item.href !== '/dashboard')}>
+					<span class="nav-icon">{item.icon}</span>
+					<span class="nav-label">{item.label}</span>
+				</a>
+			{/each}
+		</nav>
+
+		<div class="sidebar-footer">
+			<button class="logout-btn" onclick={handleLogout}>
+				<span>📤</span>
+				<span>Logout</span>
+			</button>
+		</div>
+	</aside>
+
+	<div class="main-wrapper">
+		<header class="topbar">
+			<div class="topbar-left">
+				<h1 class="page-title">Dashboard</h1>
+			</div>
+			<div class="topbar-right">
+				<div class="user-menu">
+					<div class="user-avatar">
+						{getInitials($user?.email || '')}
+					</div>
+					<div class="user-info">
+						<span class="user-email">{$user?.email || 'User'}</span>
+						<span class="user-role">{$user?.role}</span>
+					</div>
+				</div>
+			</div>
+		</header>
+
+		<main class="main-content">
+			{@render children()}
+		</main>
+	</div>
+</div>
+
+<style>
+	.app-layout {
+		display: flex;
+		min-height: 100vh;
+	}
+
+	.sidebar {
+		width: 240px;
+		background: var(--color-bg-2);
+		border-right: 1px solid var(--color-border);
+		display: flex;
+		flex-direction: column;
+		flex-shrink: 0;
+	}
+
+	.sidebar-header {
+		padding: var(--space-4);
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	.logo {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		font-size: var(--font-size-lg);
+		font-weight: 700;
+		color: var(--color-text);
+		text-decoration: none;
+	}
+
+	.logo-icon {
+		width: 28px;
+		height: 28px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--color-accent);
+		color: white;
+		border-radius: var(--radius-sm);
+	}
+
+	.sidebar-nav {
+		flex: 1;
+		padding: var(--space-3);
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+	}
+
+	.nav-item {
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
+		padding: var(--space-3);
+		border-radius: var(--radius-md);
+		color: var(--color-text-muted);
+		text-decoration: none;
+		font-size: var(--font-size-sm);
+		font-weight: 500;
+		transition: all 0.15s ease;
+	}
+
+	.nav-item:hover {
+		background: var(--color-bg-3);
+		color: var(--color-text);
+	}
+
+	.nav-item.active {
+		background: var(--color-accent);
+		color: white;
+	}
+
+	.nav-icon {
+		font-size: var(--font-size-base);
+	}
+
+	.sidebar-footer {
+		padding: var(--space-3);
+		border-top: 1px solid var(--color-border);
+	}
+
+	.logout-btn {
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
+		width: 100%;
+		padding: var(--space-3);
+		background: none;
+		border: none;
+		border-radius: var(--radius-md);
+		color: var(--color-text-muted);
+		font-size: var(--font-size-sm);
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.logout-btn:hover {
+		background: var(--color-bg-3);
+		color: var(--color-danger);
+	}
+
+	.main-wrapper {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+	}
+
+	.topbar {
+		height: 64px;
+		padding: 0 var(--space-6);
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		border-bottom: 1px solid var(--color-border);
+		background: var(--color-bg);
+	}
+
+	.page-title {
+		font-size: var(--font-size-lg);
+		font-weight: 600;
+		color: var(--color-text);
+	}
+
+	.user-menu {
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
+	}
+
+	.user-avatar {
+		width: 36px;
+		height: 36px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--color-accent);
+		color: white;
+		border-radius: var(--radius-full);
+		font-size: var(--font-size-xs);
+		font-weight: 600;
+	}
+
+	.user-info {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.user-email {
+		font-size: var(--font-size-sm);
+		font-weight: 500;
+		color: var(--color-text);
+	}
+
+	.user-role {
+		font-size: var(--font-size-xs);
+		color: var(--color-text-muted);
+		text-transform: capitalize;
+	}
+
+	.main-content {
+		flex: 1;
+		padding: var(--space-6);
+		overflow-y: auto;
+	}
+</style>
+------------------------------------------------------------
+
+## routes/(auth)/+layout.svelte
+
+<script lang="ts">
+	import type { Snippet } from 'svelte';
+
+	interface Props {
+		children: Snippet;
+	}
+
+	let { children }: Props = $props();
+</script>
+
+<div class="auth-layout">
+	<div class="auth-container">
+		{@render children()}
+	</div>
+</div>
+
+<style>
+	.auth-layout {
+		min-height: 100vh;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: var(--space-4);
+		background: var(--color-bg);
+	}
+
+	.auth-container {
+		width: 100%;
+		max-width: 400px;
+	}
+</style>
+------------------------------------------------------------
+
+## routes/(auth)/login/+page.server.ts
+
+import { fail, redirect, type Redirect } from '@sveltejs/kit';
+import type { Actions } from './$types';
+import { login } from '$lib/api/auth';
+import { ApiError } from '$lib/api/client';
+
+const COOKIE_NAME = 'kyro_token';
+
+export const actions: Actions = {
+	default: async ({ request, cookies }) => {
+		const formData = await request.formData();
+		const email = formData.get('email') as string;
+		const password = formData.get('password') as string;
+
+		if (!email || !password) {
+			return fail(400, { error: 'Email and password are required' });
+		}
+
+		try {
+			const response = await login({ email, password });
+
+			cookies.set(COOKIE_NAME, response.token, {
+				path: '/',
+				httpOnly: true,
+				sameSite: 'lax',
+				secure: process.env.NODE_ENV === 'production',
+				maxAge: 60 * 60 * 24 * 7
+			});
+
+			throw redirect(302, '/dashboard');
+		} catch (err) {
+			if ((err as any)?.status === 302 || (err as any)?.status === 301) {
+				throw err;
+			}
+			if (err instanceof ApiError) {
+				if (err.status === 401) {
+					return fail(401, { error: 'Invalid email or password' });
+				}
+				return fail(err.status, { error: err.message });
+			}
+			if (err instanceof Response) {
+				const data = await err.json().catch(() => ({ error: 'Login failed' }));
+				return fail(err.status, { error: data.error || 'Login failed' });
+			}
+			console.error('Login error:', err);
+			return fail(500, { error: 'An unexpected error occurred' });
+		}
+	}
+};
+------------------------------------------------------------
+
+## routes/(auth)/login/+page.svelte
+
+<script lang="ts">
+	import Button from '$lib/components/ui/Button.svelte';
+	import Input from '$lib/components/ui/Input.svelte';
+	import Card from '$lib/components/ui/Card.svelte';
+
+	let email = $state('');
+	let password = $state('');
+	let loading = $state(false);
+</script>
+
+<svelte:head>
+	<title>Sign In - Kyro</title>
+</svelte:head>
+
+<div class="auth-page">
+	<div class="auth-header">
+		<a href="/" class="logo">
+			<span class="logo-icon">K</span>
+			<span class="logo-text">Kyro</span>
+		</a>
+	</div>
+
+	<Card padding="lg">
+		<div class="auth-form">
+			<h1>Welcome back</h1>
+			<p class="subtitle">Sign in to your account</p>
+
+			<form method="POST">
+				<Input
+					label="Email"
+					type="email"
+					placeholder="you@example.com"
+					bind:value={email}
+					required
+				/>
+				<Input
+					label="Password"
+					type="password"
+					placeholder="••••••••"
+					bind:value={password}
+					required
+				/>
+				<Button type="submit" {loading} disabled={loading}>
+					{loading ? 'Signing in...' : 'Sign In'}
+				</Button>
+			</form>
+
+			<p class="footer-text">
+				Don't have an account? <a href="/register">Create one</a>
+			</p>
+		</div>
+	</Card>
+</div>
+
+<style>
+	.auth-page {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-6);
+	}
+
+	.auth-header {
+		text-align: center;
+	}
+
+	.logo {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-2);
+		font-size: var(--font-size-xl);
+		font-weight: 700;
+		color: var(--color-text);
+		text-decoration: none;
+	}
+
+	.logo-icon {
+		width: 32px;
+		height: 32px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--color-accent);
+		color: white;
+		border-radius: var(--radius-md);
+	}
+
+	.auth-form {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-4);
+	}
+
+	.auth-form h1 {
+		font-size: var(--font-size-2xl);
+		font-weight: 600;
+		color: var(--color-text);
+	}
+
+	.subtitle {
+		color: var(--color-text-muted);
+		margin-top: calc(-1 * var(--space-2));
+	}
+
+	form {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-4);
+		margin-top: var(--space-2);
+	}
+
+	form :global(.input-wrapper) {
+		margin-bottom: 0;
+	}
+
+	form :global(button) {
+		margin-top: var(--space-2);
+		width: 100%;
+	}
+
+	.footer-text {
+		text-align: center;
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+		margin-top: var(--space-4);
+	}
+
+	.footer-text a {
+		color: var(--color-accent);
+		font-weight: 500;
+	}
+</style>
+------------------------------------------------------------
+
+## routes/(auth)/register/+page.server.ts
+
+import { fail, redirect } from '@sveltejs/kit';
+import type { Actions } from './$types';
+import { register } from '$lib/api/auth';
+import { ApiError } from '$lib/api/client';
+
+const COOKIE_NAME = 'kyro_token';
+
+export const actions: Actions = {
+	default: async ({ request, cookies }) => {
+		const formData = await request.formData();
+		const orgName = formData.get('orgName') as string;
+		const email = formData.get('email') as string;
+		const password = formData.get('password') as string;
+
+		if (!orgName || !email || !password) {
+			return fail(400, { error: 'All fields are required' });
+		}
+
+		try {
+			const response = await register({ orgName, email, password });
+
+			cookies.set(COOKIE_NAME, response.token, {
+				path: '/',
+				httpOnly: true,
+				sameSite: 'lax',
+				secure: process.env.NODE_ENV === 'production',
+				maxAge: 60 * 60 * 24 * 7
+			});
+
+			throw redirect(302, '/dashboard');
+		} catch (err) {
+			if ((err as any)?.status === 302 || (err as any)?.status === 301) {
+				throw err;
+			}
+			if (err instanceof ApiError) {
+				return fail(err.status, { error: err.message });
+			}
+			if (err instanceof Response) {
+				const data = await err.json().catch(() => ({ error: 'Registration failed' }));
+				return fail(err.status, { error: data.error || 'Registration failed' });
+			}
+			console.error('Registration error:', err);
+			return fail(500, { error: 'An unexpected error occurred' });
+		}
+	}
+};
+------------------------------------------------------------
+
+## routes/(auth)/register/+page.svelte
+
+<script lang="ts">
+	import Button from '$lib/components/ui/Button.svelte';
+	import Input from '$lib/components/ui/Input.svelte';
+	import Card from '$lib/components/ui/Card.svelte';
+
+	let orgName = $state('');
+	let email = $state('');
+	let password = $state('');
+	let loading = $state(false);
+</script>
+
+<svelte:head>
+	<title>Create Account - Kyro</title>
+</svelte:head>
+
+<div class="auth-page">
+	<div class="auth-header">
+		<a href="/" class="logo">
+			<span class="logo-icon">K</span>
+			<span class="logo-text">Kyro</span>
+		</a>
+	</div>
+
+	<Card padding="lg">
+		<div class="auth-form">
+			<h1>Create your account</h1>
+			<p class="subtitle">Start building with Kyro</p>
+
+			<form method="POST">
+				<Input
+					label="Organization Name"
+					type="text"
+					placeholder="My Company"
+					bind:value={orgName}
+					required
+				/>
+				<Input
+					label="Email"
+					type="email"
+					placeholder="you@example.com"
+					bind:value={email}
+					required
+				/>
+				<Input
+					label="Password"
+					type="password"
+					placeholder="••••••••"
+					bind:value={password}
+					required
+				/>
+				<Button type="submit" {loading} disabled={loading}>
+					{loading ? 'Creating account...' : 'Create Account'}
+				</Button>
+			</form>
+
+			<p class="footer-text">
+				Already have an account? <a href="/login">Sign in</a>
+			</p>
+		</div>
+	</Card>
+</div>
+
+<style>
+	.auth-page {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-6);
+	}
+
+	.auth-header {
+		text-align: center;
+	}
+
+	.logo {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-2);
+		font-size: var(--font-size-xl);
+		font-weight: 700;
+		color: var(--color-text);
+		text-decoration: none;
+	}
+
+	.logo-icon {
+		width: 32px;
+		height: 32px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--color-accent);
+		color: white;
+		border-radius: var(--radius-md);
+	}
+
+	.auth-form {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-4);
+	}
+
+	.auth-form h1 {
+		font-size: var(--font-size-2xl);
+		font-weight: 600;
+		color: var(--color-text);
+	}
+
+	.subtitle {
+		color: var(--color-text-muted);
+		margin-top: calc(-1 * var(--space-2));
+	}
+
+	form {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-4);
+		margin-top: var(--space-2);
+	}
+
+	form :global(.input-wrapper) {
+		margin-bottom: 0;
+	}
+
+	form :global(button) {
+		margin-top: var(--space-2);
+		width: 100%;
+	}
+
+	.footer-text {
+		text-align: center;
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+		margin-top: var(--space-4);
+	}
+
+	.footer-text a {
+		color: var(--color-accent);
+		font-weight: 500;
+	}
+</style>
+------------------------------------------------------------
+
+## routes/+error.svelte
+
+<script lang="ts">
+	import { page } from '$app/stores';
+	import Button from '$lib/components/ui/Button.svelte';
+
+	const status = $derived($page.status);
+	const error = $derived($page.error);
+</script>
+
+<div class="error-page">
+	<div class="error-content">
+		<h1 class="error-code">{status}</h1>
+		<p class="error-message">{error?.message ?? 'An error occurred'}</p>
+		<p class="error-description">
+			{#if status === 404}
+				The page you're looking for doesn't exist.
+			{:else if status === 403}
+				You don't have permission to access this resource.
+			{:else if status === 500}
+				Something went wrong on our end. Please try again later.
+			{:else}
+				An unexpected error occurred.
+			{/if}
+		</p>
+		<div class="error-actions">
+			<Button onclick={() => window.history.back()}>Go Back</Button>
+			<Button variant="secondary" onclick={() => (window.location.href = '/')}>Go Home</Button>
+		</div>
+	</div>
+</div>
+
+<style>
+	.error-page {
+		min-height: 100vh;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: var(--space-4);
+	}
+
+	.error-content {
+		text-align: center;
+		max-width: 400px;
+	}
+
+	.error-code {
+		font-size: 120px;
+		font-weight: 700;
+		line-height: 1;
+		color: var(--color-accent);
+		opacity: 0.3;
+	}
+
+	.error-message {
+		font-size: var(--font-size-xl);
+		font-weight: 600;
+		color: var(--color-text);
+		margin-top: var(--space-4);
+	}
+
+	.error-description {
+		font-size: var(--font-size-base);
+		color: var(--color-text-muted);
+		margin-top: var(--space-2);
+	}
+
+	.error-actions {
+		display: flex;
+		gap: var(--space-3);
+		justify-content: center;
+		margin-top: var(--space-6);
+	}
+</style>
+------------------------------------------------------------
+
+## routes/health/+page.svelte
+
+<script lang="ts">
+	import { onMount } from 'svelte';
+	import { getHealth, checkHealth, type HealthResponse } from '$lib/api/health';
+	import Card from '$lib/components/ui/Card.svelte';
+	import Badge from '$lib/components/ui/Badge.svelte';
+	import Spinner from '$lib/components/ui/Spinner.svelte';
+
+	let loading = $state(true);
+	let health: HealthResponse | null = $state(null);
+	let error = $state<string | null>(null);
+
+	onMount(async () => {
+		try {
+			health = await getHealth();
+			error = null;
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to connect to backend';
+		} finally {
+			loading = false;
+		}
+	});
+
+	function formatUptime(seconds: number): string {
+		const days = Math.floor(seconds / 86400);
+		const hours = Math.floor((seconds % 86400) / 3600);
+		const mins = Math.floor((seconds % 3600) / 60);
+		if (days > 0) return `${days}d ${hours}h`;
+		if (hours > 0) return `${hours}h ${mins}m`;
+		return `${mins}m`;
+	}
+
+	function formatTimestamp(ts: string): string {
+		return new Date(ts).toLocaleString();
+	}
+</script>
+
+<div class="health-page">
+	<header class="page-header">
+		<h1>System Health</h1>
+		<p class="subtitle">Backend connection status</p>
+	</header>
+
+	{#if loading}
+		<div class="loading">
+			<Spinner size="lg" />
+			<p>Checking backend status...</p>
+		</div>
+	{:else if error}
+		<Card>
+			<div class="status-card error">
+				<div class="status-icon error">✕</div>
+				<div class="status-info">
+					<h2>Connection Failed</h2>
+					<p class="error-message">{error}</p>
+					<p class="hint">Make sure the backend container is running</p>
+				</div>
+			</div>
+		</Card>
+	{:else if health}
+		<div class="status-grid">
+			<Card>
+				<div class="status-card">
+					<div class="status-icon" class:success={health.status === 'ok'} class:degraded={health.status === 'degraded'}>
+						{health.status === 'ok' ? '✓' : '⚠'}
+					</div>
+					<div class="status-info">
+						<h2>Status: <Badge variant={health.status === 'ok' ? 'success' : 'warning'}>{health.status}</Badge></h2>
+						<p class="muted">Server is responding</p>
+					</div>
+				</div>
+			</Card>
+
+			<Card>
+				<div class="detail-card">
+					<h3>Uptime</h3>
+					<p class="detail-value">{formatUptime(health.uptime)}</p>
+					<p class="muted">Since last restart</p>
+				</div>
+			</Card>
+
+			<Card>
+				<div class="detail-card">
+					<h3>Timestamp</h3>
+					<p class="detail-value">{formatTimestamp(health.timestamp)}</p>
+					<p class="muted">Server time</p>
+				</div>
+			</Card>
+
+			<Card>
+				<div class="detail-card">
+					<h3>Database</h3>
+					<p class="detail-value">
+						<Badge variant={health.database === 'connected' ? 'success' : 'danger'}>
+							{health.database}
+						</Badge>
+					</p>
+					<p class="muted">PostgreSQL connection</p>
+				</div>
+			</Card>
+
+			<Card>
+				<div class="detail-card">
+					<h3>Redis</h3>
+					<p class="detail-value">
+						<Badge variant={health.redis === 'connected' ? 'success' : 'danger'}>
+							{health.redis}
+						</Badge>
+					</p>
+					<p class="muted">Redis connection</p>
+				</div>
+			</Card>
+		</div>
+	{/if}
+</div>
+
+<style>
+	.health-page {
+		max-width: 800px;
+		margin: 0 auto;
+		padding: var(--space-8) var(--space-4);
+	}
+
+	.page-header {
+		margin-bottom: var(--space-8);
+	}
+
+	.page-header h1 {
+		font-size: var(--font-size-3xl);
+		font-weight: 700;
+		color: var(--color-text);
+	}
+
+	.subtitle {
+		font-size: var(--font-size-base);
+		color: var(--color-text-muted);
+		margin-top: var(--space-2);
+	}
+
+	.loading {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: var(--space-4);
+		padding: var(--space-12);
+		color: var(--color-text-muted);
+	}
+
+	.status-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+		gap: var(--space-4);
+	}
+
+	.status-card {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--space-4);
+	}
+
+	.status-card.error {
+		flex-direction: column;
+		align-items: center;
+		text-align: center;
+		padding: var(--space-4);
+	}
+
+	.status-icon {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 48px;
+		height: 48px;
+		border-radius: var(--radius-full);
+		font-size: var(--font-size-xl);
+		font-weight: 700;
+		flex-shrink: 0;
+	}
+
+	.status-icon.success {
+		background: rgba(34, 197, 94, 0.15);
+		color: var(--color-success);
+	}
+
+	.status-icon.degraded {
+		background: rgba(245, 158, 11, 0.15);
+		color: var(--color-warning);
+	}
+
+	.status-icon.error {
+		background: rgba(239, 68, 68, 0.15);
+		color: var(--color-danger);
+	}
+
+	.status-info h2 {
+		font-size: var(--font-size-lg);
+		font-weight: 600;
+		color: var(--color-text);
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+	}
+
+	.error-message {
+		color: var(--color-danger);
+		margin-top: var(--space-2);
+	}
+
+	.hint {
+		color: var(--color-text-muted);
+		font-size: var(--font-size-sm);
+		margin-top: var(--space-2);
+	}
+
+	.muted {
+		color: var(--color-text-muted);
+		font-size: var(--font-size-sm);
+		margin-top: var(--space-1);
+	}
+
+	.detail-card {
+		text-align: center;
+	}
+
+	.detail-card h3 {
+		font-size: var(--font-size-sm);
+		font-weight: 500;
+		color: var(--color-text-muted);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+
+	.detail-value {
+		font-size: var(--font-size-2xl);
+		font-weight: 600;
+		color: var(--color-text);
+		margin-top: var(--space-2);
+	}
+</style>
+------------------------------------------------------------
+
+## routes/health/+server.ts
+
+import { json } from '@sveltejs/kit';
+
+export function GET() {
+	return json({ status: 'ok', timestamp: new Date().toISOString() });
+}
+------------------------------------------------------------
+
+## routes/+layout.svelte
+
+<script lang="ts">
+	import '../app.css';
+	import Toast from '$lib/components/ui/Toast.svelte';
+	import { type Snippet } from 'svelte';
+
+	interface Props {
+		children: Snippet;
+	}
+
+	let { children }: Props = $props();
+</script>
+
+<Toast />
+<main>
+	{@render children()}
+</main>
+
+<style>
+	main {
+		min-height: 100vh;
+		display: flex;
+		flex-direction: column;
+	}
+</style>
+------------------------------------------------------------
+
+## routes/logout/+page.server.ts
+
+import { redirect } from '@sveltejs/kit';
+import type { Actions } from './$types';
+
+const COOKIE_NAME = 'kyro_token';
+
+export const actions = {
+	default: async ({ cookies }) => {
+		cookies.delete(COOKIE_NAME, { path: '/' });
+		throw redirect(302, '/login');
+	}
+} satisfies Actions;
+------------------------------------------------------------
+
+## routes/+page.svelte
+
+<script lang="ts">
+	import { onMount } from 'svelte';
+	import Button from '$lib/components/ui/Button.svelte';
+
+	type HealthStatus = 'checking' | 'connected' | 'degraded' | 'error';
+
+	let status: HealthStatus = $state('checking');
+	let health: {
+		uptime?: number;
+		database?: string;
+		redis?: string;
+		timestamp?: string;
+	} = $state({});
+
+	onMount(async () => {
+		try {
+			const res = await fetch('/health');
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			const data = await res.json();
+			health = data;
+			status = data.status === 'ok' ? 'connected' : 'degraded';
+		} catch {
+			status = 'error';
+		}
+	});
+
+	function formatUptime(seconds: number): string {
+		if (!seconds) return '—';
+		const d = Math.floor(seconds / 86400);
+		const h = Math.floor((seconds % 86400) / 3600);
+		const m = Math.floor((seconds % 3600) / 60);
+		if (d > 0) return `${d}d ${h}h`;
+		if (h > 0) return `${h}h ${m}m`;
+		return `${m}m ${seconds % 60}s`;
+	}
+
+	const statusConfig = {
+		checking: { label: 'Connecting…', dot: 'dot-pulse', color: 'var(--color-warning)' },
+		connected: { label: 'All systems operational', dot: 'dot-online', color: 'var(--color-success)' },
+		degraded:  { label: 'Degraded', dot: 'dot-degraded', color: 'var(--color-warning)' },
+		error:     { label: 'Backend unreachable', dot: 'dot-error', color: 'var(--color-danger)' },
+	};
+
+	let cfg = $derived(statusConfig[status]);
+</script>
+
+<svelte:head>
+	<title>Kyro — API Management Platform</title>
+</svelte:head>
+
+<div class="landing">
+	<!-- Header -->
+	<header class="header">
+		<a href="/" class="logo">
+			<span class="logo-mark">K</span>
+			<span class="logo-text">Kyro</span>
+		</a>
+		<nav class="nav">
+			<a href="/health" class="nav-link">Status</a>
+			<a href="/login" class="nav-link">Sign In</a>
+			<a href="/register" class="nav-btn">Get Started</a>
+		</nav>
+	</header>
+
+	<!-- Status bar -->
+	<div class="status-bar" style="--status-color: {cfg.color}">
+		<span class="dot {cfg.dot}"></span>
+		<span class="status-label">{cfg.label}</span>
+
+		{#if status === 'connected' || status === 'degraded'}
+			<span class="status-divider">·</span>
+			<span class="status-detail">
+				DB <span class="chip" class:chip-ok={health.database === 'connected'} class:chip-err={health.database !== 'connected'}>{health.database}</span>
+			</span>
+			<span class="status-divider">·</span>
+			<span class="status-detail">
+				Redis <span class="chip" class:chip-ok={health.redis === 'connected'} class:chip-err={health.redis !== 'connected'}>{health.redis}</span>
+			</span>
+			<span class="status-divider">·</span>
+			<span class="status-detail muted">up {formatUptime(health.uptime ?? 0)}</span>
+		{/if}
+	</div>
+
+	<!-- Hero -->
+	<main class="hero">
+		<div class="hero-inner">
+			<div class="eyebrow">API Management Platform</div>
+			<h1 class="hero-title">
+				Build faster.<br />
+				Ship with&nbsp;<span class="accent">confidence.</span>
+			</h1>
+			<p class="hero-sub">
+				Manage API keys, track usage in real time, and store files —
+				all in one unified platform built for modern teams.
+			</p>
+			<div class="hero-cta">
+				<a href="/register" class="cta-primary">Start Building Free</a>
+				<a href="/login" class="cta-secondary">Sign In →</a>
+			</div>
+		</div>
+
+		<!-- Feature cards -->
+		<div class="features">
+			<div class="feature-card">
+				<div class="feature-icon">🔑</div>
+				<h3>API Key Management</h3>
+				<p>Create, scope, and revoke keys with fine-grained permission control.</p>
+			</div>
+			<div class="feature-card">
+				<div class="feature-icon">📊</div>
+				<h3>Usage Analytics</h3>
+				<p>Real-time dashboards with daily breakdowns and bandwidth tracking.</p>
+			</div>
+			<div class="feature-card">
+				<div class="feature-icon">📁</div>
+				<h3>File Storage</h3>
+				<p>Upload, serve, and manage files with per-org storage quotas.</p>
+			</div>
+			<div class="feature-card">
+				<div class="feature-icon">🛡️</div>
+				<h3>Rate Limiting</h3>
+				<p>Redis-backed rate limiting protects your infrastructure automatically.</p>
+			</div>
+		</div>
+	</main>
+
+	<footer class="footer">
+		<span>© 2026 Kyro</span>
+		<a href="/health">System Status</a>
+	</footer>
+</div>
+
+<style>
+	.landing {
+		min-height: 100vh;
+		display: flex;
+		flex-direction: column;
+		background: var(--color-bg);
+	}
+
+	/* ── Header ── */
+	.header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: var(--space-4) var(--space-8);
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	.logo {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		text-decoration: none;
+		font-size: var(--font-size-lg);
+		font-weight: 700;
+		color: var(--color-text);
+	}
+
+	.logo-mark {
+		width: 30px;
+		height: 30px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--color-accent);
+		color: white;
+		border-radius: var(--radius-sm);
+		font-size: var(--font-size-base);
+	}
+
+	.nav {
+		display: flex;
+		align-items: center;
+		gap: var(--space-5);
+	}
+
+	.nav-link {
+		color: var(--color-text-muted);
+		font-size: var(--font-size-sm);
+		font-weight: 500;
+		text-decoration: none;
+		transition: color 0.15s;
+	}
+
+	.nav-link:hover {
+		color: var(--color-text);
+		text-decoration: none;
+	}
+
+	.nav-btn {
+		height: 34px;
+		padding: 0 var(--space-4);
+		background: var(--color-accent);
+		color: white;
+		border-radius: var(--radius-md);
+		font-size: var(--font-size-sm);
+		font-weight: 500;
+		text-decoration: none;
+		display: flex;
+		align-items: center;
+		transition: background 0.15s;
+	}
+
+	.nav-btn:hover {
+		background: var(--color-accent-hover);
+		text-decoration: none;
+	}
+
+	/* ── Status bar ── */
+	.status-bar {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		padding: var(--space-2) var(--space-8);
+		background: var(--color-bg-2);
+		border-bottom: 1px solid var(--color-border);
+		font-size: var(--font-size-xs);
+		color: var(--color-text-muted);
+	}
+
+	.dot {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		flex-shrink: 0;
+	}
+
+	.dot-online  { background: var(--color-success); }
+	.dot-degraded { background: var(--color-warning); }
+	.dot-error   { background: var(--color-danger); }
+
+	.dot-pulse {
+		background: var(--color-warning);
+		animation: pulse 1.2s ease-in-out infinite;
+	}
+
+	@keyframes pulse {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.3; }
+	}
+
+	.status-label {
+		color: var(--status-color);
+		font-weight: 500;
+	}
+
+	.status-divider {
+		color: var(--color-border);
+	}
+
+	.status-detail {
+		display: flex;
+		align-items: center;
+		gap: var(--space-1);
+	}
+
+	.status-detail.muted {
+		color: var(--color-text-muted);
+	}
+
+	.chip {
+		display: inline-flex;
+		align-items: center;
+		padding: 0 5px;
+		height: 16px;
+		border-radius: var(--radius-sm);
+		font-size: 10px;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+	}
+
+	.chip-ok  { background: rgba(34,197,94,0.15); color: var(--color-success); }
+	.chip-err { background: rgba(239,68,68,0.15);  color: var(--color-danger); }
+
+	/* ── Hero ── */
+	.hero {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		padding: var(--space-12) var(--space-8);
+		gap: var(--space-12);
+	}
+
+	.hero-inner {
+		max-width: 680px;
+		text-align: center;
+	}
+
+	.eyebrow {
+		display: inline-block;
+		padding: 0 var(--space-3);
+		height: 24px;
+		line-height: 24px;
+		border-radius: var(--radius-full);
+		background: rgba(99,102,241,0.12);
+		color: var(--color-accent);
+		font-size: var(--font-size-xs);
+		font-weight: 600;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		margin-bottom: var(--space-5);
+	}
+
+	.hero-title {
+		font-size: clamp(36px, 6vw, 56px);
+		font-weight: 700;
+		line-height: 1.1;
+		color: var(--color-text);
+		letter-spacing: -0.02em;
+		margin-bottom: var(--space-5);
+	}
+
+	.accent {
+		color: var(--color-accent);
+	}
+
+	.hero-sub {
+		font-size: var(--font-size-lg);
+		color: var(--color-text-muted);
+		line-height: 1.6;
+		max-width: 520px;
+		margin: 0 auto var(--space-8);
+	}
+
+	.hero-cta {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--space-4);
+		flex-wrap: wrap;
+	}
+
+	.cta-primary {
+		height: 48px;
+		padding: 0 var(--space-6);
+		background: var(--color-accent);
+		color: white;
+		border-radius: var(--radius-md);
+		font-size: var(--font-size-base);
+		font-weight: 600;
+		text-decoration: none;
+		display: flex;
+		align-items: center;
+		transition: background 0.15s, transform 0.1s;
+	}
+
+	.cta-primary:hover {
+		background: var(--color-accent-hover);
+		text-decoration: none;
+		transform: translateY(-1px);
+	}
+
+	.cta-secondary {
+		height: 48px;
+		padding: 0 var(--space-5);
+		color: var(--color-text-muted);
+		font-size: var(--font-size-base);
+		font-weight: 500;
+		text-decoration: none;
+		display: flex;
+		align-items: center;
+		transition: color 0.15s;
+	}
+
+	.cta-secondary:hover {
+		color: var(--color-text);
+		text-decoration: none;
+	}
+
+	/* ── Features ── */
+	.features {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+		gap: var(--space-4);
+		width: 100%;
+		max-width: 900px;
+	}
+
+	.feature-card {
+		padding: var(--space-6);
+		background: var(--color-bg-2);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-lg);
+		transition: border-color 0.15s, transform 0.15s;
+	}
+
+	.feature-card:hover {
+		border-color: var(--color-accent);
+		transform: translateY(-2px);
+	}
+
+	.feature-icon {
+		font-size: 28px;
+		margin-bottom: var(--space-3);
+	}
+
+	.feature-card h3 {
+		font-size: var(--font-size-base);
+		font-weight: 600;
+		color: var(--color-text);
+		margin-bottom: var(--space-2);
+	}
+
+	.feature-card p {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+		line-height: 1.5;
+	}
+
+	/* ── Footer ── */
+	.footer {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: var(--space-4) var(--space-8);
+		border-top: 1px solid var(--color-border);
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+	}
+
+	.footer a {
+		color: var(--color-text-muted);
+		text-decoration: none;
+	}
+
+	.footer a:hover {
+		color: var(--color-text);
+	}
+</style>
+------------------------------------------------------------
+
+## routes/+page.svelte.bak
+
+<script lang="ts">
+	import Button from '$lib/components/ui/Button.svelte';
+	import Card from '$lib/components/ui/Card.svelte';
+</script>
+
+<svelte:head>
+	<title>Kyro - API Management Platform</title>
+</svelte:head>
+
+<div class="landing">
+	<header class="header">
+		<div class="logo">
+			<span class="logo-icon">K</span>
+			<span class="logo-text">Kyro</span>
+		</div>
+		<nav class="nav">
+			<a href="/login" class="nav-link">Sign In</a>
+			<Button onclick={() => (window.location.href = '/register')}>Get Started</Button>
+		</nav>
+	</header>
+
+	<main>
+		<section class="hero">
+			<h1 class="hero-title">Build faster with Kyro</h1>
+			<p class="hero-subtitle">
+				The modern API management platform for developers. Manage keys, track usage, and scale with confidence.
+			</p>
+			<div class="hero-cta">
+				<Button size="lg" onclick={() => (window.location.href = '/register')}>Start Building Free</Button>
+				<Button variant="secondary" size="lg" onclick={() => (window.location.href = '/login')}>Sign In</Button>
+			</div>
+		</section>
+
+		<section class="features">
+			<Card>
+				<div class="feature">
+					<div class="feature-icon">🔑</div>
+					<h3>API Key Management</h3>
+					<p>Create, manage, and revoke API keys with fine-grained permissions and scopes.</p>
+				</div>
+			</Card>
+			<Card>
+				<div class="feature">
+					<div class="feature-icon">📊</div>
+					<h3>Usage Analytics</h3>
+					<p>Track API usage in real-time with detailed analytics and daily breakdowns.</p>
+				</div>
+			</Card>
+			<Card>
+				<div class="feature">
+					<div class="feature-icon">📁</div>
+					<h3>File Storage</h3>
+					<p>Upload and serve files with built-in storage management and quotas.</p>
+				</div>
+			</Card>
+		</section>
+	</main>
+
+	<footer class="footer">
+		<p>&copy; 2026 Kyro. All rights reserved.</p>
+	</footer>
+</div>
+
+<style>
+	.landing {
+		min-height: 100vh;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: var(--space-4) var(--space-6);
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	.logo {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		font-size: var(--font-size-xl);
+		font-weight: 700;
+	}
+
+	.logo-icon {
+		width: 32px;
+		height: 32px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--color-accent);
+		color: white;
+		border-radius: var(--radius-md);
+	}
+
+	.nav {
+		display: flex;
+		align-items: center;
+		gap: var(--space-4);
+	}
+
+	.nav-link {
+		color: var(--color-text-muted);
+		font-weight: 500;
+	}
+
+	.nav-link:hover {
+		color: var(--color-text);
+	}
+
+	main {
+		flex: 1;
+	}
+
+	.hero {
+		padding: var(--space-12) var(--space-6);
+		text-align: center;
+		max-width: 800px;
+		margin: 0 auto;
+	}
+
+	.hero-title {
+		font-size: 48px;
+		font-weight: 700;
+		line-height: 1.1;
+		color: var(--color-text);
+		margin-bottom: var(--space-4);
+	}
+
+	.hero-subtitle {
+		font-size: var(--font-size-lg);
+		color: var(--color-text-muted);
+		margin-bottom: var(--space-8);
+		max-width: 600px;
+		margin-left: auto;
+		margin-right: auto;
+	}
+
+	.hero-cta {
+		display: flex;
+		gap: var(--space-4);
+		justify-content: center;
+	}
+
+	.features {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+		gap: var(--space-4);
+		padding: var(--space-8) var(--space-6);
+		max-width: 1000px;
+		margin: 0 auto;
+	}
+
+	.feature {
+		text-align: center;
+	}
+
+	.feature-icon {
+		font-size: 32px;
+		margin-bottom: var(--space-3);
+	}
+
+	.feature h3 {
+		font-size: var(--font-size-lg);
+		font-weight: 600;
+		color: var(--color-text);
+		margin-bottom: var(--space-2);
+	}
+
+	.feature p {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+	}
+
+	.footer {
+		padding: var(--space-4) var(--space-6);
+		text-align: center;
+		border-top: 1px solid var(--color-border);
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+	}
+</style>
+------------------------------------------------------------
+

@@ -1,0 +1,184 @@
+<script lang="ts">
+	import Button from '$lib/components/ui/Button.svelte';
+	import Card from '$lib/components/ui/Card.svelte';
+</script>
+
+<svelte:head>
+	<title>Kyro - API Management Platform</title>
+</svelte:head>
+
+<div class="landing">
+	<header class="header">
+		<div class="logo">
+			<span class="logo-icon">K</span>
+			<span class="logo-text">Kyro</span>
+		</div>
+		<nav class="nav">
+			<a href="/login" class="nav-link">Sign In</a>
+			<Button onclick={() => (window.location.href = '/register')}>Get Started</Button>
+		</nav>
+	</header>
+
+	<main>
+		<section class="hero">
+			<h1 class="hero-title">Build faster with Kyro</h1>
+			<p class="hero-subtitle">
+				The modern API management platform for developers. Manage keys, track usage, and scale with confidence.
+			</p>
+			<div class="hero-cta">
+				<Button size="lg" onclick={() => (window.location.href = '/register')}>Start Building Free</Button>
+				<Button variant="secondary" size="lg" onclick={() => (window.location.href = '/login')}>Sign In</Button>
+			</div>
+		</section>
+
+		<section class="features">
+			<Card>
+				<div class="feature">
+					<div class="feature-icon">🔑</div>
+					<h3>API Key Management</h3>
+					<p>Create, manage, and revoke API keys with fine-grained permissions and scopes.</p>
+				</div>
+			</Card>
+			<Card>
+				<div class="feature">
+					<div class="feature-icon">📊</div>
+					<h3>Usage Analytics</h3>
+					<p>Track API usage in real-time with detailed analytics and daily breakdowns.</p>
+				</div>
+			</Card>
+			<Card>
+				<div class="feature">
+					<div class="feature-icon">📁</div>
+					<h3>File Storage</h3>
+					<p>Upload and serve files with built-in storage management and quotas.</p>
+				</div>
+			</Card>
+		</section>
+	</main>
+
+	<footer class="footer">
+		<p>&copy; 2026 Kyro. All rights reserved.</p>
+	</footer>
+</div>
+
+<style>
+	.landing {
+		min-height: 100vh;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: var(--space-4) var(--space-6);
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	.logo {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		font-size: var(--font-size-xl);
+		font-weight: 700;
+	}
+
+	.logo-icon {
+		width: 32px;
+		height: 32px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--color-accent);
+		color: white;
+		border-radius: var(--radius-md);
+	}
+
+	.nav {
+		display: flex;
+		align-items: center;
+		gap: var(--space-4);
+	}
+
+	.nav-link {
+		color: var(--color-text-muted);
+		font-weight: 500;
+	}
+
+	.nav-link:hover {
+		color: var(--color-text);
+	}
+
+	main {
+		flex: 1;
+	}
+
+	.hero {
+		padding: var(--space-12) var(--space-6);
+		text-align: center;
+		max-width: 800px;
+		margin: 0 auto;
+	}
+
+	.hero-title {
+		font-size: 48px;
+		font-weight: 700;
+		line-height: 1.1;
+		color: var(--color-text);
+		margin-bottom: var(--space-4);
+	}
+
+	.hero-subtitle {
+		font-size: var(--font-size-lg);
+		color: var(--color-text-muted);
+		margin-bottom: var(--space-8);
+		max-width: 600px;
+		margin-left: auto;
+		margin-right: auto;
+	}
+
+	.hero-cta {
+		display: flex;
+		gap: var(--space-4);
+		justify-content: center;
+	}
+
+	.features {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+		gap: var(--space-4);
+		padding: var(--space-8) var(--space-6);
+		max-width: 1000px;
+		margin: 0 auto;
+	}
+
+	.feature {
+		text-align: center;
+	}
+
+	.feature-icon {
+		font-size: 32px;
+		margin-bottom: var(--space-3);
+	}
+
+	.feature h3 {
+		font-size: var(--font-size-lg);
+		font-weight: 600;
+		color: var(--color-text);
+		margin-bottom: var(--space-2);
+	}
+
+	.feature p {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+	}
+
+	.footer {
+		padding: var(--space-4) var(--space-6);
+		text-align: center;
+		border-top: 1px solid var(--color-border);
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+	}
+</style>

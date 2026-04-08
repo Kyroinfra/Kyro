@@ -122,6 +122,7 @@ function unresolved_hydratable(key, stack) {
 }
 const BLOCK_OPEN = `<!--${HYDRATION_START}-->`;
 const BLOCK_CLOSE = `<!--${HYDRATION_END}-->`;
+const EMPTY_COMMENT = `<!---->`;
 const ATTR_REGEX = /[&"<]/g;
 const CONTENT_REGEX = /[&<]/g;
 function escape_html(value, is_attr) {
@@ -2160,6 +2161,7 @@ function untrack(fn) {
 function subscribe_to_store(store, run, invalidate) {
   if (store == null) {
     run(void 0);
+    if (invalidate) invalidate(void 0);
     return noop;
   }
   const unsub = untrack(
@@ -2219,6 +2221,13 @@ function render(component, options = {}) {
     options
   );
 }
+function head(hash, renderer, fn) {
+  renderer.head((renderer2) => {
+    renderer2.push(`<!--${hash}-->`);
+    renderer2.child(fn);
+    renderer2.push(EMPTY_COMMENT);
+  });
+}
 function attributes(attrs, css_hash, classes, styles, flags = 0) {
   if (styles) {
     attrs.style = to_style(attrs.style, styles);
@@ -2276,6 +2285,15 @@ function store_get(store_values, store_name, store) {
 function unsubscribe_stores(store_values) {
   for (const store_name of Object.keys(store_values)) {
     store_values[store_name][1]();
+  }
+}
+function bind_props(props_parent, props_now) {
+  for (const key of Object.keys(props_now)) {
+    const initial_value = props_parent[key];
+    const value = props_now[key];
+    if (initial_value === void 0 && value !== void 0 && Object.getOwnPropertyDescriptor(props_parent, key)?.set) {
+      props_parent[key] = value;
+    }
   }
 }
 function ensure_array_like(array_like_or_iterator) {
@@ -2399,10 +2417,10 @@ class Renderer {
    * @param {(renderer: Renderer) => void} fn
    */
   head(fn) {
-    const head = new Renderer(this.global, this);
-    head.type = "head";
-    this.#out.push(head);
-    head.child(fn);
+    const head2 = new Renderer(this.global, this);
+    head2.type = "head";
+    this.#out.push(head2);
+    head2.child(fn);
   }
   /**
    * @param {Array<Promise<void>>} blockers
@@ -2597,7 +2615,7 @@ class Renderer {
    */
   option(attrs, body, css_hash, classes, styles, flags, is_rich) {
     this.#out.push(`<option${attributes(attrs, css_hash, classes, styles, flags)}`);
-    const close = (renderer, value, { head, body: body2 }) => {
+    const close = (renderer, value, { head: head2, body: body2 }) => {
       if (has_own_property.call(attrs, "value")) {
         value = attrs.value;
       }
@@ -2605,8 +2623,8 @@ class Renderer {
         renderer.#out.push(' selected=""');
       }
       renderer.#out.push(`>${body2}${is_rich ? "<!>" : ""}</option>`);
-      if (head) {
-        renderer.head((child) => child.push(head));
+      if (head2) {
+        renderer.head((child) => child.push(head2));
       }
     };
     if (typeof body === "function") {
@@ -2631,8 +2649,8 @@ class Renderer {
    */
   title(fn) {
     const path = this.get_path();
-    const close = (head) => {
-      this.global.set_title(head, path);
+    const close = (head2) => {
+      this.global.set_title(head2, path);
     };
     this.child((renderer) => {
       const r = new Renderer(renderer.global, renderer);
@@ -2960,13 +2978,13 @@ class Renderer {
     for (const cleanup of renderer.#collect_on_destroy()) {
       cleanup();
     }
-    let head = content.head + renderer.global.get_title();
+    let head2 = content.head + renderer.global.get_title();
     let body = content.body;
     for (const { hash, code } of renderer.global.css) {
-      head += `<style id="${hash}">${code}</style>`;
+      head2 += `<style id="${hash}">${code}</style>`;
     }
     return {
-      head,
+      head: head2,
       body,
       hashes: {
         script: renderer.global.csp.script_hashes
@@ -3108,13 +3126,17 @@ export {
   mutable_source as a6,
   render as a7,
   setContext as a8,
+  head as a9,
+  safe_not_equal as aa,
+  subscribe_to_store as ab,
+  run_all as ac,
   escape_html as b,
-  safe_not_equal as c,
-  attr as d,
+  store_get as c,
+  derived as d,
   ensure_array_like as e,
-  derived as f,
-  getContext as g,
-  store_get as h,
+  attr as f,
+  bind_props as g,
+  getContext as h,
   HYDRATION_END as i,
   HYDRATION_START as j,
   HYDRATION_START_ELSE as k,

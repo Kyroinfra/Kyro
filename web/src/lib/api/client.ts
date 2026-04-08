@@ -1,4 +1,4 @@
-import { PUBLIC_API_URL } from '$env/static/public';
+import { browser } from '$app/environment';
 
 export class ApiError extends Error {
 	constructor(public status: number, message: string) {
@@ -14,6 +14,14 @@ type RequestOptions = {
 	apiKey?: string;
 };
 
+function getBaseUrl(): string {
+	if (browser) {
+		return ''; // browser uses relative URLs, nginx routes them
+	}
+	// Server-side: use internal Docker network URL
+	return process.env.INTERNAL_API_URL || 'http://api:3000';
+}
+
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
 	const { method = 'GET', body, token, apiKey } = options;
 
@@ -21,14 +29,12 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 		'Content-Type': 'application/json'
 	};
 
-	if (token) {
-		headers['Authorization'] = `Bearer ${token}`;
-	}
-	if (apiKey) {
-		headers['X-API-Key'] = apiKey;
-	}
+	if (token) headers['Authorization'] = `Bearer ${token}`;
+	if (apiKey) headers['X-API-Key'] = apiKey;
 
-	const res = await fetch(`${PUBLIC_API_URL}${path}`, {
+	const url = `${getBaseUrl()}${path}`;
+
+	const res = await fetch(url, {
 		method,
 		headers,
 		body: body ? JSON.stringify(body) : undefined

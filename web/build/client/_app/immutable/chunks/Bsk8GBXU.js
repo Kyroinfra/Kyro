@@ -1,0 +1,1 @@
+import{c as y,b as u,T as _,U as g,h as t,C as o,K as i,f as l,s as d,i as p,g as m}from"./DSO6KSvc.js";function C(n,r){let s=null,f=t;var a;if(t){s=p;for(var e=m(document.head);e!==null&&(e.nodeType!==o||e.data!==n);)e=i(e);if(e===null)l(!1);else{var E=i(e);e.remove(),d(E)}}t||(a=document.head.appendChild(y()));try{u(()=>r(a),_|g)}finally{f&&(l(!0),d(s))}}export{C as h};
