@@ -1,8 +1,8 @@
 # Prompt:
-This is my current codebase
+this is my current codebase
 
 # File collection from: /home/nyxox/Documents/Projects/Kyro/web/src
-# Generated: 2026-04-08 20:11:23
+# Generated: 2026-04-08 20:29:24
 ------------------------------------------------------------
 
 ## app.css
@@ -602,110 +602,115 @@ export async function checkHealth(): Promise<{ ok: boolean; error?: string }> {
 ## lib/components/ui/Input.svelte
 
 <script lang="ts">
-	interface Props {
-		label?: string;
-		type?: 'text' | 'email' | 'password' | 'number';
-		placeholder?: string;
-		value?: string;
-		error?: string;
-		disabled?: boolean;
-		required?: boolean;
-		oninput?: (e: Event) => void;
-		onchange?: (e: Event) => void;
-	}
+  interface Props {
+    name?: string;
+    label?: string;
+    type?: "text" | "email" | "password" | "number";
+    placeholder?: string;
+    value?: string;
+    error?: string;
+    disabled?: boolean;
+    required?: boolean;
+    oninput?: (e: Event) => void;
+    onchange?: (e: Event) => void;
+  }
 
-	let {
-		label,
-		type = 'text',
-		placeholder = '',
-		value = $bindable(''),
-		error,
-		disabled = false,
-		required = false,
-		oninput,
-		onchange
-	}: Props = $props();
+  let {
+    name,
+    label,
+    type = "text",
+    placeholder = "",
+    value = $bindable(""),
+    error,
+    disabled = false,
+    required = false,
+    oninput,
+    onchange,
+  }: Props = $props();
 </script>
 
 <div class="input-wrapper">
-	{#if label}
-		<label class="label">
-			{label}
-			{#if required}<span class="required">*</span>{/if}
-		</label>
-	{/if}
-	<input
-		{type}
-		{placeholder}
-		bind:value
-		{disabled}
-		{required}
-		class="input"
-		class:error={!!error}
-		oninput={oninput}
-		onchange={onchange}
-	/>
-	{#if error}
-		<span class="error-text">{error}</span>
-	{/if}
+  {#if label}
+    <label class="label">
+      {label}
+      {#if required}<span class="required">*</span>{/if}
+    </label>
+  {/if}
+  <input
+    {name}
+    {type}
+    {placeholder}
+    bind:value
+    {disabled}
+    {required}
+    class="input"
+    class:error={!!error}
+    {oninput}
+    {onchange}
+  />
+  {#if error}
+    <span class="error-text">{error}</span>
+  {/if}
 </div>
 
 <style>
-	.input-wrapper {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
-	}
+  .input-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
 
-	.label {
-		font-size: var(--font-size-sm);
-		font-weight: 500;
-		color: var(--color-text);
-	}
+  .label {
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--color-text);
+  }
 
-	.required {
-		color: var(--color-danger);
-		margin-left: 2px;
-	}
+  .required {
+    color: var(--color-danger);
+    margin-left: 2px;
+  }
 
-	.input {
-		height: 40px;
-		padding: 0 var(--space-3);
-		background: var(--color-bg-2);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
-		color: var(--color-text);
-		font-size: var(--font-size-base);
-		transition: border-color 0.15s ease, box-shadow 0.15s ease;
-	}
+  .input {
+    height: 40px;
+    padding: 0 var(--space-3);
+    background: var(--color-bg-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    color: var(--color-text);
+    font-size: var(--font-size-base);
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
 
-	.input::placeholder {
-		color: var(--color-text-muted);
-	}
+  .input::placeholder {
+    color: var(--color-text-muted);
+  }
 
-	.input:focus {
-		outline: none;
-		border-color: var(--color-accent);
-		box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
-	}
+  .input:focus {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+  }
 
-	.input:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
+  .input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 
-	.input.error {
-		border-color: var(--color-danger);
-	}
+  .input.error {
+    border-color: var(--color-danger);
+  }
 
-	.input.error:focus {
-		box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
-	}
+  .input.error:focus {
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+  }
 
-	.error-text {
-		font-size: var(--font-size-sm);
-		color: var(--color-danger);
-	}
+  .error-text {
+    font-size: var(--font-size-sm);
+    color: var(--color-danger);
+  }
 </style>
 ------------------------------------------------------------
 
@@ -1597,135 +1602,152 @@ export const actions: Actions = {
 ## routes/(auth)/login/+page.svelte
 
 <script lang="ts">
-	import Button from '$lib/components/ui/Button.svelte';
-	import Input from '$lib/components/ui/Input.svelte';
-	import Card from '$lib/components/ui/Card.svelte';
+  import { enhance } from "$app/forms";
+  import Button from "$lib/components/ui/Button.svelte";
+  import Input from "$lib/components/ui/Input.svelte";
+  import Card from "$lib/components/ui/Card.svelte";
 
-	let email = $state('');
-	let password = $state('');
-	let loading = $state(false);
+  let { form } = $props(); // receives fail() data from server
+
+  let email = $state("");
+  let password = $state("");
+  let loading = $state(false);
 </script>
 
 <svelte:head>
-	<title>Sign In - Kyro</title>
+  <title>Sign In - Kyro</title>
 </svelte:head>
 
 <div class="auth-page">
-	<div class="auth-header">
-		<a href="/" class="logo">
-			<span class="logo-icon">K</span>
-			<span class="logo-text">Kyro</span>
-		</a>
-	</div>
+  <div class="auth-header">
+    <a href="/" class="logo">
+      <span class="logo-icon">K</span>
+      <span class="logo-text">Kyro</span>
+    </a>
+  </div>
 
-	<Card padding="lg">
-		<div class="auth-form">
-			<h1>Welcome back</h1>
-			<p class="subtitle">Sign in to your account</p>
+  <Card padding="lg">
+    <div class="auth-form">
+      <h1>Welcome back</h1>
+      <p class="subtitle">Sign in to your account</p>
 
-			<form method="POST">
-				<Input
-					label="Email"
-					type="email"
-					placeholder="you@example.com"
-					bind:value={email}
-					required
-				/>
-				<Input
-					label="Password"
-					type="password"
-					placeholder="••••••••"
-					bind:value={password}
-					required
-				/>
-				<Button type="submit" {loading} disabled={loading}>
-					{loading ? 'Signing in...' : 'Sign In'}
-				</Button>
-			</form>
+      <form
+        method="POST"
+        use:enhance={() => {
+          loading = true;
+          return async ({ update }) => {
+            loading = false;
+            await update();
+          };
+        }}
+      >
+        {#if form?.error}
+          <div class="form-error">{form.error}</div>
+        {/if}
+        <Input
+          name="email"
+          label="Email"
+          type="email"
+          placeholder="you@example.com"
+          bind:value={email}
+          required
+        />
+        <Input
+          name="password"
+          label="Password"
+          type="password"
+          placeholder="••••••••"
+          bind:value={password}
+          required
+        />
+        <Button type="submit" {loading} disabled={loading}>
+          {loading ? "Signing in..." : "Sign In"}
+        </Button>
+      </form>
 
-			<p class="footer-text">
-				Don't have an account? <a href="/register">Create one</a>
-			</p>
-		</div>
-	</Card>
+      <p class="footer-text">
+        Don't have an account? <a href="/register">Create one</a>
+      </p>
+    </div>
+  </Card>
 </div>
 
 <style>
-	.auth-page {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-6);
-	}
+  .auth-page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
 
-	.auth-header {
-		text-align: center;
-	}
+  .auth-header {
+    text-align: center;
+  }
 
-	.logo {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-2);
-		font-size: var(--font-size-xl);
-		font-weight: 700;
-		color: var(--color-text);
-		text-decoration: none;
-	}
+  .logo {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--font-size-xl);
+    font-weight: 700;
+    color: var(--color-text);
+    text-decoration: none;
+  }
 
-	.logo-icon {
-		width: 32px;
-		height: 32px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background: var(--color-accent);
-		color: white;
-		border-radius: var(--radius-md);
-	}
+  .logo-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-accent);
+    color: white;
+    border-radius: var(--radius-md);
+  }
 
-	.auth-form {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-4);
-	}
+  .auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
 
-	.auth-form h1 {
-		font-size: var(--font-size-2xl);
-		font-weight: 600;
-		color: var(--color-text);
-	}
+  .auth-form h1 {
+    font-size: var(--font-size-2xl);
+    font-weight: 600;
+    color: var(--color-text);
+  }
 
-	.subtitle {
-		color: var(--color-text-muted);
-		margin-top: calc(-1 * var(--space-2));
-	}
+  .subtitle {
+    color: var(--color-text-muted);
+    margin-top: calc(-1 * var(--space-2));
+  }
 
-	form {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-4);
-		margin-top: var(--space-2);
-	}
+  form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    margin-top: var(--space-2);
+  }
 
-	form :global(.input-wrapper) {
-		margin-bottom: 0;
-	}
+  form :global(.input-wrapper) {
+    margin-bottom: 0;
+  }
 
-	form :global(button) {
-		margin-top: var(--space-2);
-		width: 100%;
-	}
+  form :global(button) {
+    margin-top: var(--space-2);
+    width: 100%;
+  }
 
-	.footer-text {
-		text-align: center;
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
-		margin-top: var(--space-4);
-	}
+  .footer-text {
+    text-align: center;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    margin-top: var(--space-4);
+  }
 
-	.footer-text a {
-		color: var(--color-accent);
-		font-weight: 500;
-	}
+  .footer-text a {
+    color: var(--color-accent);
+    font-weight: 500;
+  }
 </style>
 ------------------------------------------------------------
 
@@ -1782,143 +1804,161 @@ export const actions: Actions = {
 ## routes/(auth)/register/+page.svelte
 
 <script lang="ts">
-	import Button from '$lib/components/ui/Button.svelte';
-	import Input from '$lib/components/ui/Input.svelte';
-	import Card from '$lib/components/ui/Card.svelte';
+  import { enhance } from "$app/forms";
+  import Button from "$lib/components/ui/Button.svelte";
+  import Input from "$lib/components/ui/Input.svelte";
+  import Card from "$lib/components/ui/Card.svelte";
 
-	let orgName = $state('');
-	let email = $state('');
-	let password = $state('');
-	let loading = $state(false);
+  let { form } = $props(); // receives fail() data from server
+
+  let orgName = $state("");
+  let email = $state("");
+  let password = $state("");
+  let loading = $state(false);
 </script>
 
 <svelte:head>
-	<title>Create Account - Kyro</title>
+  <title>Create Account - Kyro</title>
 </svelte:head>
 
 <div class="auth-page">
-	<div class="auth-header">
-		<a href="/" class="logo">
-			<span class="logo-icon">K</span>
-			<span class="logo-text">Kyro</span>
-		</a>
-	</div>
+  <div class="auth-header">
+    <a href="/" class="logo">
+      <span class="logo-icon">K</span>
+      <span class="logo-text">Kyro</span>
+    </a>
+  </div>
 
-	<Card padding="lg">
-		<div class="auth-form">
-			<h1>Create your account</h1>
-			<p class="subtitle">Start building with Kyro</p>
+  <Card padding="lg">
+    <div class="auth-form">
+      <h1>Create your account</h1>
+      <p class="subtitle">Start building with Kyro</p>
 
-			<form method="POST">
-				<Input
-					label="Organization Name"
-					type="text"
-					placeholder="My Company"
-					bind:value={orgName}
-					required
-				/>
-				<Input
-					label="Email"
-					type="email"
-					placeholder="you@example.com"
-					bind:value={email}
-					required
-				/>
-				<Input
-					label="Password"
-					type="password"
-					placeholder="••••••••"
-					bind:value={password}
-					required
-				/>
-				<Button type="submit" {loading} disabled={loading}>
-					{loading ? 'Creating account...' : 'Create Account'}
-				</Button>
-			</form>
+      <form
+        method="POST"
+        use:enhance={() => {
+          loading = true;
+          return async ({ update }) => {
+            loading = false;
+            await update();
+          };
+        }}
+      >
+        {#if form?.error}
+          <div class="form-error">{form.error}</div>
+        {/if}
+        <Input
+          name="orgName"
+          label="Organization Name"
+          type="text"
+          placeholder="My Company"
+          bind:value={orgName}
+          required
+        />
+        <Input
+          name="email"
+          label="Email"
+          type="email"
+          placeholder="you@example.com"
+          bind:value={email}
+          required
+        />
+        <Input
+          name="password"
+          label="Password"
+          type="password"
+          placeholder="••••••••"
+          bind:value={password}
+          required
+        />
+        <Button type="submit" {loading} disabled={loading}>
+          {loading ? "Creating account..." : "Create Account"}
+        </Button>
+      </form>
 
-			<p class="footer-text">
-				Already have an account? <a href="/login">Sign in</a>
-			</p>
-		</div>
-	</Card>
+      <p class="footer-text">
+        Already have an account? <a href="/login">Sign in</a>
+      </p>
+    </div>
+  </Card>
 </div>
 
 <style>
-	.auth-page {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-6);
-	}
+  .auth-page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
 
-	.auth-header {
-		text-align: center;
-	}
+  .auth-header {
+    text-align: center;
+  }
 
-	.logo {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-2);
-		font-size: var(--font-size-xl);
-		font-weight: 700;
-		color: var(--color-text);
-		text-decoration: none;
-	}
+  .logo {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--font-size-xl);
+    font-weight: 700;
+    color: var(--color-text);
+    text-decoration: none;
+  }
 
-	.logo-icon {
-		width: 32px;
-		height: 32px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background: var(--color-accent);
-		color: white;
-		border-radius: var(--radius-md);
-	}
+  .logo-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-accent);
+    color: white;
+    border-radius: var(--radius-md);
+  }
 
-	.auth-form {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-4);
-	}
+  .auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
 
-	.auth-form h1 {
-		font-size: var(--font-size-2xl);
-		font-weight: 600;
-		color: var(--color-text);
-	}
+  .auth-form h1 {
+    font-size: var(--font-size-2xl);
+    font-weight: 600;
+    color: var(--color-text);
+  }
 
-	.subtitle {
-		color: var(--color-text-muted);
-		margin-top: calc(-1 * var(--space-2));
-	}
+  .subtitle {
+    color: var(--color-text-muted);
+    margin-top: calc(-1 * var(--space-2));
+  }
 
-	form {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-4);
-		margin-top: var(--space-2);
-	}
+  form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    margin-top: var(--space-2);
+  }
 
-	form :global(.input-wrapper) {
-		margin-bottom: 0;
-	}
+  form :global(.input-wrapper) {
+    margin-bottom: 0;
+  }
 
-	form :global(button) {
-		margin-top: var(--space-2);
-		width: 100%;
-	}
+  form :global(button) {
+    margin-top: var(--space-2);
+    width: 100%;
+  }
 
-	.footer-text {
-		text-align: center;
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
-		margin-top: var(--space-4);
-	}
+  .footer-text {
+    text-align: center;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    margin-top: var(--space-4);
+  }
 
-	.footer-text a {
-		color: var(--color-accent);
-		font-weight: 500;
-	}
+  .footer-text a {
+    color: var(--color-accent);
+    font-weight: 500;
+  }
 </style>
 ------------------------------------------------------------
 

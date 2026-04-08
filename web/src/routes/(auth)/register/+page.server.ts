@@ -16,6 +16,10 @@ export const actions: Actions = {
 			return fail(400, { error: 'All fields are required' });
 		}
 
+		if (password.length < 8) {
+			return fail(400, { error: 'Password must be at least 8 characters' });
+		}
+
 		try {
 			const response = await register({ orgName, email, password });
 
@@ -27,12 +31,15 @@ export const actions: Actions = {
 				maxAge: 60 * 60 * 24 * 7
 			});
 
-			throw redirect(302, '/dashboard');
+			redirect(302, '/dashboard');
 		} catch (err) {
 			if ((err as any)?.status === 302 || (err as any)?.status === 301) {
 				throw err;
 			}
 			if (err instanceof ApiError) {
+				if (err.status === 400 && err.message === 'Invalid input') {
+					return fail(400, { error: 'Please check your details — password must be at least 8 characters' });
+				}
 				return fail(err.status, { error: err.message });
 			}
 			if (err instanceof Response) {
