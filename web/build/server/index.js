@@ -1,7 +1,7 @@
-import { D as DevalueError, i as is_primitive, g as get_type, a as is_plain_object, e as enumerable_symbols, s as stringify_key, b as stringify_string, v as valid_array_indices, B as BROWSER, u as uneval } from './chunks/renderer-DLnxqfrv.js';
+import { D as DevalueError, i as is_primitive, g as get_type, a as is_plain_object, e as enumerable_symbols, s as stringify_key, b as stringify_string, v as valid_array_indices, c as DEV, u as uneval } from './chunks/renderer-DMNwzsJT.js';
 import { H as HttpError, j as json, t as text, S as SvelteKitError, R as Redirect, e as error, A as ActionFailure, i as isRedirect } from './chunks/index-aGhFOaj4.js';
-import { w as with_request_store, t as text_decoder, b as base64_decode, r as root, d as decode_pathname, n as normalize_path, a as disable_search, c as decode_params, v as validate_layout_server_exports, e as validate_layout_exports, f as validate_page_server_exports, g as validate_page_exports, h as text_encoder, i as resolve, m as make_trackable, j as get_relative_path, k as base64_encode } from './chunks/root-XENmHcWE.js';
-import { r as readable, w as writable } from './chunks/index-nmK-lLzQ.js';
+import { w as with_request_store, t as text_decoder, b as base64_decode, r as root, d as decode_pathname, n as normalize_path, a as disable_search, c as decode_params, v as validate_layout_server_exports, e as validate_layout_exports, f as validate_page_server_exports, g as validate_page_exports, h as text_encoder, i as resolve, m as make_trackable, j as get_relative_path, k as base64_encode } from './chunks/root-B5IRCJso.js';
+import { r as readable, w as writable } from './chunks/index-Dw650lR_.js';
 
 /**
  * @template {{ tracing: { enabled: boolean, root: import('@opentelemetry/api').Span, current: import('@opentelemetry/api').Span } }} T
@@ -1291,7 +1291,7 @@ const options = {
   app_template_contains_nonce: false,
   async: false,
   csp: { "mode": "auto", "directives": { "upgrade-insecure-requests": false, "block-all-mixed-content": false }, "reportOnly": { "upgrade-insecure-requests": false, "block-all-mixed-content": false } },
-  csrf_check_origin: true,
+  csrf_check_origin: false,
   csrf_trusted_origins: [],
   embedded: false,
   env_public_prefix: "PUBLIC_",
@@ -1377,7 +1377,7 @@ const options = {
 		<div class="error">
 			<span class="status">` + status + '</span>\n			<div class="message">\n				<h1>' + message + "</h1>\n			</div>\n		</div>\n	</body>\n</html>\n"
   },
-  version_hash: "1lw768q"
+  version_hash: "1yccwwp"
 };
 async function get_hooks() {
   let handle;
@@ -1385,7 +1385,7 @@ async function get_hooks() {
   let handleError;
   let handleValidationError;
   let init;
-  ({ handle, handleFetch, handleError, handleValidationError, init } = await import('./chunks/hooks.server-uzRnDDV7.js'));
+  ({ handle, handleFetch, handleError, handleValidationError, init } = await import('./chunks/hooks.server-7F226eTj.js'));
   let reroute;
   let transport;
   return {
@@ -2138,7 +2138,7 @@ async function handle_action_json_request(event, event_state, options2, server) 
   check_named_default_separate(actions);
   try {
     const data = await call_action(event, event_state, actions);
-    if (BROWSER) ;
+    if (DEV) ;
     if (data instanceof ActionFailure) {
       return action_json({
         type: "failure",
@@ -2223,7 +2223,7 @@ async function handle_action_request(event, event_state, server) {
   check_named_default_separate(actions);
   try {
     const data = await call_action(event, event_state, actions);
-    if (BROWSER) ;
+    if (DEV) ;
     if (data instanceof ActionFailure) {
       return {
         type: "failure",
@@ -3533,7 +3533,7 @@ async function render_response({
       ) : void 0
     };
     try {
-      if (BROWSER) ;
+      if (DEV) ;
       const state2 = { ...event_state, is_in_render: true };
       rendered = await with_request_store({ event, state: state2 }, async () => {
         if (relative) override({ base: base$1, assets: assets$1 });
@@ -4455,7 +4455,7 @@ async function render_page(event, event_state, page, options2, manifest, state, 
     const ssr = nodes.ssr();
     const csr = nodes.csr();
     if (ssr === false && !(state.prerendering && should_prerender_data)) {
-      if (BROWSER && action_result && !event.request.headers.has("x-sveltekit-action")) ;
+      if (DEV && action_result && !event.request.headers.has("x-sveltekit-action")) ;
       return await render_response({
         branch: [],
         fetched,
@@ -5352,12 +5352,12 @@ async function internal_respond(request, options2, manifest, state) {
       if (url.pathname === base || url.pathname === base + "/") {
         trailing_slash = "always";
       } else if (page_nodes) {
-        if (BROWSER) ;
+        if (DEV) ;
         trailing_slash = page_nodes.trailing_slash();
       } else if (route.endpoint) {
         const node = await route.endpoint();
         trailing_slash = node.trailingSlash ?? "never";
-        if (BROWSER) ;
+        if (DEV) ;
       }
       if (!is_data_request) {
         const normalized = normalize_path(url.pathname, trailing_slash);
@@ -5617,7 +5617,7 @@ async function internal_respond(request, options2, manifest, state) {
         });
       }
       if (state.depth === 0) {
-        if (BROWSER && event2.url.pathname === "/.well-known/appspecific/com.chrome.devtools.json") ;
+        if (DEV && event2.url.pathname === "/.well-known/appspecific/com.chrome.devtools.json") ;
         return await respond_with_error({
           event: event2,
           event_state,

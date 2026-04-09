@@ -1,4 +1,4 @@
-import { l as lifecycle_outside_component, B as BROWSER, i as invalid_csp, a as await_invalid, g as get_render_context } from "./render-context.js";
+import { l as lifecycle_outside_component, D as DEV, i as invalid_csp, a as await_invalid, g as get_render_context } from "./render-context.js";
 import { clsx as clsx$1 } from "clsx";
 import * as devalue from "devalue";
 var ssr_context = null;
@@ -2044,7 +2044,7 @@ function update_effect(effect) {
     effect.teardown = typeof teardown === "function" ? teardown : null;
     effect.wv = write_version;
     var dep;
-    if (BROWSER && tracing_mode_flag && (effect.f & DIRTY) !== 0 && effect.deps !== null) ;
+    if (DEV && tracing_mode_flag && (effect.f & DIRTY) !== 0 && effect.deps !== null) ;
   } finally {
     is_updating_effect = was_updating_effect;
     active_effect = previous_effect;
@@ -2267,6 +2267,10 @@ function stringify(value) {
 function attr_class(value, hash, directives) {
   var result = to_class(value, hash, directives);
   return result ? ` class="${escape_html(result, true)}"` : "";
+}
+function attr_style(value, directives) {
+  var result = to_style(value, directives);
+  return result ? ` style="${escape_html(result, true)}"` : "";
 }
 function store_get(store_values, store_name, store) {
   if (store_name in store_values && store_values[store_name][0] === store) {
@@ -3088,71 +3092,72 @@ class SSRState {
   }
 }
 export {
-  array_from as $,
-  pause_effect as A,
-  BOUNDARY_EFFECT as B,
+  init_operations as $,
+  queue_micro_task as A,
+  active_effect as B,
   COMMENT_NODE as C,
-  current_batch as D,
-  move_effect as E,
-  defer_effect as F,
-  set_active_effect as G,
+  BOUNDARY_EFFECT as D,
+  block as E,
+  branch as F,
+  create_text as G,
   HYDRATION_ERROR as H,
-  set_active_reaction as I,
-  set_component_context as J,
-  Batch as K,
-  handle_error as L,
-  active_reaction as M,
-  component_context as N,
-  internal_set as O,
-  destroy_effect as P,
-  invoke_error_boundary as Q,
-  svelte_boundary_reset_onerror as R,
-  HYDRATION_START_FAILED as S,
-  EFFECT_TRANSPARENT as T,
-  EFFECT_PRESERVED as U,
-  define_property as V,
-  init_operations as W,
-  get_first_child as X,
-  hydration_failed as Y,
-  clear_text_content as Z,
-  component_root as _,
+  pause_effect as I,
+  current_batch as J,
+  move_effect as K,
+  defer_effect as L,
+  set_active_effect as M,
+  set_active_reaction as N,
+  set_component_context as O,
+  Batch as P,
+  handle_error as Q,
+  active_reaction as R,
+  component_context as S,
+  internal_set as T,
+  destroy_effect as U,
+  invoke_error_boundary as V,
+  svelte_boundary_reset_onerror as W,
+  HYDRATION_START_FAILED as X,
+  EFFECT_TRANSPARENT as Y,
+  EFFECT_PRESERVED as Z,
+  define_property as _,
   attr_class as a,
-  is_passive_event as a0,
-  push as a1,
-  pop as a2,
-  set as a3,
-  LEGACY_PROPS as a4,
-  flushSync as a5,
-  mutable_source as a6,
-  render as a7,
-  setContext as a8,
-  head as a9,
-  safe_not_equal as aa,
-  subscribe_to_store as ab,
-  run_all as ac,
+  get_first_child as a0,
+  hydration_failed as a1,
+  clear_text_content as a2,
+  component_root as a3,
+  array_from as a4,
+  is_passive_event as a5,
+  push as a6,
+  pop as a7,
+  set as a8,
+  LEGACY_PROPS as a9,
+  flushSync as aa,
+  mutable_source as ab,
+  render as ac,
+  setContext as ad,
   escape_html as b,
   store_get as c,
   derived as d,
   ensure_array_like as e,
   attr as f,
-  bind_props as g,
-  getContext as h,
-  HYDRATION_END as i,
-  HYDRATION_START as j,
-  HYDRATION_START_ELSE as k,
-  get_next_sibling as l,
-  effect_tracking as m,
+  getContext as g,
+  head as h,
+  attr_style as i,
+  bind_props as j,
+  safe_not_equal as k,
+  subscribe_to_store as l,
+  HYDRATION_END as m,
   noop as n,
-  get as o,
-  source as p,
-  untrack as q,
-  render_effect as r,
+  HYDRATION_START as o,
+  HYDRATION_START_ELSE as p,
+  get_next_sibling as q,
+  run_all as r,
   stringify as s,
-  increment as t,
+  effect_tracking as t,
   unsubscribe_stores as u,
-  queue_micro_task as v,
-  active_effect as w,
-  block as x,
-  branch as y,
-  create_text as z
+  get as v,
+  render_effect as w,
+  source as x,
+  untrack as y,
+  increment as z
 };

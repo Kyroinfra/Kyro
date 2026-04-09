@@ -1,24 +1,11 @@
-import { n as noop, h as getContext } from "./renderer.js";
+import { g as getContext } from "./renderer.js";
 import "clsx";
 import "@sveltejs/kit/internal";
 import "./exports.js";
 import "./utils.js";
 import "@sveltejs/kit/internal/server";
 import "./root.js";
-const is_legacy = noop.toString().includes("$$") || /function \w+\(\) \{\}/.test(noop.toString());
-const placeholder_url = "a:";
-if (is_legacy) {
-  ({
-    data: {},
-    form: null,
-    error: null,
-    params: {},
-    route: { id: null },
-    state: {},
-    status: -1,
-    url: new URL(placeholder_url)
-  });
-}
+import "./state.svelte.js";
 const getStores = () => {
   const stores = getContext("__svelte__");
   return {

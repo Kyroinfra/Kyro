@@ -7,7 +7,7 @@ const COOKIE_NAME = 'kyro_token';
 export const handle: Handle = async ({ event, resolve }) => {
 	const token = event.cookies.get(COOKIE_NAME);
 
-	if (token) {
+		if (token) {
 		try {
 			const decoded = jwt.verify(token, JWT_SECRET) as {
 				userId: string;
@@ -17,7 +17,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 			event.locals.user = {
 				id: decoded.userId,
 				orgId: decoded.orgId,
-				role: decoded.role
+				role: decoded.role,
+				token
 			};
 		} catch {
 			event.cookies.delete(COOKIE_NAME, { path: '/' });

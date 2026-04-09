@@ -2,6 +2,20 @@
 	import Card from '$lib/components/ui/Card.svelte';
 	import Badge from '$lib/components/ui/Badge.svelte';
 	import { user } from '$lib/stores/auth';
+	import { formatBytes, formatNumber } from '$lib/utils/format';
+
+	interface Props {
+		data: {
+			stats: {
+				totalRequests: number;
+				totalStorage: number;
+				activeApiKeys: number;
+				totalMembers: number;
+			};
+		};
+	}
+
+	let { data }: Props = $props();
 </script>
 
 <svelte:head>
@@ -21,7 +35,7 @@
 			<div class="stat-card">
 				<span class="stat-icon">🔑</span>
 				<div class="stat-info">
-					<span class="stat-value">0</span>
+					<span class="stat-value">{formatNumber(data.stats.activeApiKeys)}</span>
 					<span class="stat-label">API Keys</span>
 				</div>
 			</div>
@@ -30,7 +44,7 @@
 			<div class="stat-card">
 				<span class="stat-icon">📊</span>
 				<div class="stat-info">
-					<span class="stat-value">0</span>
+					<span class="stat-value">{formatNumber(data.stats.totalRequests)}</span>
 					<span class="stat-label">API Requests</span>
 				</div>
 			</div>
@@ -39,7 +53,7 @@
 			<div class="stat-card">
 				<span class="stat-icon">📁</span>
 				<div class="stat-info">
-					<span class="stat-value">0 MB</span>
+					<span class="stat-value">{formatBytes(data.stats.totalStorage)}</span>
 					<span class="stat-label">Storage Used</span>
 				</div>
 			</div>
@@ -48,7 +62,7 @@
 			<div class="stat-card">
 				<span class="stat-icon">👥</span>
 				<div class="stat-info">
-					<span class="stat-value">1</span>
+					<span class="stat-value">{formatNumber(data.stats.totalMembers)}</span>
 					<span class="stat-label">Team Members</span>
 				</div>
 			</div>

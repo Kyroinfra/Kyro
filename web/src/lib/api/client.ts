@@ -32,6 +32,11 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 	if (token) headers['Authorization'] = `Bearer ${token}`;
 	if (apiKey) headers['X-API-Key'] = apiKey;
 
+	const isFormData = body instanceof FormData;
+	if (isFormData) {
+		delete headers['Content-Type'];
+	}
+
 	const url = `${getBaseUrl()}${path}`;
 
 	const res = await fetch(url, {

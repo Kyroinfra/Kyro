@@ -1,4 +1,5 @@
 import { f as attr, a as attr_class, s as stringify } from "./renderer.js";
+/* empty css                                     */
 function Button($$renderer, $$props) {
   let {
     variant = "primary",

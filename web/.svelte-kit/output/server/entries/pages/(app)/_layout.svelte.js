@@ -1,16 +1,9 @@
-import { e as ensure_array_like, f as attr, a as attr_class, c as store_get, b as escape_html, u as unsubscribe_stores, g as bind_props } from "../../../chunks/renderer.js";
-import { redirect } from "@sveltejs/kit";
+import { e as ensure_array_like, f as attr, a as attr_class, c as store_get, b as escape_html, u as unsubscribe_stores } from "../../../chunks/renderer.js";
 import { p as page } from "../../../chunks/stores.js";
 import { u as user } from "../../../chunks/auth.js";
 function _layout($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
     var $$store_subs;
-    const load = async ({ locals }) => {
-      if (!locals.user) {
-        throw redirect(302, "/login");
-      }
-      return { user: locals.user };
-    };
     let { data, children } = $$props;
     const navItems = [
       { href: "/dashboard", label: "Dashboard", icon: "🏠" },
@@ -34,7 +27,6 @@ function _layout($$renderer, $$props) {
     children($$renderer2);
     $$renderer2.push(`<!----></main></div></div>`);
     if ($$store_subs) unsubscribe_stores($$store_subs);
-    bind_props($$props, { load });
   });
 }
 export {

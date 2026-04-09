@@ -29,7 +29,7 @@ declare module "$app/types" {
 	type MatcherParam<M> = M extends (param : string) => param is (infer U extends string) ? U : string;
 
 	export interface AppTypes {
-		RouteId(): "/(auth)" | "/(app)" | "/" | "/(app)/dashboard" | "/health" | "/(auth)/login" | "/logout" | "/(auth)/register";
+		RouteId(): "/(auth)" | "/(app)" | "/" | "/(app)/dashboard" | "/(app)/dashboard/files" | "/(app)/dashboard/keys" | "/(app)/dashboard/settings" | "/(app)/dashboard/usage" | "/health" | "/(auth)/login" | "/logout" | "/(auth)/register";
 		RouteParams(): {
 			
 		};
@@ -38,12 +38,16 @@ declare module "$app/types" {
 			"/(app)": Record<string, never>;
 			"/": Record<string, never>;
 			"/(app)/dashboard": Record<string, never>;
+			"/(app)/dashboard/files": Record<string, never>;
+			"/(app)/dashboard/keys": Record<string, never>;
+			"/(app)/dashboard/settings": Record<string, never>;
+			"/(app)/dashboard/usage": Record<string, never>;
 			"/health": Record<string, never>;
 			"/(auth)/login": Record<string, never>;
 			"/logout": Record<string, never>;
 			"/(auth)/register": Record<string, never>
 		};
-		Pathname(): "/" | "/dashboard" | "/health" | "/login" | "/logout" | "/register";
+		Pathname(): "/" | "/dashboard" | "/dashboard/files" | "/dashboard/keys" | "/dashboard/settings" | "/dashboard/usage" | "/health" | "/login" | "/logout" | "/register";
 		ResolvedPathname(): `${"" | `/${string}`}${ReturnType<AppTypes['Pathname']>}`;
 		Asset(): string & {};
 	}

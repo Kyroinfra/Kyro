@@ -16,7 +16,7 @@ const options = {
   app_template_contains_nonce: false,
   async: false,
   csp: { "mode": "auto", "directives": { "upgrade-insecure-requests": false, "block-all-mixed-content": false }, "reportOnly": { "upgrade-insecure-requests": false, "block-all-mixed-content": false } },
-  csrf_check_origin: true,
+  csrf_check_origin: false,
   csrf_trusted_origins: [],
   embedded: false,
   env_public_prefix: "PUBLIC_",
@@ -102,7 +102,7 @@ const options = {
 		<div class="error">
 			<span class="status">` + status + '</span>\n			<div class="message">\n				<h1>' + message + "</h1>\n			</div>\n		</div>\n	</body>\n</html>\n"
   },
-  version_hash: "1lw768q"
+  version_hash: "1yccwwp"
 };
 async function get_hooks() {
   let handle;

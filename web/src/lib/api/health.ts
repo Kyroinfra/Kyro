@@ -1,4 +1,4 @@
-import { request, type ApiError } from './client';
+import { request, ApiError } from './client';
 
 export interface HealthResponse {
 	status: 'ok' | 'degraded';

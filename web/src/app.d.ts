@@ -7,6 +7,7 @@ declare global {
 				id: string;
 				orgId: string;
 				role: 'owner' | 'admin' | 'member';
+				token?: string;
 			} | null;
 		}
 	}

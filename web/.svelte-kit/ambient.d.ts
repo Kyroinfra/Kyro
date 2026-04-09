@@ -59,6 +59,7 @@ declare module '$env/static/private' {
 	export const INPUT_METHOD: string;
 	export const XCOMPOSEFILE: string;
 	export const XDG_CONFIG_HOME: string;
+	export const AGENT: string;
 	export const OMARCHY_PATH: string;
 	export const MEMORY_PRESSURE_WRITE: string;
 	export const COLOR: string;
@@ -72,8 +73,8 @@ declare module '$env/static/private' {
 	export const EDITOR: string;
 	export const XDG_SEAT: string;
 	export const PWD: string;
-	export const LOGNAME: string;
 	export const XDG_SESSION_DESKTOP: string;
+	export const LOGNAME: string;
 	export const XDG_SESSION_TYPE: string;
 	export const PNPM_HOME: string;
 	export const npm_config_init_module: string;
@@ -82,7 +83,9 @@ declare module '$env/static/private' {
 	export const TERMINAL: string;
 	export const QT_STYLE_OVERRIDE: string;
 	export const MOTD_SHOWN: string;
+	export const OPENCODE_PID: string;
 	export const HOME: string;
+	export const OPENCODE: string;
 	export const LANG: string;
 	export const _JAVA_AWT_WM_NONREPARENTING: string;
 	export const XDG_CURRENT_DESKTOP: string;
@@ -261,6 +264,7 @@ declare module '$env/dynamic/private' {
 		INPUT_METHOD: string;
 		XCOMPOSEFILE: string;
 		XDG_CONFIG_HOME: string;
+		AGENT: string;
 		OMARCHY_PATH: string;
 		MEMORY_PRESSURE_WRITE: string;
 		COLOR: string;
@@ -274,8 +278,8 @@ declare module '$env/dynamic/private' {
 		EDITOR: string;
 		XDG_SEAT: string;
 		PWD: string;
-		LOGNAME: string;
 		XDG_SESSION_DESKTOP: string;
+		LOGNAME: string;
 		XDG_SESSION_TYPE: string;
 		PNPM_HOME: string;
 		npm_config_init_module: string;
@@ -284,7 +288,9 @@ declare module '$env/dynamic/private' {
 		TERMINAL: string;
 		QT_STYLE_OVERRIDE: string;
 		MOTD_SHOWN: string;
+		OPENCODE_PID: string;
 		HOME: string;
+		OPENCODE: string;
 		LANG: string;
 		_JAVA_AWT_WM_NONREPARENTING: string;
 		XDG_CURRENT_DESKTOP: string;

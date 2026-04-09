@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-const JWT_SECRET = "Kyro";
+const JWT_SECRET = process.env.JWT_SECRET || "Kyro";
 const COOKIE_NAME = "kyro_token";
 const handle = async ({ event, resolve }) => {
   const token = event.cookies.get(COOKIE_NAME);
@@ -9,7 +9,8 @@ const handle = async ({ event, resolve }) => {
       event.locals.user = {
         id: decoded.userId,
         orgId: decoded.orgId,
-        role: decoded.role
+        role: decoded.role,
+        token
       };
     } catch {
       event.cookies.delete(COOKIE_NAME, { path: "/" });
