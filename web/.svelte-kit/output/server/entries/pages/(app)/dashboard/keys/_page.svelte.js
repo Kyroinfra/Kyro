@@ -1,4 +1,4 @@
-import { h as head, b as escape_html, e as ensure_array_like, d as derived, c as store_get, f as attr, u as unsubscribe_stores } from "../../../../../chunks/renderer.js";
+import { h as head, b as escape_html, a as attr_class, e as ensure_array_like, d as derived, c as store_get, f as attr, u as unsubscribe_stores } from "../../../../../chunks/renderer.js";
 import "@sveltejs/kit/internal";
 import "../../../../../chunks/exports.js";
 import "../../../../../chunks/utils.js";
@@ -10,7 +10,7 @@ import { B as Button } from "../../../../../chunks/Button.js";
 import { C as Card } from "../../../../../chunks/Card.js";
 import { B as Badge, M as Modal } from "../../../../../chunks/Modal.js";
 import { C as ConfirmDialog } from "../../../../../chunks/ConfirmDialog.js";
-import { b as formatDate, c as formatDateTime } from "../../../../../chunks/format.js";
+import { c as formatDate, b as formatDateTime } from "../../../../../chunks/format.js";
 function _page($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
     var $$store_subs;
@@ -20,10 +20,14 @@ function _page($$renderer, $$props) {
     let keyToDelete = null;
     let copied = false;
     let creating = false;
+    let filter = "all";
     let newKey = form?.newKey || null;
     let keyName = "";
     let selectedScopes = ["read"];
     const canManage = derived(() => store_get($$store_subs ??= {}, "$user", user)?.role === "owner" || store_get($$store_subs ??= {}, "$user", user)?.role === "admin");
+    const filteredKeys = derived(() => () => {
+      return data.keys;
+    });
     function handleCopy() {
       if (newKey) {
         navigator.clipboard.writeText(newKey);
@@ -102,19 +106,38 @@ function _page($$renderer, $$props) {
         });
       } else {
         $$renderer3.push("<!--[-1-->");
-        $$renderer3.push(`<div class="keys-list svelte-1584yhn"><!--[-->`);
-        const each_array = ensure_array_like(data.keys);
+        $$renderer3.push(`<div class="filter-tabs svelte-1584yhn"><button${attr_class("filter-tab svelte-1584yhn", void 0, { "active": filter === "all" })}>All (${escape_html(data.keys.length)})</button> <button${attr_class("filter-tab svelte-1584yhn", void 0, { "active": filter === "active" })}>Active (${escape_html(data.keys.filter((k) => !k.revokedAt).length)})</button> <button${attr_class("filter-tab svelte-1584yhn", void 0, { "active": filter === "revoked" })}>Revoked (${escape_html(data.keys.filter((k) => k.revokedAt).length)})</button></div> <div class="keys-list svelte-1584yhn"><!--[-->`);
+        const each_array = ensure_array_like(filteredKeys()());
         for (let $$index_1 = 0, $$length = each_array.length; $$index_1 < $$length; $$index_1++) {
           let key = each_array[$$index_1];
           Card($$renderer3, {
             children: ($$renderer4) => {
-              $$renderer4.push(`<div class="key-card svelte-1584yhn"><div class="key-info svelte-1584yhn"><div class="key-name svelte-1584yhn">${escape_html(key.name)}</div> <div class="key-prefix svelte-1584yhn">key_${escape_html(key.prefix)}***</div> <div class="key-meta svelte-1584yhn"><span class="key-date svelte-1584yhn">Created ${escape_html(formatDate(key.createdAt))}</span> `);
+              $$renderer4.push(`<div${attr_class("key-card svelte-1584yhn", void 0, { "revoked": key.revokedAt })}><div class="key-info svelte-1584yhn"><div class="key-header svelte-1584yhn"><span${attr_class("key-name svelte-1584yhn", void 0, { "revoked": key.revokedAt })}>${escape_html(key.name)}</span> `);
+              if (key.revokedAt) {
+                $$renderer4.push("<!--[0-->");
+                Badge($$renderer4, {
+                  variant: "danger",
+                  children: ($$renderer5) => {
+                    $$renderer5.push(`<!---->Revoked`);
+                  }
+                });
+              } else {
+                $$renderer4.push("<!--[-1-->");
+              }
+              $$renderer4.push(`<!--]--></div> <div${attr_class("key-prefix svelte-1584yhn", void 0, { "revoked": key.revokedAt })}>key_${escape_html(key.prefix)}***</div> <div class="key-meta svelte-1584yhn"><span class="key-date svelte-1584yhn">Created ${escape_html(formatDate(key.createdAt))}</span> `);
               if (key.lastUsedAt) {
                 $$renderer4.push("<!--[0-->");
                 $$renderer4.push(`<span class="key-date svelte-1584yhn">Last used ${escape_html(formatDateTime(key.lastUsedAt))}</span>`);
               } else {
                 $$renderer4.push("<!--[-1-->");
                 $$renderer4.push(`<span class="key-date svelte-1584yhn">Never used</span>`);
+              }
+              $$renderer4.push(`<!--]--> `);
+              if (key.revokedAt) {
+                $$renderer4.push("<!--[0-->");
+                $$renderer4.push(`<span class="key-date revoked-date svelte-1584yhn">Revoked ${escape_html(formatDate(key.revokedAt))}</span>`);
+              } else {
+                $$renderer4.push("<!--[-1-->");
               }
               $$renderer4.push(`<!--]--></div> <div class="key-scopes svelte-1584yhn"><!--[-->`);
               const each_array_1 = ensure_array_like(key.scopes);
@@ -127,7 +150,7 @@ function _page($$renderer, $$props) {
                 });
               }
               $$renderer4.push(`<!--]--></div></div> `);
-              if (canManage()) {
+              if (canManage() && !key.revokedAt) {
                 $$renderer4.push("<!--[0-->");
                 Button($$renderer4, {
                   variant: "danger",

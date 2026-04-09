@@ -18,6 +18,7 @@
 				scopes: string[];
 				lastUsedAt: string | null;
 				createdAt: string;
+				revokedAt: string | null;
 			}>;
 		};
 		form?: {
@@ -35,12 +36,19 @@
 	let copied = $state(false);
 	let createError = $state<string | null>(null);
 	let creating = $state(false);
+	let filter = $state<'all' | 'active' | 'revoked'>('all');
 
 	let newKey = $state<string | null>(form?.newKey || null);
 	let keyName = $state('');
 	let selectedScopes = $state<string[]>(['read']);
 
 	const canManage = $derived($user?.role === 'owner' || $user?.role === 'admin');
+
+	const filteredKeys = $derived(() => {
+		if (filter === 'active') return data.keys.filter(k => !k.revokedAt);
+		if (filter === 'revoked') return data.keys.filter(k => k.revokedAt);
+		return data.keys;
+	});
 
 	function handleCreateSubmit() {
 		creating = true;
@@ -132,19 +140,39 @@
 			</div>
 		</Card>
 	{:else}
+		<div class="filter-tabs">
+			<button class="filter-tab" class:active={filter === 'all'} onclick={() => (filter = 'all')}>
+				All ({data.keys.length})
+			</button>
+			<button class="filter-tab" class:active={filter === 'active'} onclick={() => (filter = 'active')}>
+				Active ({data.keys.filter(k => !k.revokedAt).length})
+			</button>
+			<button class="filter-tab" class:active={filter === 'revoked'} onclick={() => (filter = 'revoked')}>
+				Revoked ({data.keys.filter(k => k.revokedAt).length})
+			</button>
+		</div>
+
 		<div class="keys-list">
-			{#each data.keys as key}
+			{#each filteredKeys() as key}
 				<Card>
-					<div class="key-card">
+					<div class="key-card" class:revoked={key.revokedAt}>
 						<div class="key-info">
-							<div class="key-name">{key.name}</div>
-							<div class="key-prefix">key_{key.prefix}***</div>
+							<div class="key-header">
+								<span class="key-name" class:revoked={key.revokedAt}>{key.name}</span>
+								{#if key.revokedAt}
+									<Badge variant="danger">Revoked</Badge>
+								{/if}
+							</div>
+							<div class="key-prefix" class:revoked={key.revokedAt}>key_{key.prefix}***</div>
 							<div class="key-meta">
 								<span class="key-date">Created {formatDate(key.createdAt)}</span>
 								{#if key.lastUsedAt}
 									<span class="key-date">Last used {formatDateTime(key.lastUsedAt)}</span>
 								{:else}
 									<span class="key-date">Never used</span>
+								{/if}
+								{#if key.revokedAt}
+									<span class="key-date revoked-date">Revoked {formatDate(key.revokedAt)}</span>
 								{/if}
 							</div>
 							<div class="key-scopes">
@@ -153,7 +181,7 @@
 								{/each}
 							</div>
 						</div>
-						{#if canManage}
+						{#if canManage && !key.revokedAt}
 							<Button variant="danger" size="sm" onclick={() => confirmDelete(key.id)}>
 								Revoke
 							</Button>
@@ -348,11 +376,46 @@
 		gap: var(--space-3);
 	}
 
-	.key-card {
+	.key-card.revoked {
+		opacity: 0.6;
+	}
+
+	.filter-tabs {
 		display: flex;
-		justify-content: space-between;
+		gap: var(--space-1);
+		margin-bottom: var(--space-4);
+		background: var(--color-bg-2);
+		padding: var(--space-1);
+		border-radius: var(--radius-md);
+		width: fit-content;
+	}
+
+	.filter-tab {
+		padding: var(--space-2) var(--space-3);
+		background: transparent;
+		border: none;
+		border-radius: var(--radius-sm);
+		color: var(--color-text-muted);
+		font-size: var(--font-size-sm);
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.filter-tab:hover {
+		color: var(--color-text);
+	}
+
+	.filter-tab.active {
+		background: var(--color-accent);
+		color: white;
+	}
+
+	.key-header {
+		display: flex;
 		align-items: center;
-		gap: var(--space-4);
+		gap: var(--space-2);
+		margin-bottom: var(--space-1);
 	}
 
 	.key-info {
@@ -366,11 +429,20 @@
 		margin-bottom: var(--space-1);
 	}
 
+	.key-name.revoked {
+		text-decoration: line-through;
+		color: var(--color-text-muted);
+	}
+
 	.key-prefix {
 		font-family: var(--font-mono);
 		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
 		margin-bottom: var(--space-2);
+	}
+
+	.key-prefix.revoked {
+		opacity: 0.6;
 	}
 
 	.key-meta {

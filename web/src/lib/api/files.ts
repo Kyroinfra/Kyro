@@ -78,7 +78,7 @@ export async function uploadFile(
 		xhr.onerror = () => reject(new Error('Network error'));
 
 		xhr.open('POST', '/api/v1/files');
-		xhr.setRequestHeader('Authorization', `Bearer ${apiKey}`);
+		xhr.setRequestHeader('X-API-Key', apiKey);
 		
 		const fd = new FormData();
 		fd.append('file', file);

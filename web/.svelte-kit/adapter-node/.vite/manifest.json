@@ -99,6 +99,13 @@
     "file": "chunks/exports.js",
     "name": "exports"
   },
+  "_files.js": {
+    "file": "chunks/files.js",
+    "name": "files",
+    "imports": [
+      "_client.js"
+    ]
+  },
   "_format.js": {
     "file": "chunks/format.js",
     "name": "format"
@@ -279,7 +286,7 @@
     "isEntry": true,
     "imports": [
       "_keys.js",
-      "_client.js"
+      "_files.js"
     ]
   },
   "src/routes/(app)/dashboard/files/+page.svelte": {
@@ -289,17 +296,15 @@
     "isEntry": true,
     "imports": [
       "_renderer.js",
-      "_exports.js",
-      "_utils.js",
-      "_root.js",
-      "_state.svelte.js",
       "_auth.js",
       "_Button.js",
       "_Card.js",
-      "_ConfirmDialog.js"
+      "_ConfirmDialog.js",
+      "_format.js",
+      "_files.js"
     ],
     "css": [
-      "_app/immutable/assets/_page.CZNeZZbn.css"
+      "_app/immutable/assets/_page.O9FvK7_-.css"
     ]
   },
   "src/routes/(app)/dashboard/keys/+page.server.ts": {
@@ -330,7 +335,7 @@
       "_format.js"
     ],
     "css": [
-      "_app/immutable/assets/_page.MOcqL4lI.css"
+      "_app/immutable/assets/_page.DtRtg0HR.css"
     ]
   },
   "src/routes/(app)/dashboard/settings/+page.server.ts": {
@@ -494,6 +499,12 @@
       "_app/immutable/assets/_page.CLo2SxnP.css",
       "_app/immutable/assets/Button.0TkAx1vZ.css"
     ]
+  },
+  "src/routes/api/files/[id]/+server.ts": {
+    "file": "entries/endpoints/api/files/_id_/_server.ts.js",
+    "name": "entries/endpoints/api/files/_id_/_server.ts",
+    "src": "src/routes/api/files/[id]/+server.ts",
+    "isEntry": true
   },
   "src/routes/health/+page.svelte": {
     "file": "entries/pages/health/_page.svelte.js",

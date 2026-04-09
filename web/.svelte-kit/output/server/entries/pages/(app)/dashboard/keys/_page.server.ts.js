@@ -14,7 +14,8 @@ const load = async ({ locals }) => {
         prefix: k.key_prefix,
         scopes: k.scopes,
         lastUsedAt: k.last_used_at,
-        createdAt: k.created_at
+        createdAt: k.created_at,
+        revokedAt: k.revoked_at
       }))
     };
   } catch (error) {

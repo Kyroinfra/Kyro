@@ -10,7 +10,7 @@ import { B as Button } from "../../../../../chunks/Button.js";
 import { C as Card } from "../../../../../chunks/Card.js";
 import { B as Badge, M as Modal } from "../../../../../chunks/Modal.js";
 import { C as ConfirmDialog } from "../../../../../chunks/ConfirmDialog.js";
-import { b as formatDate } from "../../../../../chunks/format.js";
+import { c as formatDate } from "../../../../../chunks/format.js";
 function _page($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
     var $$store_subs;

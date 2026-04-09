@@ -26,7 +26,7 @@ function formatNumber(num) {
 }
 export {
   formatBytes as a,
-  formatDate as b,
-  formatDateTime as c,
+  formatDateTime as b,
+  formatDate as c,
   formatNumber as f
 };

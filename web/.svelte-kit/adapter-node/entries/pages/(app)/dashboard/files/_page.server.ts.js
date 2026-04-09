@@ -1,16 +1,6 @@
 import { redirect } from "@sveltejs/kit";
 import { g as getKeys } from "../../../../../chunks/keys.js";
-import { r as request } from "../../../../../chunks/client.js";
-async function getFiles(apiKey) {
-  const files = await request("/api/v1/files", { method: "GET", apiKey });
-  return files.map((f) => ({
-    id: f.id,
-    name: f.name,
-    mimeType: f.mime_type,
-    sizeBytes: f.size_bytes,
-    createdAt: f.created_at
-  }));
-}
+import { g as getFiles } from "../../../../../chunks/files.js";
 const load = async ({ locals }) => {
   const token = locals.user?.token;
   if (!token) {
