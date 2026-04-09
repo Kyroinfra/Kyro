@@ -30,7 +30,7 @@
 	.progress-track {
 		flex: 1;
 		background: var(--color-bg-3);
-		border-radius: var(--radius-full);
+		border-radius: var(--radius-sm);
 		overflow: hidden;
 	}
 
@@ -39,22 +39,23 @@
 	}
 
 	.progress-md .progress-track {
-		height: 8px;
+		height: 6px;
 	}
 
 	.progress-lg .progress-track {
-		height: 12px;
+		height: 8px;
 	}
 
 	.progress-fill {
 		height: 100%;
-		background: var(--color-accent);
-		border-radius: var(--radius-full);
+		background: var(--color-text);
+		border-radius: var(--radius-sm);
 		transition: width 0.2s ease;
 	}
 
 	.progress-label {
-		font-size: var(--font-size-sm);
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 		min-width: 40px;
 		text-align: right;

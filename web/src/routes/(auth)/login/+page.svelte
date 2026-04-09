@@ -1,148 +1,136 @@
 <script lang="ts">
-  import { enhance } from "$app/forms";
-  import Button from "$lib/components/ui/Button.svelte";
-  import Input from "$lib/components/ui/Input.svelte";
-  import Card from "$lib/components/ui/Card.svelte";
+	import { enhance } from '$app/forms';
+	import Button from '$lib/components/ui/Button.svelte';
+	import Input from '$lib/components/ui/Input.svelte';
+	import Card from '$lib/components/ui/Card.svelte';
 
-  let { form } = $props(); // receives fail() data from server
+	let { form } = $props();
 
-  let email = $state("");
-  let password = $state("");
-  let loading = $state(false);
+	let email = $state('');
+	let password = $state('');
+	let loading = $state(false);
 </script>
 
 <svelte:head>
-  <title>Sign In - Kyro</title>
+	<title>Sign In - Kyro</title>
 </svelte:head>
 
 <div class="auth-page">
-  <div class="auth-header">
-    <a href="/" class="logo">
-      <span class="logo-icon">K</span>
-      <span class="logo-text">Kyro</span>
-    </a>
-  </div>
+	<div class="auth-header">
+		<div class="logo">
+			<span class="logo-mark">K</span>
+			<span class="logo-text">kyro</span>
+		</div>
+		<p class="auth-command">$ signin</p>
+	</div>
 
-  <Card padding="lg">
-    <div class="auth-form">
-      <h1>Welcome back</h1>
-      <p class="subtitle">Sign in to your account</p>
+	<Card padding="lg">
+		<form
+			method="POST"
+			use:enhance={() => {
+				loading = true;
+				return async ({ update }) => {
+					loading = false;
+					await update();
+				};
+			}}
+		>
+			<div class="auth-form">
+				{#if form?.error}
+					<div class="form-error">{form.error}</div>
+				{/if}
+				<Input name="email" label="Email" type="email" placeholder="user@domain.com" bind:value={email} required />
+				<Input name="password" label="Password" type="password" placeholder="********" bind:value={password} required />
+				<Button type="submit" {loading} disabled={loading}>
+					{loading ? 'Authenticating...' : 'Sign In'}
+				</Button>
+			</div>
+		</form>
+	</Card>
 
-      <form
-        method="POST"
-        use:enhance={() => {
-          loading = true;
-          return async ({ update }) => {
-            loading = false;
-            await update();
-          };
-        }}
-      >
-        {#if form?.error}
-          <div class="form-error">{form.error}</div>
-        {/if}
-        <Input
-          name="email"
-          label="Email"
-          type="email"
-          placeholder="you@example.com"
-          bind:value={email}
-          required
-        />
-        <Input
-          name="password"
-          label="Password"
-          type="password"
-          placeholder="••••••••"
-          bind:value={password}
-          required
-        />
-        <Button type="submit" {loading} disabled={loading}>
-          {loading ? "Signing in..." : "Sign In"}
-        </Button>
-      </form>
-
-      <p class="footer-text">
-        Don't have an account? <a href="/register">Create one</a>
-      </p>
-    </div>
-  </Card>
+	<p class="footer-text">
+		<span class="prompt">></span> No account? <a href="/register">Register</a>
+	</p>
 </div>
 
 <style>
-  .auth-page {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-6);
-  }
+	.auth-page {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-6);
+	}
 
-  .auth-header {
-    text-align: center;
-  }
+	.auth-header {
+		text-align: center;
+	}
 
-  .logo {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    font-size: var(--font-size-xl);
-    font-weight: 700;
-    color: var(--color-text);
-    text-decoration: none;
-  }
+	.logo {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-2);
+		font-family: var(--font-mono);
+		font-size: var(--font-size-lg);
+		font-weight: 600;
+		color: var(--color-text);
+		text-decoration: none;
+		margin-bottom: var(--space-2);
+	}
 
-  .logo-icon {
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--color-accent);
-    color: white;
-    border-radius: var(--radius-md);
-  }
+	.logo-mark {
+		width: 28px;
+		height: 28px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--color-text);
+		color: var(--color-bg);
+		border-radius: var(--radius-sm);
+		font-weight: 700;
+	}
 
-  .auth-form {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-  }
+	.auth-command {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
+		color: var(--color-text-muted);
+		margin: 0;
+	}
 
-  .auth-form h1 {
-    font-size: var(--font-size-2xl);
-    font-weight: 600;
-    color: var(--color-text);
-  }
+	.auth-form {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-4);
+	}
 
-  .subtitle {
-    color: var(--color-text-muted);
-    margin-top: calc(-1 * var(--space-2));
-  }
+	.auth-form :global(button) {
+		width: 100%;
+		margin-top: var(--space-2);
+	}
 
-  form {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-    margin-top: var(--space-2);
-  }
+	.form-error {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
+		color: var(--color-danger);
+		padding: var(--space-3);
+		background: rgba(255, 68, 68, 0.1);
+		border: 1px solid var(--color-danger);
+		border-radius: var(--radius-sm);
+	}
 
-  form :global(.input-wrapper) {
-    margin-bottom: 0;
-  }
+	.footer-text {
+		text-align: center;
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
+		color: var(--color-text-muted);
+		margin: 0;
+	}
 
-  form :global(button) {
-    margin-top: var(--space-2);
-    width: 100%;
-  }
+	.prompt {
+		color: var(--color-text);
+		margin-right: var(--space-1);
+	}
 
-  .footer-text {
-    text-align: center;
-    font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
-    margin-top: var(--space-4);
-  }
-
-  .footer-text a {
-    color: var(--color-accent);
-    font-weight: 500;
-  }
+	.footer-text a {
+		color: var(--color-text);
+		font-weight: 500;
+	}
 </style>

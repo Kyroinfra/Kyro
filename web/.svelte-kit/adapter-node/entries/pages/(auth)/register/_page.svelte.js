@@ -20,26 +20,26 @@ function _page($$renderer, $$props) {
     function $$render_inner($$renderer3) {
       head("ydeots", $$renderer3, ($$renderer4) => {
         $$renderer4.title(($$renderer5) => {
-          $$renderer5.push(`<title>Create Account - Kyro</title>`);
+          $$renderer5.push(`<title>Register - Kyro</title>`);
         });
       });
-      $$renderer3.push(`<div class="auth-page svelte-ydeots"><div class="auth-header svelte-ydeots"><a href="/" class="logo svelte-ydeots"><span class="logo-icon svelte-ydeots">K</span> <span class="logo-text">Kyro</span></a></div> `);
+      $$renderer3.push(`<div class="auth-page svelte-ydeots"><div class="auth-header svelte-ydeots"><div class="logo svelte-ydeots"><span class="logo-mark svelte-ydeots">K</span> <span class="logo-text">kyro</span></div> <p class="auth-command svelte-ydeots">$ register</p></div> `);
       Card($$renderer3, {
         padding: "lg",
         children: ($$renderer4) => {
-          $$renderer4.push(`<div class="auth-form svelte-ydeots"><h1 class="svelte-ydeots">Create your account</h1> <p class="subtitle svelte-ydeots">Start building with Kyro</p> <form method="POST" class="svelte-ydeots">`);
+          $$renderer4.push(`<form method="POST"><div class="auth-form svelte-ydeots">`);
           if (form?.error) {
             $$renderer4.push("<!--[0-->");
-            $$renderer4.push(`<div class="form-error">${escape_html(form.error)}</div>`);
+            $$renderer4.push(`<div class="form-error svelte-ydeots">${escape_html(form.error)}</div>`);
           } else {
             $$renderer4.push("<!--[-1-->");
           }
           $$renderer4.push(`<!--]--> `);
           Input($$renderer4, {
             name: "orgName",
-            label: "Organization Name",
+            label: "Organization",
             type: "text",
-            placeholder: "My Company",
+            placeholder: "my-org",
             required: true,
             get value() {
               return orgName;
@@ -54,7 +54,7 @@ function _page($$renderer, $$props) {
             name: "email",
             label: "Email",
             type: "email",
-            placeholder: "you@example.com",
+            placeholder: "user@domain.com",
             required: true,
             get value() {
               return email;
@@ -69,7 +69,7 @@ function _page($$renderer, $$props) {
             name: "password",
             label: "Password",
             type: "password",
-            placeholder: "••••••••",
+            placeholder: "********",
             required: true,
             get value() {
               return password;
@@ -88,10 +88,10 @@ function _page($$renderer, $$props) {
               $$renderer5.push(`<!---->${escape_html("Create Account")}`);
             }
           });
-          $$renderer4.push(`<!----></form> <p class="footer-text svelte-ydeots">Already have an account? <a href="/login" class="svelte-ydeots">Sign in</a></p></div>`);
+          $$renderer4.push(`<!----></div></form>`);
         }
       });
-      $$renderer3.push(`<!----></div>`);
+      $$renderer3.push(`<!----> <p class="footer-text svelte-ydeots"><span class="prompt svelte-ydeots">></span> Have account? <a href="/login" class="svelte-ydeots">Sign in</a></p></div>`);
     }
     do {
       $$settled = true;

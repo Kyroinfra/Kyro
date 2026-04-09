@@ -1,5 +1,5 @@
 import { redirect } from "@sveltejs/kit";
-import { g as getUsage, a as getDailyUsage } from "../../../../../chunks/usage.js";
+import { g as getUsage, a as getDailyUsage } from "../../../../../chunks/usage2.js";
 const load = async ({ locals }) => {
   const token = locals.user?.token;
   if (!token) {

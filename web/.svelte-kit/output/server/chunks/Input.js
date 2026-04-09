@@ -1,4 +1,4 @@
-import { b as escape_html, f as attr, a as attr_class, j as bind_props } from "./renderer.js";
+import { f as attr, b as escape_html, a as attr_class, j as bind_props } from "./renderer.js";
 function Input($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
     let {
@@ -16,7 +16,7 @@ function Input($$renderer, $$props) {
     $$renderer2.push(`<div class="input-wrapper svelte-138axrz">`);
     if (label) {
       $$renderer2.push("<!--[0-->");
-      $$renderer2.push(`<label class="label svelte-138axrz">${escape_html(label)} `);
+      $$renderer2.push(`<label class="label svelte-138axrz"${attr("for", name)}>${escape_html(label)}`);
       if (required) {
         $$renderer2.push("<!--[0-->");
         $$renderer2.push(`<span class="required svelte-138axrz">*</span>`);

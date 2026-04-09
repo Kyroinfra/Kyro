@@ -79,16 +79,16 @@
 
 <div class="settings-page">
 	<header class="page-header">
-		<div>
-			<h1>Settings</h1>
-			<p class="subtitle">Manage your organization and team members</p>
+		<div class="header-content">
+			<span class="prompt">$</span>
+			<span class="command">./settings.sh</span>
 		</div>
 	</header>
 
 	{#if org}
 		<Card>
 			<div class="section">
-				<h2>Organization</h2>
+				<div class="section-title">// Organization</div>
 				<div class="org-info">
 					<div class="org-field">
 						<label>Name</label>
@@ -114,9 +114,9 @@
 	<Card>
 		<div class="section">
 			<div class="section-header">
-				<h2>Team Members</h2>
+				<span class="section-title">// Team Members</span>
 				{#if isOwner}
-					<Button onclick={() => (showInviteModal = true)}>Invite Member</Button>
+					<Button onclick={() => (showInviteModal = true)}>+ Invite</Button>
 				{/if}
 			</div>
 

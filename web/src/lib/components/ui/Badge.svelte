@@ -20,45 +20,50 @@
 	.badge {
 		display: inline-flex;
 		align-items: center;
+		font-family: var(--font-mono);
 		font-weight: 500;
-		border-radius: var(--radius-full);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
 		white-space: nowrap;
 	}
 
 	.badge-sm {
-		height: 20px;
-		padding: 0 var(--space-2);
+		padding: 2px 6px;
 		font-size: var(--font-size-xs);
 	}
 
 	.badge-md {
-		height: 24px;
-		padding: 0 var(--space-3);
+		padding: 4px 8px;
 		font-size: var(--font-size-sm);
 	}
 
 	.badge-default {
-		background: var(--color-bg-3);
+		background: transparent;
 		color: var(--color-text-muted);
+		border-color: var(--color-border);
 	}
 
 	.badge-success {
-		background: rgba(34, 197, 94, 0.15);
+		background: transparent;
 		color: var(--color-success);
+		border-color: var(--color-success);
 	}
 
 	.badge-warning {
-		background: rgba(245, 158, 11, 0.15);
+		background: transparent;
 		color: var(--color-warning);
+		border-color: var(--color-warning);
 	}
 
 	.badge-danger {
-		background: rgba(239, 68, 68, 0.15);
+		background: transparent;
 		color: var(--color-danger);
+		border-color: var(--color-danger);
 	}
 
 	.badge-info {
-		background: rgba(99, 102, 241, 0.15);
-		color: var(--color-accent);
+		background: transparent;
+		color: var(--color-text);
+		border-color: var(--color-border);
 	}
 </style>

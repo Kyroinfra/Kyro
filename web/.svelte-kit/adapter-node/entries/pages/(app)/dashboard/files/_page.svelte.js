@@ -3,7 +3,7 @@ import { u as user } from "../../../../../chunks/auth.js";
 import { B as Button } from "../../../../../chunks/Button.js";
 import { C as Card } from "../../../../../chunks/Card.js";
 import { C as ConfirmDialog } from "../../../../../chunks/ConfirmDialog.js";
-import { a as formatBytes, b as formatDateTime } from "../../../../../chunks/format.js";
+import { f as formatBytes, a as formatDateTime } from "../../../../../chunks/format.js";
 import { g as getFiles, d as deleteFile } from "../../../../../chunks/files.js";
 function _page($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
@@ -72,12 +72,13 @@ function _page($$renderer, $$props) {
           $$renderer5.push(`<title>Files - Kyro</title>`);
         });
       });
-      $$renderer3.push(`<div class="files-page svelte-s6cb1u"><header class="page-header svelte-s6cb1u"><div><h1 class="svelte-s6cb1u">Files</h1> <p class="subtitle svelte-s6cb1u">Manage your organization's uploaded files</p></div></header> `);
+      $$renderer3.push(`<div class="files-page svelte-s6cb1u"><header class="page-header svelte-s6cb1u"><div class="header-content svelte-s6cb1u"><span class="prompt svelte-s6cb1u">$</span> <span class="command svelte-s6cb1u">./files.sh</span></div></header> `);
       if (!hasApiKey) {
         $$renderer3.push("<!--[0-->");
         Card($$renderer3, {
           children: ($$renderer4) => {
-            $$renderer4.push(`<div class="empty-state svelte-s6cb1u"><span class="empty-icon svelte-s6cb1u">🔑</span> <h3 class="svelte-s6cb1u">API Key Required</h3> <p class="svelte-s6cb1u">You need at least one API key with write scope to upload and manage files.</p> <a href="/dashboard/keys">`);
+            $$renderer4.push(`<div class="empty-state svelte-s6cb1u"><span class="empty-icon svelte-s6cb1u">🔑</span> <h3 class="svelte-s6cb1u">API Key Required</h3> <p class="svelte-s6cb1u">You need at least one API key with write scope to upload and manage
+          files.</p> <a href="/dashboard/keys">`);
             Button($$renderer4, {
               children: ($$renderer5) => {
                 $$renderer5.push(`<!---->Create API Key`);
@@ -140,8 +141,9 @@ function _page($$renderer, $$props) {
               $$renderer4.push(`<div${attr_class("upload-zone svelte-s6cb1u", void 0, { "drag-over": dragOver })}>`);
               {
                 $$renderer4.push("<!--[-1-->");
-                $$renderer4.push(`<span class="upload-icon svelte-s6cb1u">📤</span> <span class="upload-text svelte-s6cb1u">Drag and drop files here, or</span> <label class="upload-btn svelte-s6cb1u"><input type="file" class="file-input svelte-s6cb1u" accept="*/*"/> `);
+                $$renderer4.push(`<span class="upload-icon svelte-s6cb1u">📤</span> <span class="upload-text svelte-s6cb1u">Drag and drop files here, or</span> <label class="upload-btn svelte-s6cb1u"><input type="file" class="file-input svelte-s6cb1u" id="file-input" accept="*/*"/> `);
                 Button($$renderer4, {
+                  onclick: () => document.getElementById("file-input")?.click(),
                   children: ($$renderer5) => {
                     $$renderer5.push(`<!---->Browse Files`);
                   }

@@ -10,7 +10,7 @@ import { B as Button } from "../../../../../chunks/Button.js";
 import { C as Card } from "../../../../../chunks/Card.js";
 import { B as Badge, M as Modal } from "../../../../../chunks/Modal.js";
 import { C as ConfirmDialog } from "../../../../../chunks/ConfirmDialog.js";
-import { c as formatDate } from "../../../../../chunks/format.js";
+import { b as formatDate } from "../../../../../chunks/format.js";
 function _page($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
     var $$store_subs;
@@ -43,12 +43,12 @@ function _page($$renderer, $$props) {
           $$renderer5.push(`<title>Settings - Kyro</title>`);
         });
       });
-      $$renderer3.push(`<div class="settings-page svelte-1jrfzug"><header class="page-header svelte-1jrfzug"><div><h1 class="svelte-1jrfzug">Settings</h1> <p class="subtitle svelte-1jrfzug">Manage your organization and team members</p></div></header> `);
+      $$renderer3.push(`<div class="settings-page svelte-1jrfzug"><header class="page-header svelte-1jrfzug"><div class="header-content"><span class="prompt">$</span> <span class="command">./settings.sh</span></div></header> `);
       if (org) {
         $$renderer3.push("<!--[0-->");
         Card($$renderer3, {
           children: ($$renderer4) => {
-            $$renderer4.push(`<div class="section svelte-1jrfzug"><h2 class="svelte-1jrfzug">Organization</h2> <div class="org-info svelte-1jrfzug"><div class="org-field svelte-1jrfzug"><label class="svelte-1jrfzug">Name</label> <span class="svelte-1jrfzug">${escape_html(org.name)}</span></div> <div class="org-field svelte-1jrfzug"><label class="svelte-1jrfzug">Slug</label> <span class="svelte-1jrfzug">${escape_html(org.slug)}</span></div> <div class="org-field svelte-1jrfzug"><label class="svelte-1jrfzug">Plan</label> `);
+            $$renderer4.push(`<div class="section svelte-1jrfzug"><div class="section-title">// Organization</div> <div class="org-info svelte-1jrfzug"><div class="org-field svelte-1jrfzug"><label class="svelte-1jrfzug">Name</label> <span class="svelte-1jrfzug">${escape_html(org.name)}</span></div> <div class="org-field svelte-1jrfzug"><label class="svelte-1jrfzug">Slug</label> <span class="svelte-1jrfzug">${escape_html(org.slug)}</span></div> <div class="org-field svelte-1jrfzug"><label class="svelte-1jrfzug">Plan</label> `);
             Badge($$renderer4, {
               children: ($$renderer5) => {
                 $$renderer5.push(`<!---->${escape_html(org.plan)}`);
@@ -63,13 +63,13 @@ function _page($$renderer, $$props) {
       $$renderer3.push(`<!--]--> `);
       Card($$renderer3, {
         children: ($$renderer4) => {
-          $$renderer4.push(`<div class="section svelte-1jrfzug"><div class="section-header svelte-1jrfzug"><h2 class="svelte-1jrfzug">Team Members</h2> `);
+          $$renderer4.push(`<div class="section svelte-1jrfzug"><div class="section-header svelte-1jrfzug"><span class="section-title">// Team Members</span> `);
           if (isOwner()) {
             $$renderer4.push("<!--[0-->");
             Button($$renderer4, {
               onclick: () => showInviteModal = true,
               children: ($$renderer5) => {
-                $$renderer5.push(`<!---->Invite Member`);
+                $$renderer5.push(`<!---->+ Invite`);
               }
             });
           } else {

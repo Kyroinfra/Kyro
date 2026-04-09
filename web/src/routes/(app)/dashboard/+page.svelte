@@ -1,8 +1,7 @@
 <script lang="ts">
 	import Card from '$lib/components/ui/Card.svelte';
-	import Badge from '$lib/components/ui/Badge.svelte';
-	import { user } from '$lib/stores/auth';
-	import { formatBytes, formatNumber } from '$lib/utils/format';
+	import Button from '$lib/components/ui/Button.svelte';
+	import { Key, File, Usage, Settings } from '$lib/components/icons';
 
 	interface Props {
 		data: {
@@ -16,6 +15,21 @@
 	}
 
 	let { data }: Props = $props();
+
+	const stats = [
+		{ label: 'API Keys', value: data.stats.activeApiKeys, icon: Key },
+		{ label: 'Requests', value: data.stats.totalRequests, icon: Usage },
+		{ label: 'Storage', value: formatBytes(data.stats.totalStorage), icon: File },
+		{ label: 'Members', value: data.stats.totalMembers, icon: null }
+	];
+
+	function formatBytes(bytes: number): string {
+		if (bytes === 0) return '0 B';
+		const k = 1024;
+		const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+		const i = Math.floor(Math.log(bytes) / Math.log(k));
+		return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+	}
 </script>
 
 <svelte:head>
@@ -24,68 +38,52 @@
 
 <div class="dashboard">
 	<header class="dashboard-header">
-		<div>
-			<h1>Welcome back</h1>
-			<p class="subtitle">Here's what's happening with your API</p>
-		</div>
+		<span class="prompt">$</span>
+		<span class="command">./dashboard.sh</span>
 	</header>
 
-	<div class="stats-grid">
-		<Card>
-			<div class="stat-card">
-				<span class="stat-icon">🔑</span>
-				<div class="stat-info">
-					<span class="stat-value">{formatNumber(data.stats.activeApiKeys)}</span>
-					<span class="stat-label">API Keys</span>
-				</div>
-			</div>
-		</Card>
-		<Card>
-			<div class="stat-card">
-				<span class="stat-icon">📊</span>
-				<div class="stat-info">
-					<span class="stat-value">{formatNumber(data.stats.totalRequests)}</span>
-					<span class="stat-label">API Requests</span>
-				</div>
-			</div>
-		</Card>
-		<Card>
-			<div class="stat-card">
-				<span class="stat-icon">📁</span>
-				<div class="stat-info">
-					<span class="stat-value">{formatBytes(data.stats.totalStorage)}</span>
-					<span class="stat-label">Storage Used</span>
-				</div>
-			</div>
-		</Card>
-		<Card>
-			<div class="stat-card">
-				<span class="stat-icon">👥</span>
-				<div class="stat-info">
-					<span class="stat-value">{formatNumber(data.stats.totalMembers)}</span>
-					<span class="stat-label">Team Members</span>
-				</div>
-			</div>
-		</Card>
+	<div class="stats-section">
+		<div class="section-label">// Statistics</div>
+		<div class="stats-grid">
+			{#each stats as stat}
+				<Card>
+					<div class="stat-card">
+						<div class="stat-header">
+							{#if stat.icon}
+								<span class="stat-icon">
+									<svelte:component this={stat.icon} size={14} />
+								</span>
+							{/if}
+							<span class="stat-label">{stat.label}</span>
+						</div>
+						<div class="stat-value">
+							<span class="bracket">[</span>
+							<span class="value">{typeof stat.value === 'number' ? stat.value.toLocaleString() : stat.value}</span>
+							<span class="bracket">]</span>
+						</div>
+					</div>
+				</Card>
+			{/each}
+		</div>
 	</div>
 
-	<div class="quick-actions">
-		<h2>Quick Actions</h2>
+	<div class="actions-section">
+		<div class="section-label">// Quick Actions</div>
 		<div class="actions-grid">
 			<a href="/dashboard/keys" class="action-card">
-				<span class="action-icon">🔑</span>
+				<span class="action-marker">></span>
 				<span class="action-label">Create API Key</span>
 			</a>
 			<a href="/dashboard/files" class="action-card">
-				<span class="action-icon">📤</span>
+				<span class="action-marker">></span>
 				<span class="action-label">Upload File</span>
 			</a>
 			<a href="/dashboard/usage" class="action-card">
-				<span class="action-icon">📈</span>
+				<span class="action-marker">></span>
 				<span class="action-label">View Analytics</span>
 			</a>
 			<a href="/dashboard/settings" class="action-card">
-				<span class="action-icon">⚙️</span>
+				<span class="action-marker">></span>
 				<span class="action-label">Settings</span>
 			</a>
 		</div>
@@ -94,95 +92,119 @@
 
 <style>
 	.dashboard {
-		max-width: 1200px;
+		max-width: 900px;
 	}
 
 	.dashboard-header {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
 		margin-bottom: var(--space-6);
 	}
 
-	.dashboard-header h1 {
-		font-size: var(--font-size-2xl);
+	.prompt {
+		font-family: var(--font-mono);
+		color: var(--color-success);
 		font-weight: 600;
-		color: var(--color-text);
 	}
 
-	.subtitle {
-		color: var(--color-text-muted);
-		margin-top: var(--space-1);
-	}
-
-	.stats-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-		gap: var(--space-4);
-		margin-bottom: var(--space-8);
-	}
-
-	.stat-card {
-		display: flex;
-		align-items: center;
-		gap: var(--space-4);
-	}
-
-	.stat-icon {
-		font-size: 32px;
-	}
-
-	.stat-info {
-		display: flex;
-		flex-direction: column;
-	}
-
-	.stat-value {
-		font-size: var(--font-size-2xl);
-		font-weight: 600;
-		color: var(--color-text);
-	}
-
-	.stat-label {
+	.command {
+		font-family: var(--font-mono);
 		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
 	}
 
-	.quick-actions h2 {
-		font-size: var(--font-size-lg);
+	.section-label {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
+		color: var(--color-text-muted);
+		margin-bottom: var(--space-3);
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+	}
+
+	.stats-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+		gap: var(--space-3);
+		margin-bottom: var(--space-6);
+	}
+
+	.stat-card {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+	}
+
+	.stat-header {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+	}
+
+	.stat-icon {
+		color: var(--color-text-muted);
+		display: flex;
+	}
+
+	.stat-label {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
+		color: var(--color-text-muted);
+		text-transform: uppercase;
+	}
+
+	.stat-value {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xl);
 		font-weight: 600;
 		color: var(--color-text);
-		margin-bottom: var(--space-4);
+	}
+
+	.bracket {
+		color: var(--color-text-muted);
+	}
+
+	.value {
+		color: var(--color-text);
+	}
+
+	.actions-section {
+		margin-top: var(--space-6);
 	}
 
 	.actions-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-		gap: var(--space-4);
+		grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+		gap: var(--space-3);
 	}
 
 	.action-card {
 		display: flex;
-		flex-direction: column;
 		align-items: center;
 		gap: var(--space-2);
-		padding: var(--space-6);
+		padding: var(--space-3) var(--space-4);
 		background: var(--color-bg-2);
 		border: 1px solid var(--color-border);
-		border-radius: var(--radius-lg);
+		border-radius: var(--radius-sm);
 		text-decoration: none;
 		transition: all 0.15s ease;
 	}
 
 	.action-card:hover {
+		border-color: var(--color-text-muted);
 		background: var(--color-bg-3);
-		border-color: var(--color-accent);
 	}
 
-	.action-icon {
-		font-size: 24px;
+	.action-marker {
+		font-family: var(--font-mono);
+		color: var(--color-success);
+		font-weight: 600;
 	}
 
 	.action-label {
+		font-family: var(--font-mono);
 		font-size: var(--font-size-sm);
-		font-weight: 500;
 		color: var(--color-text);
 	}
 </style>

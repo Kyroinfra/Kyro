@@ -11,7 +11,7 @@
     ]
   },
   "_Badge.svelte_svelte_type_style_lang.js": {
-    "file": "_app/immutable/assets/Badge.C3IP6rTe.css",
+    "file": "_app/immutable/assets/Badge.OH5zYe3V.css",
     "src": "_Badge.svelte_svelte_type_style_lang.js"
   },
   "_Button.js": {
@@ -21,11 +21,11 @@
       "_renderer.js"
     ],
     "css": [
-      "_app/immutable/assets/Button.0TkAx1vZ.css"
+      "_app/immutable/assets/Button.BCXzFm4h.css"
     ]
   },
   "_Button.svelte_svelte_type_style_lang.js": {
-    "file": "_app/immutable/assets/Button.0TkAx1vZ.css",
+    "file": "_app/immutable/assets/Button.BCXzFm4h.css",
     "src": "_Button.svelte_svelte_type_style_lang.js"
   },
   "_Card.js": {
@@ -35,11 +35,11 @@
       "_renderer.js"
     ],
     "css": [
-      "_app/immutable/assets/Card.YXoaD-YW.css"
+      "_app/immutable/assets/Card.BN6XTZFe.css"
     ]
   },
   "_Card.svelte_svelte_type_style_lang.js": {
-    "file": "_app/immutable/assets/Card.YXoaD-YW.css",
+    "file": "_app/immutable/assets/Card.BN6XTZFe.css",
     "src": "_Card.svelte_svelte_type_style_lang.js"
   },
   "_ConfirmDialog.js": {
@@ -49,7 +49,7 @@
       "_renderer.js"
     ],
     "css": [
-      "_app/immutable/assets/ConfirmDialog.CLO1xGSQ.css"
+      "_app/immutable/assets/ConfirmDialog.DAXVSrQg.css"
     ]
   },
   "_Input.js": {
@@ -59,7 +59,7 @@
       "_renderer.js"
     ],
     "css": [
-      "_app/immutable/assets/Input.CbceVVV_.css"
+      "_app/immutable/assets/Input.z93VMvzc.css"
     ]
   },
   "_Modal.js": {
@@ -69,8 +69,15 @@
       "_renderer.js"
     ],
     "css": [
-      "_app/immutable/assets/Modal.B6xu6Jy5.css",
-      "_app/immutable/assets/Badge.C3IP6rTe.css"
+      "_app/immutable/assets/Modal.C7gZP0y3.css",
+      "_app/immutable/assets/Badge.OH5zYe3V.css"
+    ]
+  },
+  "_Usage.js": {
+    "file": "chunks/Usage.js",
+    "name": "Usage",
+    "imports": [
+      "_renderer.js"
     ]
   },
   "_auth.js": {
@@ -188,8 +195,8 @@
       "_state.svelte.js"
     ]
   },
-  "_usage.js": {
-    "file": "chunks/usage.js",
+  "_usage2.js": {
+    "file": "chunks/usage2.js",
     "name": "usage",
     "imports": [
       "_client.js"
@@ -246,10 +253,11 @@
     "imports": [
       "_renderer.js",
       "_stores.js",
-      "_auth.js"
+      "_auth.js",
+      "_Usage.js"
     ],
     "css": [
-      "_app/immutable/assets/_layout.2-KzuV8d.css"
+      "_app/immutable/assets/_layout.CE0hdgJE.css"
     ]
   },
   "src/routes/(app)/dashboard/+page.server.ts": {
@@ -258,7 +266,7 @@
     "src": "src/routes/(app)/dashboard/+page.server.ts",
     "isEntry": true,
     "imports": [
-      "_usage.js",
+      "_usage2.js",
       "_keys.js",
       "_org.js"
     ]
@@ -271,12 +279,11 @@
     "imports": [
       "_renderer.js",
       "_Card.js",
-      "_auth.js",
-      "_format.js"
+      "_Usage.js"
     ],
     "css": [
-      "_app/immutable/assets/_page.-0v6aK7C.css",
-      "_app/immutable/assets/Badge.C3IP6rTe.css"
+      "_app/immutable/assets/_page.BPcnjOco.css",
+      "_app/immutable/assets/Button.BCXzFm4h.css"
     ]
   },
   "src/routes/(app)/dashboard/files/+page.server.ts": {
@@ -304,7 +311,7 @@
       "_files.js"
     ],
     "css": [
-      "_app/immutable/assets/_page.O9FvK7_-.css"
+      "_app/immutable/assets/_page.CBD-qLsI.css"
     ]
   },
   "src/routes/(app)/dashboard/keys/+page.server.ts": {
@@ -335,7 +342,7 @@
       "_format.js"
     ],
     "css": [
-      "_app/immutable/assets/_page.DtRtg0HR.css"
+      "_app/immutable/assets/_page.B7cN7njT.css"
     ]
   },
   "src/routes/(app)/dashboard/settings/+page.server.ts": {
@@ -366,7 +373,7 @@
       "_format.js"
     ],
     "css": [
-      "_app/immutable/assets/_page.YRHiEY43.css"
+      "_app/immutable/assets/_page.CB62I0E4.css"
     ]
   },
   "src/routes/(app)/dashboard/usage/+page.server.ts": {
@@ -375,7 +382,7 @@
     "src": "src/routes/(app)/dashboard/usage/+page.server.ts",
     "isEntry": true,
     "imports": [
-      "_usage.js"
+      "_usage2.js"
     ]
   },
   "src/routes/(app)/dashboard/usage/+page.svelte": {
@@ -389,8 +396,8 @@
       "_format.js"
     ],
     "css": [
-      "_app/immutable/assets/_page.BVLIzMHJ.css",
-      "_app/immutable/assets/Button.0TkAx1vZ.css"
+      "_app/immutable/assets/_page.Mgi6DjxR.css",
+      "_app/immutable/assets/Button.BCXzFm4h.css"
     ]
   },
   "src/routes/(auth)/+layout.svelte": {
@@ -428,7 +435,7 @@
       "_Card.js"
     ],
     "css": [
-      "_app/immutable/assets/_page.DPGHvfLf.css"
+      "_app/immutable/assets/_page.DxZryHE0.css"
     ]
   },
   "src/routes/(auth)/register/+page.server.ts": {
@@ -457,7 +464,7 @@
       "_Card.js"
     ],
     "css": [
-      "_app/immutable/assets/_page.Xhk6UxIK.css"
+      "_app/immutable/assets/_page.JPW5GxQl.css"
     ]
   },
   "src/routes/+error.svelte": {
@@ -484,7 +491,7 @@
       "_index.js"
     ],
     "css": [
-      "_app/immutable/assets/_layout.CsQ8QnbR.css"
+      "_app/immutable/assets/_layout.8t8re2F-.css"
     ]
   },
   "src/routes/+page.svelte": {
@@ -497,7 +504,7 @@
     ],
     "css": [
       "_app/immutable/assets/_page.CLo2SxnP.css",
-      "_app/immutable/assets/Button.0TkAx1vZ.css"
+      "_app/immutable/assets/Button.BCXzFm4h.css"
     ]
   },
   "src/routes/api/files/[id]/+server.ts": {
@@ -516,8 +523,8 @@
     ],
     "css": [
       "_app/immutable/assets/_page.BpnurW7r.css",
-      "_app/immutable/assets/Card.YXoaD-YW.css",
-      "_app/immutable/assets/Badge.C3IP6rTe.css"
+      "_app/immutable/assets/Card.BN6XTZFe.css",
+      "_app/immutable/assets/Badge.OH5zYe3V.css"
     ]
   },
   "src/routes/health/+server.ts": {

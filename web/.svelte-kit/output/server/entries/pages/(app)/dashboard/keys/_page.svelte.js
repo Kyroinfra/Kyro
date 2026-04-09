@@ -10,7 +10,7 @@ import { B as Button } from "../../../../../chunks/Button.js";
 import { C as Card } from "../../../../../chunks/Card.js";
 import { B as Badge, M as Modal } from "../../../../../chunks/Modal.js";
 import { C as ConfirmDialog } from "../../../../../chunks/ConfirmDialog.js";
-import { c as formatDate, b as formatDateTime } from "../../../../../chunks/format.js";
+import { b as formatDate, a as formatDateTime } from "../../../../../chunks/format.js";
 function _page($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
     var $$store_subs;
@@ -56,13 +56,13 @@ function _page($$renderer, $$props) {
           $$renderer5.push(`<title>API Keys - Kyro</title>`);
         });
       });
-      $$renderer3.push(`<div class="keys-page svelte-1584yhn"><header class="page-header svelte-1584yhn"><div><h1 class="svelte-1584yhn">API Keys</h1> <p class="subtitle svelte-1584yhn">Manage your organization's API keys</p></div> `);
+      $$renderer3.push(`<div class="keys-page svelte-1584yhn"><header class="page-header svelte-1584yhn"><div class="header-content svelte-1584yhn"><span class="prompt svelte-1584yhn">$</span> <span class="command svelte-1584yhn">./keys.sh</span></div> `);
       if (canManage()) {
         $$renderer3.push("<!--[0-->");
         Button($$renderer3, {
           onclick: () => showCreateModal = true,
           children: ($$renderer4) => {
-            $$renderer4.push(`<!---->Create Key`);
+            $$renderer4.push(`<!---->+ New Key`);
           }
         });
       } else {
@@ -71,13 +71,13 @@ function _page($$renderer, $$props) {
       $$renderer3.push(`<!--]--></header> `);
       if (newKey) {
         $$renderer3.push("<!--[0-->");
-        $$renderer3.push(`<div class="key-reveal svelte-1584yhn"><div class="key-reveal-header svelte-1584yhn"><span class="key-reveal-icon svelte-1584yhn">🔑</span> <span class="key-reveal-title svelte-1584yhn">Your new API key</span> <button class="dismiss-btn svelte-1584yhn">✕</button></div> <p class="key-reveal-warning svelte-1584yhn">Copy this key now — it won't be shown again.</p> <div class="key-value svelte-1584yhn"><code class="svelte-1584yhn">${escape_html(newKey)}</code> `);
+        $$renderer3.push(`<div class="key-reveal svelte-1584yhn"><div class="key-reveal-header svelte-1584yhn"><span class="key-reveal-title svelte-1584yhn">> API Key Generated</span> <button class="dismiss-btn svelte-1584yhn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button></div> <p class="key-reveal-warning svelte-1584yhn">// Copy now - cannot be retrieved again</p> <div class="key-value svelte-1584yhn"><code class="svelte-1584yhn">${escape_html(newKey)}</code> `);
         Button($$renderer3, {
           variant: "secondary",
           size: "sm",
           onclick: handleCopy,
           children: ($$renderer4) => {
-            $$renderer4.push(`<!---->${escape_html(copied ? "Copied!" : "Copy")}`);
+            $$renderer4.push(`<!---->${escape_html(copied ? "Copied" : "Copy")}`);
           }
         });
         $$renderer3.push(`<!----></div></div>`);
@@ -89,13 +89,13 @@ function _page($$renderer, $$props) {
         $$renderer3.push("<!--[0-->");
         Card($$renderer3, {
           children: ($$renderer4) => {
-            $$renderer4.push(`<div class="empty-state svelte-1584yhn"><span class="empty-icon svelte-1584yhn">🔑</span> <h3 class="svelte-1584yhn">No API keys yet</h3> <p class="svelte-1584yhn">Create your first API key to start making requests to the Kyro API.</p> `);
+            $$renderer4.push(`<div class="empty-state svelte-1584yhn"><span class="empty-icon svelte-1584yhn"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg></span> <h3 class="svelte-1584yhn">No API keys</h3> <p class="svelte-1584yhn">Create your first key to authenticate with the API</p> `);
             if (canManage()) {
               $$renderer4.push("<!--[0-->");
               Button($$renderer4, {
                 onclick: () => showCreateModal = true,
                 children: ($$renderer5) => {
-                  $$renderer5.push(`<!---->Create Your First Key`);
+                  $$renderer5.push(`<!---->+ Create First Key`);
                 }
               });
             } else {
@@ -106,7 +106,7 @@ function _page($$renderer, $$props) {
         });
       } else {
         $$renderer3.push("<!--[-1-->");
-        $$renderer3.push(`<div class="filter-tabs svelte-1584yhn"><button${attr_class("filter-tab svelte-1584yhn", void 0, { "active": filter === "all" })}>All (${escape_html(data.keys.length)})</button> <button${attr_class("filter-tab svelte-1584yhn", void 0, { "active": filter === "active" })}>Active (${escape_html(data.keys.filter((k) => !k.revokedAt).length)})</button> <button${attr_class("filter-tab svelte-1584yhn", void 0, { "active": filter === "revoked" })}>Revoked (${escape_html(data.keys.filter((k) => k.revokedAt).length)})</button></div> <div class="keys-list svelte-1584yhn"><!--[-->`);
+        $$renderer3.push(`<div class="filter-tabs svelte-1584yhn"><button${attr_class("filter-tab svelte-1584yhn", void 0, { "active": filter === "all" })}><span class="filter-marker svelte-1584yhn">[</span>all<span class="filter-marker svelte-1584yhn">]</span></button> <button${attr_class("filter-tab svelte-1584yhn", void 0, { "active": filter === "active" })}><span class="filter-marker svelte-1584yhn">[</span>active<span class="filter-marker svelte-1584yhn">]</span></button> <button${attr_class("filter-tab svelte-1584yhn", void 0, { "active": filter === "revoked" })}><span class="filter-marker svelte-1584yhn">[</span>revoked<span class="filter-marker svelte-1584yhn">]</span></button></div> <div class="keys-list svelte-1584yhn"><!--[-->`);
         const each_array = ensure_array_like(filteredKeys()());
         for (let $$index_1 = 0, $$length = each_array.length; $$index_1 < $$length; $$index_1++) {
           let key = each_array[$$index_1];

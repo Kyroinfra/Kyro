@@ -22,14 +22,14 @@ function _page($$renderer, $$props) {
           $$renderer5.push(`<title>Sign In - Kyro</title>`);
         });
       });
-      $$renderer3.push(`<div class="auth-page svelte-8k30lk"><div class="auth-header svelte-8k30lk"><a href="/" class="logo svelte-8k30lk"><span class="logo-icon svelte-8k30lk">K</span> <span class="logo-text">Kyro</span></a></div> `);
+      $$renderer3.push(`<div class="auth-page svelte-8k30lk"><div class="auth-header svelte-8k30lk"><div class="logo svelte-8k30lk"><span class="logo-mark svelte-8k30lk">K</span> <span class="logo-text">kyro</span></div> <p class="auth-command svelte-8k30lk">$ signin</p></div> `);
       Card($$renderer3, {
         padding: "lg",
         children: ($$renderer4) => {
-          $$renderer4.push(`<div class="auth-form svelte-8k30lk"><h1 class="svelte-8k30lk">Welcome back</h1> <p class="subtitle svelte-8k30lk">Sign in to your account</p> <form method="POST" class="svelte-8k30lk">`);
+          $$renderer4.push(`<form method="POST"><div class="auth-form svelte-8k30lk">`);
           if (form?.error) {
             $$renderer4.push("<!--[0-->");
-            $$renderer4.push(`<div class="form-error">${escape_html(form.error)}</div>`);
+            $$renderer4.push(`<div class="form-error svelte-8k30lk">${escape_html(form.error)}</div>`);
           } else {
             $$renderer4.push("<!--[-1-->");
           }
@@ -38,7 +38,7 @@ function _page($$renderer, $$props) {
             name: "email",
             label: "Email",
             type: "email",
-            placeholder: "you@example.com",
+            placeholder: "user@domain.com",
             required: true,
             get value() {
               return email;
@@ -53,7 +53,7 @@ function _page($$renderer, $$props) {
             name: "password",
             label: "Password",
             type: "password",
-            placeholder: "••••••••",
+            placeholder: "********",
             required: true,
             get value() {
               return password;
@@ -72,10 +72,10 @@ function _page($$renderer, $$props) {
               $$renderer5.push(`<!---->${escape_html("Sign In")}`);
             }
           });
-          $$renderer4.push(`<!----></form> <p class="footer-text svelte-8k30lk">Don't have an account? <a href="/register" class="svelte-8k30lk">Create one</a></p></div>`);
+          $$renderer4.push(`<!----></div></form>`);
         }
       });
-      $$renderer3.push(`<!----></div>`);
+      $$renderer3.push(`<!----> <p class="footer-text svelte-8k30lk"><span class="prompt svelte-8k30lk">></span> No account? <a href="/register" class="svelte-8k30lk">Register</a></p></div>`);
     }
     do {
       $$settled = true;

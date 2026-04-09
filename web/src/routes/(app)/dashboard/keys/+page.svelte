@@ -102,27 +102,31 @@
 
 <div class="keys-page">
 	<header class="page-header">
-		<div>
-			<h1>API Keys</h1>
-			<p class="subtitle">Manage your organization's API keys</p>
+		<div class="header-content">
+			<span class="prompt">$</span>
+			<span class="command">./keys.sh</span>
 		</div>
 		{#if canManage}
-			<Button onclick={() => (showCreateModal = true)}>Create Key</Button>
+			<Button onclick={() => (showCreateModal = true)}>+ New Key</Button>
 		{/if}
 	</header>
 
 	{#if newKey}
 		<div class="key-reveal">
 			<div class="key-reveal-header">
-				<span class="key-reveal-icon">🔑</span>
-				<span class="key-reveal-title">Your new API key</span>
-				<button class="dismiss-btn" onclick={dismissKey}>✕</button>
+				<span class="key-reveal-title">> API Key Generated</span>
+				<button class="dismiss-btn" onclick={dismissKey}>
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<line x1="18" y1="6" x2="6" y2="18" />
+						<line x1="6" y1="6" x2="18" y2="18" />
+					</svg>
+				</button>
 			</div>
-			<p class="key-reveal-warning">Copy this key now — it won't be shown again.</p>
+			<p class="key-reveal-warning">// Copy now - cannot be retrieved again</p>
 			<div class="key-value">
 				<code>{newKey}</code>
 				<Button variant="secondary" size="sm" onclick={handleCopy}>
-					{copied ? 'Copied!' : 'Copy'}
+					{copied ? 'Copied' : 'Copy'}
 				</Button>
 			</div>
 		</div>
@@ -131,24 +135,28 @@
 	{#if data.keys.length === 0}
 		<Card>
 			<div class="empty-state">
-				<span class="empty-icon">🔑</span>
-				<h3>No API keys yet</h3>
-				<p>Create your first API key to start making requests to the Kyro API.</p>
+				<span class="empty-icon">
+					<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+						<path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
+					</svg>
+				</span>
+				<h3>No API keys</h3>
+				<p>Create your first key to authenticate with the API</p>
 				{#if canManage}
-					<Button onclick={() => (showCreateModal = true)}>Create Your First Key</Button>
+					<Button onclick={() => (showCreateModal = true)}>+ Create First Key</Button>
 				{/if}
 			</div>
 		</Card>
 	{:else}
 		<div class="filter-tabs">
 			<button class="filter-tab" class:active={filter === 'all'} onclick={() => (filter = 'all')}>
-				All ({data.keys.length})
+				<span class="filter-marker">[</span>all<span class="filter-marker">]</span>
 			</button>
 			<button class="filter-tab" class:active={filter === 'active'} onclick={() => (filter = 'active')}>
-				Active ({data.keys.filter(k => !k.revokedAt).length})
+				<span class="filter-marker">[</span>active<span class="filter-marker">]</span>
 			</button>
 			<button class="filter-tab" class:active={filter === 'revoked'} onclick={() => (filter = 'revoked')}>
-				Revoked ({data.keys.filter(k => k.revokedAt).length})
+				<span class="filter-marker">[</span>revoked<span class="filter-marker">]</span>
 			</button>
 		</div>
 
@@ -270,20 +278,26 @@
 	.page-header {
 		display: flex;
 		justify-content: space-between;
-		align-items: flex-start;
-		margin-bottom: var(--space-6);
+		align-items: center;
+		margin-bottom: var(--space-5);
 	}
 
-	.page-header h1 {
-		font-size: var(--font-size-2xl);
+	.header-content {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+	}
+
+	.prompt {
+		font-family: var(--font-mono);
+		color: var(--color-success);
 		font-weight: 600;
-		color: var(--color-text);
-		margin: 0;
 	}
 
-	.subtitle {
+	.command {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
-		margin-top: var(--space-1);
 	}
 
 	.key-reveal {
@@ -384,9 +398,6 @@
 		display: flex;
 		gap: var(--space-1);
 		margin-bottom: var(--space-4);
-		background: var(--color-bg-2);
-		padding: var(--space-1);
-		border-radius: var(--radius-md);
 		width: fit-content;
 	}
 
@@ -394,21 +405,26 @@
 		padding: var(--space-2) var(--space-3);
 		background: transparent;
 		border: none;
-		border-radius: var(--radius-sm);
 		color: var(--color-text-muted);
-		font-size: var(--font-size-sm);
-		font-weight: 500;
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
 		cursor: pointer;
 		transition: all 0.15s ease;
+		border-radius: var(--radius-sm);
 	}
 
 	.filter-tab:hover {
 		color: var(--color-text);
+		background: var(--color-bg-2);
 	}
 
 	.filter-tab.active {
-		background: var(--color-accent);
-		color: white;
+		color: var(--color-text);
+		background: var(--color-bg-2);
+	}
+
+	.filter-marker {
+		color: var(--color-text-muted);
 	}
 
 	.key-header {

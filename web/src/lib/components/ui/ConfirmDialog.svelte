@@ -33,10 +33,10 @@
 <svelte:window onkeydown={handleKeydown} />
 
 {#if open}
-	<div class="dialog-backdrop" transition:fade={{ duration: 150 }} onclick={oncancel} role="dialog" aria-modal="true" tabindex="-1">
-		<div class="dialog" transition:scale={{ duration: 150, start: 0.95 }} onclick={(e) => e.stopPropagation()}>
-			<h3>{title}</h3>
-			<p>{message}</p>
+	<div class="dialog-backdrop" transition:fade={{ duration: 100 }} onclick={oncancel} role="dialog" aria-modal="true" tabindex="-1">
+		<div class="dialog" transition:scale={{ duration: 100, start: 0.98 }} onclick={(e) => e.stopPropagation()}>
+			<h3 class="dialog-title">{title}</h3>
+			<p class="dialog-message">{message}</p>
 			<div class="actions">
 				<button class="btn-cancel" onclick={oncancel}>{cancelLabel}</button>
 				<button class="btn-confirm btn-{variant}" onclick={onconfirm}>{confirmLabel}</button>
@@ -49,7 +49,7 @@
 	.dialog-backdrop {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.7);
+		background: rgba(0, 0, 0, 0.8);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -60,20 +60,23 @@
 	.dialog {
 		background: var(--color-bg-2);
 		border: 1px solid var(--color-border);
-		border-radius: var(--radius-lg);
+		border-radius: var(--radius-md);
 		padding: var(--space-5);
 		width: 100%;
 		max-width: 400px;
 	}
 
-	h3 {
-		font-size: var(--font-size-lg);
+	.dialog-title {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-sm);
 		font-weight: 600;
 		color: var(--color-text);
 		margin: 0 0 var(--space-3);
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
 	}
 
-	p {
+	.dialog-message {
 		color: var(--color-text-muted);
 		font-size: var(--font-size-sm);
 		margin: 0 0 var(--space-5);
@@ -87,22 +90,22 @@
 	}
 
 	button {
-		padding: var(--space-2) var(--space-4);
-		border-radius: var(--radius-md);
+		font-family: var(--font-mono);
 		font-size: var(--font-size-sm);
+		padding: var(--space-2) var(--space-4);
+		border-radius: var(--radius-sm);
 		font-weight: 500;
 		cursor: pointer;
 		transition: all 0.15s ease;
 	}
 
 	.btn-cancel {
-		background: var(--color-bg-3);
+		background: transparent;
 		border: 1px solid var(--color-border);
 		color: var(--color-text);
 	}
 
 	.btn-cancel:hover {
-		background: var(--color-bg);
 		border-color: var(--color-text-muted);
 	}
 
@@ -112,19 +115,19 @@
 
 	.btn-danger {
 		background: var(--color-danger);
-		color: white;
+		color: var(--color-bg);
 	}
 
 	.btn-danger:hover {
-		background: #dc2626;
+		background: #ff6666;
 	}
 
 	.btn-warning {
 		background: var(--color-warning);
-		color: black;
+		color: var(--color-bg);
 	}
 
 	.btn-warning:hover {
-		background: #d97706;
+		background: #ffcc00;
 	}
 </style>

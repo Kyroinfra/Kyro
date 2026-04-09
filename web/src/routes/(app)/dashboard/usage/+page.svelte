@@ -57,8 +57,8 @@
 					{
 						label: 'Requests',
 						data: chartData.map(d => d.requests),
-						borderColor: '#6366f1',
-						backgroundColor: 'rgba(99, 102, 241, 0.1)',
+						borderColor: '#ffffff',
+						backgroundColor: 'rgba(255, 255, 255, 0.05)',
 						fill: true,
 						tension: 0.3,
 						yAxisID: 'y'
@@ -77,10 +77,10 @@
 						display: false
 					},
 					tooltip: {
-						backgroundColor: '#17171a',
-						titleColor: '#e8e8ed',
-						bodyColor: '#6b6b78',
-						borderColor: '#2a2a30',
+						backgroundColor: '#0a0a0a',
+						titleColor: '#ffffff',
+						bodyColor: '#666666',
+						borderColor: '#1a1a1a',
 						borderWidth: 1,
 						padding: 12,
 						displayColors: false
@@ -89,7 +89,7 @@
 				scales: {
 					x: {
 						grid: {
-							color: '#2a2a30',
+							color: '#1a1a1a',
 							drawTicks: false
 						},
 						ticks: {
@@ -135,46 +135,58 @@
 
 <div class="usage-page">
 	<header class="page-header">
-		<div>
-			<h1>Usage</h1>
-			<p class="subtitle">Monitor your API usage and resource consumption</p>
+		<div class="header-content">
+			<span class="prompt">$</span>
+			<span class="command">./usage.sh</span>
 		</div>
 	</header>
 
 	<div class="stats-grid">
 		<Card>
 			<div class="stat-card">
-				<span class="stat-icon">📊</span>
 				<div class="stat-info">
-					<span class="stat-value">{formatNumber(data.stats.totalRequests)}</span>
 					<span class="stat-label">Total Requests</span>
+					<span class="stat-value">
+						<span class="bracket">[</span>
+						{formatNumber(data.stats.totalRequests)}
+						<span class="bracket">]</span>
+					</span>
 				</div>
 			</div>
 		</Card>
 		<Card>
 			<div class="stat-card">
-				<span class="stat-icon">📥</span>
 				<div class="stat-info">
-					<span class="stat-value">{formatBytes(data.stats.totalBytesIn)}</span>
 					<span class="stat-label">Data In</span>
+					<span class="stat-value">
+						<span class="bracket">[</span>
+						{formatBytes(data.stats.totalBytesIn)}
+						<span class="bracket">]</span>
+					</span>
 				</div>
 			</div>
 		</Card>
 		<Card>
 			<div class="stat-card">
-				<span class="stat-icon">📤</span>
 				<div class="stat-info">
-					<span class="stat-value">{formatBytes(data.stats.totalBytesOut)}</span>
 					<span class="stat-label">Data Out</span>
+					<span class="stat-value">
+						<span class="bracket">[</span>
+						{formatBytes(data.stats.totalBytesOut)}
+						<span class="bracket">]</span>
+					</span>
 				</div>
 			</div>
 		</Card>
 		<Card>
 			<div class="stat-card">
-				<span class="stat-icon">💾</span>
 				<div class="stat-info">
-					<span class="stat-value">{formatBytes(data.stats.totalStorage)}</span>
-					<span class="stat-label">Storage Used</span>
+					<span class="stat-label">Storage</span>
+					<span class="stat-value">
+						<span class="bracket">[</span>
+						{formatBytes(data.stats.totalStorage)}
+						<span class="bracket">]</span>
+					</span>
 				</div>
 			</div>
 		</Card>
@@ -182,28 +194,16 @@
 
 	<Card>
 		<div class="chart-header">
-			<h2>Request History</h2>
+			<span class="chart-title">// Request History</span>
 			<div class="range-selector">
-				<button
-					class="range-btn"
-					class:active={selectedRange === '7'}
-					onclick={() => (selectedRange = '7')}
-				>
-					7D
+				<button class="range-btn" class:active={selectedRange === '7'} onclick={() => (selectedRange = '7')}>
+					<span class="range-marker">[</span>7d<span class="range-marker">]</span>
 				</button>
-				<button
-					class="range-btn"
-					class:active={selectedRange === '30'}
-					onclick={() => (selectedRange = '30')}
-				>
-					30D
+				<button class="range-btn" class:active={selectedRange === '30'} onclick={() => (selectedRange = '30')}>
+					<span class="range-marker">[</span>30d<span class="range-marker">]</span>
 				</button>
-				<button
-					class="range-btn"
-					class:active={selectedRange === '90'}
-					onclick={() => (selectedRange = '90')}
-				>
-					90D
+				<button class="range-btn" class:active={selectedRange === '90'} onclick={() => (selectedRange = '90')}>
+					<span class="range-marker">[</span>90d<span class="range-marker">]</span>
 				</button>
 			</div>
 		</div>
@@ -219,51 +219,61 @@
 	}
 
 	.page-header {
-		margin-bottom: var(--space-6);
+		margin-bottom: var(--space-5);
 	}
 
-	.page-header h1 {
-		font-size: var(--font-size-2xl);
+	.header-content {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+	}
+
+	.prompt {
+		font-family: var(--font-mono);
+		color: var(--color-success);
 		font-weight: 600;
-		color: var(--color-text);
-		margin: 0;
 	}
 
-	.subtitle {
+	.command {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
-		margin-top: var(--space-1);
 	}
 
 	.stats-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-		gap: var(--space-4);
-		margin-bottom: var(--space-6);
+		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+		gap: var(--space-3);
+		margin-bottom: var(--space-5);
 	}
 
 	.stat-card {
 		display: flex;
-		align-items: center;
-		gap: var(--space-4);
-	}
-
-	.stat-icon {
-		font-size: 24px;
+		flex-direction: column;
+		gap: var(--space-2);
 	}
 
 	.stat-info {
 		display: flex;
 		flex-direction: column;
+		gap: var(--space-1);
+	}
+
+	.stat-label {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
+		color: var(--color-text-muted);
+		text-transform: uppercase;
 	}
 
 	.stat-value {
-		font-size: var(--font-size-xl);
+		font-family: var(--font-mono);
+		font-size: var(--font-size-lg);
 		font-weight: 600;
 		color: var(--color-text);
 	}
 
-	.stat-label {
-		font-size: var(--font-size-sm);
+	.bracket {
 		color: var(--color-text-muted);
 	}
 
@@ -274,11 +284,11 @@
 		margin-bottom: var(--space-4);
 	}
 
-	.chart-header h2 {
-		font-size: var(--font-size-lg);
-		font-weight: 600;
-		color: var(--color-text);
-		margin: 0;
+	.chart-title {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
+		color: var(--color-text-muted);
+		text-transform: uppercase;
 	}
 
 	.range-selector {

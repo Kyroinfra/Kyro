@@ -25,8 +25,8 @@ function formatNumber(num) {
   return num.toLocaleString("en-US");
 }
 export {
-  formatBytes as a,
-  formatDateTime as b,
-  formatDate as c,
-  formatNumber as f
+  formatDateTime as a,
+  formatDate as b,
+  formatNumber as c,
+  formatBytes as f
 };

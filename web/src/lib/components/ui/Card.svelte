@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { type Snippet } from 'svelte';
+	import type { Snippet } from 'svelte';
 
 	interface Props {
 		variant?: 'default' | 'bordered' | 'flat';
@@ -21,12 +21,11 @@
 <style>
 	.card {
 		background: var(--color-bg-2);
-		border-radius: var(--radius-lg);
+		border-radius: var(--radius-md);
 	}
 
 	.card-default {
 		border: 1px solid var(--color-border);
-		box-shadow: var(--shadow-sm);
 	}
 
 	.card-bordered {
@@ -34,7 +33,7 @@
 	}
 
 	.card-flat {
-		border: none;
+		border: 1px solid var(--color-border);
 	}
 
 	.padding-none {
@@ -50,6 +49,6 @@
 	}
 
 	.padding-lg {
-		padding: var(--space-6);
+		padding: var(--space-5);
 	}
 </style>
