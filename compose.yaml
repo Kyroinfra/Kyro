@@ -10,6 +10,28 @@ services:
     depends_on:
       api:
         condition: service_healthy
+      web:
+        condition: service_healthy
+    networks:
+      - kyro-net
+
+  web:
+    build:
+      context: ./web
+      args:
+        PUBLIC_API_URL: http://localhost/api/v1
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - JWT_SECRET=${JWT_SECRET}
+      - INTERNAL_API_URL=http://api:3000
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     networks:
       - kyro-net
 
@@ -17,7 +39,6 @@ services:
     build:
       context: ./api
     restart: unless-stopped
-    # No ports exposed — all traffic goes through NGINX
     environment:
       - PORT=3000
       - NODE_ENV=production

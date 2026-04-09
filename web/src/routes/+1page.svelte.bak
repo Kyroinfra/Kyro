@@ -1,0 +1,39 @@
+<script lang="ts">
+	import { onMount } from 'svelte';
+
+	let status = '';
+	let loading = true;
+	let error = '';
+
+	onMount(async () => {
+		try {
+			const res = await fetch('/api/v1/health');
+
+			if (!res.ok) {
+				throw new Error(`HTTP error: ${res.status}`);
+			}
+
+			status = await res.text(); // or res.json() if your API returns JSON
+		} catch (err) {
+			error = err instanceof Error ? err.message : 'Unknown error';
+		} finally {
+			loading = false;
+		}
+	});
+</script>
+
+<svelte:head>
+	<title>Health Check</title>
+</svelte:head>
+
+<main>
+	<h1>Backend Health</h1>
+
+	{#if loading}
+		<p>Checking...</p>
+	{:else if error}
+		<p style="color: red;">Error: {error}</p>
+	{:else}
+		<p style="color: green;">Status: {status}</p>
+	{/if}
+</main>
