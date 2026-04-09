@@ -6,28 +6,17 @@
 	toast.subscribe((value) => {
 		toasts = value;
 	});
-
-	function getIcon(type: Toast['type']) {
-		switch (type) {
-			case 'success':
-				return '✓';
-			case 'error':
-				return '✕';
-			case 'warning':
-				return '⚠';
-			case 'info':
-				return 'ℹ';
-		}
-	}
 </script>
 
 {#if toasts.length > 0}
 	<div class="toast-container">
 		{#each toasts as t (t.id)}
 			<div class="toast toast-{t.type}">
-				<span class="icon">{getIcon(t.type)}</span>
-				<span class="message">{t.message}</span>
-				<button class="close" onclick={() => toast.remove(t.id)}>✕</button>
+				<div class="toast-bar"></div>
+				<div class="toast-content">
+					<span class="message">{t.message}</span>
+					<button class="close" onclick={() => toast.remove(t.id)}>✕</button>
+				</div>
 			</div>
 		{/each}
 	</div>
@@ -36,88 +25,68 @@
 <style>
 	.toast-container {
 		position: fixed;
-		bottom: var(--space-4);
-		right: var(--space-4);
+		bottom: var(--space-5);
+		right: var(--space-5);
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-2);
 		z-index: 9999;
-		max-width: 400px;
+		max-width: 380px;
 	}
 
 	.toast {
 		display: flex;
+		overflow: hidden;
+		background: var(--color-bg-2);
+		border: 1px solid var(--color-border-2);
+		border-radius: var(--radius-lg);
+		animation: slideIn 0.15s ease;
+		box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+	}
+
+	.toast-bar {
+		width: 3px;
+		flex-shrink: 0;
+	}
+
+	.toast-success .toast-bar { background: var(--color-success); }
+	.toast-error   .toast-bar { background: var(--color-danger); }
+	.toast-warning .toast-bar { background: var(--color-warning); }
+	.toast-info    .toast-bar { background: var(--color-text-dim); }
+
+	.toast-content {
+		display: flex;
 		align-items: center;
 		gap: var(--space-3);
 		padding: var(--space-3) var(--space-4);
-		background: var(--color-bg-2);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
-		box-shadow: var(--shadow-md);
-		animation: slideIn 0.2s ease;
-	}
-
-	.toast-success {
-		border-left: 3px solid var(--color-success);
-	}
-
-	.toast-error {
-		border-left: 3px solid var(--color-danger);
-	}
-
-	.toast-warning {
-		border-left: 3px solid var(--color-warning);
-	}
-
-	.toast-info {
-		border-left: 3px solid var(--color-accent);
-	}
-
-	.icon {
-		font-size: var(--font-size-sm);
-		font-weight: 600;
-	}
-
-	.toast-success .icon {
-		color: var(--color-success);
-	}
-
-	.toast-error .icon {
-		color: var(--color-danger);
-	}
-
-	.toast-warning .icon {
-		color: var(--color-warning);
-	}
-
-	.toast-info .icon {
-		color: var(--color-accent);
+		flex: 1;
 	}
 
 	.message {
 		flex: 1;
 		font-size: var(--font-size-sm);
-		color: var(--color-text);
+		color: var(--color-text-dim);
+		line-height: 1.4;
 	}
 
 	.close {
 		background: none;
 		border: none;
-		color: var(--color-text-muted);
+		color: var(--color-text-ghost);
 		font-size: var(--font-size-xs);
-		padding: var(--space-1);
+		padding: 2px;
 		cursor: pointer;
-		opacity: 0.7;
-		transition: opacity 0.15s;
+		transition: color 0.1s;
+		line-height: 1;
 	}
 
 	.close:hover {
-		opacity: 1;
+		color: var(--color-text-muted);
 	}
 
 	@keyframes slideIn {
 		from {
-			transform: translateX(100%);
+			transform: translateX(110%);
 			opacity: 0;
 		}
 		to {

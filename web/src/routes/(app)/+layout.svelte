@@ -20,16 +20,36 @@
 		});
 	});
 
-	const navItems = [
-		{ href: '/dashboard', label: 'Dashboard', icon: Dashboard },
-		{ href: '/dashboard/keys', label: 'API Keys', icon: Key },
-		{ href: '/dashboard/files', label: 'Files', icon: File },
-		{ href: '/dashboard/usage', label: 'Usage', icon: Usage },
-		{ href: '/dashboard/settings', label: 'Settings', icon: Settings }
+	const navSections = [
+		{
+			label: '// workspace',
+			items: [
+				{ href: '/dashboard', label: 'dashboard', icon: Dashboard },
+				{ href: '/dashboard/keys', label: 'api keys', icon: Key },
+				{ href: '/dashboard/files', label: 'files', icon: File }
+			]
+		},
+		{
+			label: '// analytics',
+			items: [
+				{ href: '/dashboard/usage', label: 'usage', icon: Usage }
+			]
+		},
+		{
+			label: '// config',
+			items: [
+				{ href: '/dashboard/settings', label: 'settings', icon: Settings }
+			]
+		}
 	];
 
 	function getInitials(email: string): string {
 		return email ? email.substring(0, 2).toUpperCase() : 'U';
+	}
+
+	function getPagePath(): string {
+		const path = $page.url.pathname;
+		return '~/' + path.replace(/^\//, '').replace(/\/$/, '');
 	}
 
 	function handleLogout() {
@@ -49,30 +69,37 @@
 		</div>
 
 		<nav class="sidebar-nav">
-			{#each navItems as item}
-				{@const isActive = $page.url.pathname === item.href || ($page.url.pathname.startsWith(item.href) && item.href !== '/dashboard')}
-				<a href={item.href} class="nav-item" class:active={isActive}>
-					<span class="nav-icon">
-						<item.icon size={16} />
-					</span>
-					<span class="nav-label">{item.label}</span>
-					{#if isActive}
-						<span class="nav-indicator">></span>
-					{/if}
-				</a>
+			{#each navSections as section}
+				<div class="nav-section-label">{section.label}</div>
+				{#each section.items as item}
+					{@const isActive = $page.url.pathname === item.href || ($page.url.pathname.startsWith(item.href) && item.href !== '/dashboard')}
+					<a href={item.href} class="nav-item" class:active={isActive}>
+						<span class="nav-icon">
+							<item.icon size={14} />
+						</span>
+						<span class="nav-label">{item.label}</span>
+					</a>
+				{/each}
 			{/each}
 		</nav>
 
 		<div class="sidebar-footer">
+			<div class="user-chip">
+				<div class="user-avatar">
+					{getInitials($user?.email || '')}
+				</div>
+				<div class="user-details">
+					<span class="user-email">{$user?.email || 'user'}</span>
+					<span class="user-role">{$user?.role || 'member'}</span>
+				</div>
+			</div>
 			<button class="logout-btn" onclick={handleLogout}>
-				<span class="nav-icon">
-					<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-						<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-						<polyline points="16 17 21 12 16 7" />
-						<line x1="21" y1="12" x2="9" y2="12" />
-					</svg>
-				</span>
-				<span>Logout</span>
+				<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+					<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+					<polyline points="16 17 21 12 16 7" />
+					<line x1="21" y1="12" x2="9" y2="12" />
+				</svg>
+				<span>logout</span>
 			</button>
 		</div>
 	</aside>
@@ -80,18 +107,13 @@
 	<div class="main-wrapper">
 		<header class="topbar">
 			<div class="topbar-left">
-				<span class="prompt">$</span>
-				<h1 class="page-title">{$page.url.pathname.replace('/dashboard', 'dashboard').replace('/', '')}</h1>
+				<span class="prompt-char">$</span>
+				<span class="topbar-path">{getPagePath()}</span>
+				<span class="cursor"></span>
 			</div>
 			<div class="topbar-right">
-				<div class="user-menu">
-					<div class="user-avatar">
-						{getInitials($user?.email || '')}
-					</div>
-					<div class="user-info">
-						<span class="user-role">{$user?.role}</span>
-					</div>
-				</div>
+				<span class="status-indicator"></span>
+				<span class="status-text">connected</span>
 			</div>
 		</header>
 
@@ -107,8 +129,9 @@
 		min-height: 100vh;
 	}
 
+	/* ── Sidebar ── */
 	.sidebar {
-		width: 200px;
+		width: 196px;
 		background: var(--color-bg);
 		border-right: 1px solid var(--color-border);
 		display: flex;
@@ -117,7 +140,7 @@
 	}
 
 	.sidebar-header {
-		padding: var(--space-4);
+		padding: var(--space-4) var(--space-4);
 		border-bottom: 1px solid var(--color-border);
 	}
 
@@ -134,8 +157,8 @@
 	}
 
 	.logo-mark {
-		width: 24px;
-		height: 24px;
+		width: 22px;
+		height: 22px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -143,80 +166,159 @@
 		color: var(--color-bg);
 		border-radius: var(--radius-sm);
 		font-weight: 700;
+		font-size: 12px;
+		flex-shrink: 0;
 	}
 
+	/* ── Nav ── */
 	.sidebar-nav {
 		flex: 1;
-		padding: var(--space-3);
+		padding: var(--space-3) var(--space-2);
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-1);
+		overflow-y: auto;
+	}
+
+	.nav-section-label {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-2xs);
+		color: var(--color-text-ghost);
+		letter-spacing: 0.8px;
+		padding: var(--space-3) var(--space-2) var(--space-2);
+		user-select: none;
+	}
+
+	.nav-section-label:first-child {
+		padding-top: var(--space-2);
 	}
 
 	.nav-item {
 		display: flex;
 		align-items: center;
 		gap: var(--space-3);
-		padding: var(--space-2) var(--space-3);
-		border-radius: var(--radius-sm);
+		padding: 7px var(--space-3);
+		border-radius: var(--radius-md);
 		color: var(--color-text-muted);
 		text-decoration: none;
 		font-family: var(--font-mono);
 		font-size: var(--font-size-xs);
-		transition: all 0.15s ease;
+		transition: all 0.1s ease;
 		position: relative;
+		margin-bottom: 1px;
 	}
 
 	.nav-item:hover {
-		color: var(--color-text);
+		color: var(--color-text-dim);
 		background: var(--color-bg-2);
 	}
 
 	.nav-item.active {
 		color: var(--color-text);
-		background: var(--color-bg-2);
+		background: var(--color-bg-3);
+	}
+
+	.nav-item.active::before {
+		content: '';
+		position: absolute;
+		left: 0;
+		top: 50%;
+		transform: translateY(-50%);
+		width: 2px;
+		height: 16px;
+		background: var(--color-text);
+		border-radius: 0 2px 2px 0;
 	}
 
 	.nav-icon {
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		opacity: 0.7;
+		opacity: 0.5;
+		flex-shrink: 0;
 	}
 
 	.nav-item:hover .nav-icon,
 	.nav-item.active .nav-icon {
-		opacity: 1;
+		opacity: 0.8;
 	}
 
 	.nav-label {
 		flex: 1;
 	}
 
-	.nav-indicator {
-		color: var(--color-text);
-		font-weight: 600;
+	/* ── Footer ── */
+	.sidebar-footer {
+		padding: var(--space-3) var(--space-2);
+		border-top: 1px solid var(--color-border);
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
 	}
 
-	.sidebar-footer {
-		padding: var(--space-3);
-		border-top: 1px solid var(--color-border);
+	.user-chip {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		padding: var(--space-2) var(--space-3);
+		background: var(--color-bg-2);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		margin-bottom: var(--space-1);
+	}
+
+	.user-avatar {
+		width: 22px;
+		height: 22px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--color-bg-3);
+		border: 1px solid var(--color-border-2);
+		border-radius: var(--radius-sm);
+		font-family: var(--font-mono);
+		font-size: var(--font-size-2xs);
+		font-weight: 600;
+		color: var(--color-text-muted);
+		flex-shrink: 0;
+	}
+
+	.user-details {
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+		min-width: 0;
+	}
+
+	.user-email {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-2xs);
+		color: var(--color-text-muted);
+		text-overflow: ellipsis;
+		overflow: hidden;
+		white-space: nowrap;
+	}
+
+	.user-role {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-2xs);
+		color: var(--color-text-ghost);
 	}
 
 	.logout-btn {
 		display: flex;
 		align-items: center;
-		gap: var(--space-3);
+		gap: var(--space-2);
 		width: 100%;
-		padding: var(--space-2) var(--space-3);
+		padding: 7px var(--space-3);
 		background: none;
 		border: none;
-		border-radius: var(--radius-sm);
-		color: var(--color-text-muted);
+		border-radius: var(--radius-md);
+		color: var(--color-text-ghost);
 		font-family: var(--font-mono);
 		font-size: var(--font-size-xs);
 		cursor: pointer;
-		transition: all 0.15s ease;
+		transition: all 0.1s ease;
+		text-align: left;
 	}
 
 	.logout-btn:hover {
@@ -224,6 +326,7 @@
 		background: var(--color-bg-2);
 	}
 
+	/* ── Main ── */
 	.main-wrapper {
 		flex: 1;
 		display: flex;
@@ -232,71 +335,74 @@
 	}
 
 	.topbar {
-		height: 48px;
-		padding: 0 var(--space-4);
+		height: 42px;
+		padding: 0 var(--space-5);
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		border-bottom: 1px solid var(--color-border);
 		background: var(--color-bg);
+		flex-shrink: 0;
 	}
 
 	.topbar-left {
 		display: flex;
 		align-items: center;
 		gap: var(--space-2);
+		font-size: var(--font-size-xs);
 	}
 
-	.prompt {
+	.prompt-char {
 		font-family: var(--font-mono);
 		color: var(--color-success);
-		font-weight: 600;
+		font-weight: 700;
 	}
 
-	.page-title {
+	.topbar-path {
 		font-family: var(--font-mono);
-		font-size: var(--font-size-sm);
-		font-weight: 500;
-		color: var(--color-text);
-		text-transform: lowercase;
+		color: var(--color-text-muted);
 	}
 
-	.user-menu {
+	.cursor {
+		display: inline-block;
+		width: 7px;
+		height: 13px;
+		background: var(--color-success);
+		opacity: 0.6;
+		animation: blink 1s step-end infinite;
+		vertical-align: middle;
+		border-radius: 1px;
+	}
+
+	@keyframes blink {
+		0%, 100% { opacity: 0.6; }
+		50% { opacity: 0; }
+	}
+
+	.topbar-right {
 		display: flex;
 		align-items: center;
 		gap: var(--space-2);
 	}
 
-	.user-avatar {
-		width: 28px;
-		height: 28px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background: var(--color-bg-2);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		font-family: var(--font-mono);
-		font-size: var(--font-size-xs);
-		font-weight: 600;
-		color: var(--color-text);
+	.status-indicator {
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: var(--color-success);
+		box-shadow: 0 0 6px var(--color-success);
 	}
 
-	.user-info {
-		display: flex;
-		flex-direction: column;
-	}
-
-	.user-role {
+	.status-text {
 		font-family: var(--font-mono);
-		font-size: var(--font-size-xs);
-		color: var(--color-text-muted);
-		text-transform: capitalize;
+		font-size: var(--font-size-2xs);
+		color: var(--color-text-ghost);
+		letter-spacing: 0.5px;
 	}
 
 	.main-content {
 		flex: 1;
-		padding: var(--space-5);
+		padding: var(--space-5) var(--space-6);
 		overflow-y: auto;
 	}
 </style>

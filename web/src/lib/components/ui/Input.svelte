@@ -28,7 +28,9 @@
 
 <div class="input-wrapper">
 	{#if label}
-		<label class="label" for={name}>{label}{#if required}<span class="required">*</span>{/if}</label>
+		<label class="label" for={name}>
+			{label}{#if required}<span class="required">*</span>{/if}
+		</label>
 	{/if}
 	<input
 		{name}
@@ -43,7 +45,7 @@
 		{onchange}
 	/>
 	{#if error}
-		<span class="error-text">{error}</span>
+		<span class="error-text">// {error}</span>
 	{/if}
 </div>
 
@@ -56,10 +58,10 @@
 
 	.label {
 		font-family: var(--font-mono);
-		font-size: var(--font-size-xs);
+		font-size: var(--font-size-2xs);
 		color: var(--color-text-muted);
 		text-transform: uppercase;
-		letter-spacing: 0.5px;
+		letter-spacing: 1px;
 	}
 
 	.required {
@@ -68,38 +70,39 @@
 	}
 
 	.input {
-		height: 40px;
+		height: 36px;
 		padding: 0 var(--space-3);
 		background: var(--color-bg);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
+		border: 1px solid var(--color-border-2);
+		border-radius: var(--radius-md);
 		color: var(--color-text);
 		font-family: var(--font-mono);
 		font-size: var(--font-size-sm);
-		transition: border-color 0.15s ease;
+		transition: border-color 0.1s ease;
+		outline: none;
 	}
 
 	.input::placeholder {
-		color: var(--color-text-muted);
+		color: var(--color-text-ghost);
 		font-family: var(--font-mono);
 	}
 
 	.input:focus {
-		outline: none;
-		border-color: var(--color-accent);
+		border-color: var(--color-border-active);
 	}
 
 	.input:disabled {
-		opacity: 0.4;
+		opacity: 0.3;
 		cursor: not-allowed;
 	}
 
 	.input.error {
-		border-color: var(--color-danger);
+		border-color: var(--color-danger-border);
 	}
 
 	.error-text {
 		font-size: var(--font-size-xs);
 		color: var(--color-danger);
+		font-family: var(--font-mono);
 	}
 </style>

@@ -21,34 +21,17 @@
 <style>
 	.card {
 		background: var(--color-bg-2);
-		border-radius: var(--radius-md);
+		border-radius: var(--radius-lg);
 	}
 
-	.card-default {
-		border: 1px solid var(--color-border);
-	}
-
-	.card-bordered {
-		border: 1px solid var(--color-border);
-	}
-
+	.card-default,
+	.card-bordered,
 	.card-flat {
 		border: 1px solid var(--color-border);
 	}
 
-	.padding-none {
-		padding: 0;
-	}
-
-	.padding-sm {
-		padding: var(--space-3);
-	}
-
-	.padding-md {
-		padding: var(--space-4);
-	}
-
-	.padding-lg {
-		padding: var(--space-5);
-	}
+	.padding-none { padding: 0; }
+	.padding-sm   { padding: var(--space-3); }
+	.padding-md   { padding: var(--space-4) var(--space-5); }
+	.padding-lg   { padding: var(--space-5) var(--space-6); }
 </style>

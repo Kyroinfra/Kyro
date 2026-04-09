@@ -44,35 +44,36 @@
 		justify-content: center;
 		gap: var(--space-2);
 		font-family: var(--font-mono);
-		font-size: var(--font-size-sm);
+		font-size: var(--font-size-xs);
 		font-weight: 500;
+		letter-spacing: 0.3px;
 		border-radius: var(--radius-md);
-		transition: all 0.15s ease;
+		transition: all 0.1s ease;
 		position: relative;
 		white-space: nowrap;
 		cursor: pointer;
 	}
 
 	.btn:disabled {
-		opacity: 0.4;
+		opacity: 0.3;
 		cursor: not-allowed;
 	}
 
 	.btn-sm {
-		height: 32px;
+		height: 28px;
 		padding: 0 var(--space-3);
-		font-size: var(--font-size-xs);
+		font-size: var(--font-size-2xs);
 	}
 
 	.btn-md {
-		height: 40px;
+		height: 36px;
 		padding: 0 var(--space-4);
 	}
 
 	.btn-lg {
-		height: 48px;
-		padding: 0 var(--space-6);
-		font-size: var(--font-size-base);
+		height: 44px;
+		padding: 0 var(--space-5);
+		font-size: var(--font-size-sm);
 	}
 
 	.btn-primary {
@@ -82,30 +83,31 @@
 	}
 
 	.btn-primary:hover:not(:disabled) {
-		background: var(--color-text-muted);
-		border-color: var(--color-text-muted);
+		background: var(--color-text-dim);
+		border-color: var(--color-text-dim);
 	}
 
 	.btn-secondary {
 		background: var(--color-bg-2);
-		color: var(--color-text);
-		border: 1px solid var(--color-border);
+		color: var(--color-text-dim);
+		border: 1px solid var(--color-border-2);
 	}
 
 	.btn-secondary:hover:not(:disabled) {
 		background: var(--color-bg-3);
-		border-color: var(--color-text-muted);
+		border-color: var(--color-border-hover);
+		color: var(--color-text);
 	}
 
 	.btn-danger {
 		background: transparent;
 		color: var(--color-danger);
-		border: 1px solid var(--color-danger);
+		border: 1px solid var(--color-danger-border);
 	}
 
 	.btn-danger:hover:not(:disabled) {
-		background: var(--color-danger);
-		color: var(--color-bg);
+		background: var(--color-danger-dim);
+		border-color: var(--color-danger);
 	}
 
 	.btn-ghost {
@@ -115,7 +117,7 @@
 	}
 
 	.btn-ghost:hover:not(:disabled) {
-		color: var(--color-text);
+		color: var(--color-text-dim);
 		background: var(--color-bg-2);
 		border-color: var(--color-border);
 	}
@@ -132,17 +134,15 @@
 
 	.spinner {
 		position: absolute;
-		width: 14px;
-		height: 14px;
-		border: 2px solid currentColor;
+		width: 12px;
+		height: 12px;
+		border: 1.5px solid currentColor;
 		border-top-color: transparent;
 		border-radius: 50%;
 		animation: spin 0.6s linear infinite;
 	}
 
 	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
+		to { transform: rotate(360deg); }
 	}
 </style>

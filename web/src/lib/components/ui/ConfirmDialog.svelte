@@ -24,22 +24,23 @@
 	}: Props = $props();
 
 	function handleKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') {
-			oncancel();
-		}
+		if (e.key === 'Escape') oncancel();
 	}
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
 {#if open}
-	<div class="dialog-backdrop" transition:fade={{ duration: 100 }} onclick={oncancel} role="dialog" aria-modal="true" tabindex="-1">
-		<div class="dialog" transition:scale={{ duration: 100, start: 0.98 }} onclick={(e) => e.stopPropagation()}>
-			<h3 class="dialog-title">{title}</h3>
-			<p class="dialog-message">{message}</p>
-			<div class="actions">
-				<button class="btn-cancel" onclick={oncancel}>{cancelLabel}</button>
-				<button class="btn-confirm btn-{variant}" onclick={onconfirm}>{confirmLabel}</button>
+	<div class="dialog-backdrop" transition:fade={{ duration: 80 }} onclick={oncancel} role="dialog" aria-modal="true" tabindex="-1">
+		<div class="dialog" transition:scale={{ duration: 80, start: 0.97 }} onclick={(e) => e.stopPropagation()}>
+			<div class="dialog-line variant-{variant}"></div>
+			<div class="dialog-inner">
+				<h3 class="dialog-title">// {title}</h3>
+				<p class="dialog-message">{message}</p>
+				<div class="actions">
+					<button class="btn-cancel" onclick={oncancel}>{cancelLabel}</button>
+					<button class="btn-confirm btn-{variant}" onclick={onconfirm}>{confirmLabel}</button>
+				</div>
 			</div>
 		</div>
 	</div>
@@ -49,21 +50,34 @@
 	.dialog-backdrop {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.8);
+		background: rgba(0, 0, 0, 0.85);
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		z-index: 1001;
 		padding: var(--space-4);
+		backdrop-filter: blur(2px);
 	}
 
 	.dialog {
 		background: var(--color-bg-2);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
-		padding: var(--space-5);
+		border: 1px solid var(--color-border-2);
+		border-radius: var(--radius-lg);
 		width: 100%;
-		max-width: 400px;
+		max-width: 380px;
+		overflow: hidden;
+		box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+	}
+
+	.dialog-line {
+		height: 2px;
+	}
+
+	.variant-danger  { background: var(--color-danger); }
+	.variant-warning { background: var(--color-warning); }
+
+	.dialog-inner {
+		padding: var(--space-5);
 	}
 
 	.dialog-title {
@@ -72,15 +86,14 @@
 		font-weight: 600;
 		color: var(--color-text);
 		margin: 0 0 var(--space-3);
-		text-transform: uppercase;
-		letter-spacing: 0.5px;
+		letter-spacing: 0.3px;
 	}
 
 	.dialog-message {
-		color: var(--color-text-muted);
+		color: var(--color-text-dim);
 		font-size: var(--font-size-sm);
 		margin: 0 0 var(--space-5);
-		line-height: 1.5;
+		line-height: 1.6;
 	}
 
 	.actions {
@@ -91,22 +104,24 @@
 
 	button {
 		font-family: var(--font-mono);
-		font-size: var(--font-size-sm);
+		font-size: var(--font-size-xs);
 		padding: var(--space-2) var(--space-4);
-		border-radius: var(--radius-sm);
+		border-radius: var(--radius-md);
 		font-weight: 500;
 		cursor: pointer;
-		transition: all 0.15s ease;
+		transition: all 0.1s ease;
+		letter-spacing: 0.3px;
 	}
 
 	.btn-cancel {
 		background: transparent;
-		border: 1px solid var(--color-border);
-		color: var(--color-text);
+		border: 1px solid var(--color-border-2);
+		color: var(--color-text-dim);
 	}
 
 	.btn-cancel:hover {
-		border-color: var(--color-text-muted);
+		border-color: var(--color-border-hover);
+		color: var(--color-text);
 	}
 
 	.btn-confirm {
@@ -115,19 +130,19 @@
 
 	.btn-danger {
 		background: var(--color-danger);
-		color: var(--color-bg);
+		color: #fff;
 	}
 
 	.btn-danger:hover {
-		background: #ff6666;
+		opacity: 0.85;
 	}
 
 	.btn-warning {
 		background: var(--color-warning);
-		color: var(--color-bg);
+		color: #000;
 	}
 
 	.btn-warning:hover {
-		background: #ffcc00;
+		opacity: 0.85;
 	}
 </style>

@@ -86,10 +86,7 @@
 		if (!keyToDelete) return;
 		const formData = new FormData();
 		formData.append('id', keyToDelete);
-		await fetch('?/delete', {
-			method: 'POST',
-			body: formData
-		});
+		await fetch('?/delete', { method: 'POST', body: formData });
 		showDeleteConfirm = false;
 		keyToDelete = null;
 		window.location.reload();
@@ -97,111 +94,97 @@
 </script>
 
 <svelte:head>
-	<title>API Keys - Kyro</title>
+	<title>API Keys — Kyro</title>
 </svelte:head>
 
 <div class="keys-page">
 	<header class="page-header">
-		<div class="header-content">
-			<span class="prompt">$</span>
-			<span class="command">./keys.sh</span>
-		</div>
+		<div class="section-label">// api keys</div>
 		{#if canManage}
-			<Button onclick={() => (showCreateModal = true)}>+ New Key</Button>
+			<Button onclick={() => (showCreateModal = true)}>+ new key</Button>
 		{/if}
 	</header>
 
 	{#if newKey}
 		<div class="key-reveal">
 			<div class="key-reveal-header">
-				<span class="key-reveal-title">> API Key Generated</span>
-				<button class="dismiss-btn" onclick={dismissKey}>
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-						<line x1="18" y1="6" x2="6" y2="18" />
-						<line x1="6" y1="6" x2="18" y2="18" />
-					</svg>
-				</button>
+				<span class="key-reveal-title">key generated — copy now</span>
+				<button class="dismiss-btn" onclick={dismissKey}>✕</button>
 			</div>
-			<p class="key-reveal-warning">// Copy now - cannot be retrieved again</p>
+			<p class="key-reveal-warning">// this value will not be shown again</p>
 			<div class="key-value">
 				<code>{newKey}</code>
 				<Button variant="secondary" size="sm" onclick={handleCopy}>
-					{copied ? 'Copied' : 'Copy'}
+					{copied ? '✓ copied' : 'copy'}
 				</Button>
 			</div>
 		</div>
 	{/if}
 
 	{#if data.keys.length === 0}
-		<Card>
-			<div class="empty-state">
-				<span class="empty-icon">
-					<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-						<path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
-					</svg>
-				</span>
-				<h3>No API keys</h3>
-				<p>Create your first key to authenticate with the API</p>
-				{#if canManage}
-					<Button onclick={() => (showCreateModal = true)}>+ Create First Key</Button>
-				{/if}
+		<div class="empty-state">
+			<span class="empty-prefix">$</span>
+			<div class="empty-text">
+				<span class="empty-cmd">ls ./keys</span>
+				<span class="empty-result">// no keys found</span>
 			</div>
-		</Card>
+			{#if canManage}
+				<Button onclick={() => (showCreateModal = true)}>+ create first key</Button>
+			{/if}
+		</div>
 	{:else}
 		<div class="filter-tabs">
-			<button class="filter-tab" class:active={filter === 'all'} onclick={() => (filter = 'all')}>
-				<span class="filter-marker">[</span>all<span class="filter-marker">]</span>
-			</button>
-			<button class="filter-tab" class:active={filter === 'active'} onclick={() => (filter = 'active')}>
-				<span class="filter-marker">[</span>active<span class="filter-marker">]</span>
-			</button>
-			<button class="filter-tab" class:active={filter === 'revoked'} onclick={() => (filter = 'revoked')}>
-				<span class="filter-marker">[</span>revoked<span class="filter-marker">]</span>
-			</button>
+			{#each ['all', 'active', 'revoked'] as f}
+				<button class="filter-tab" class:active={filter === f} onclick={() => (filter = f as any)}>
+					{f}
+				</button>
+			{/each}
 		</div>
 
 		<div class="keys-list">
 			{#each filteredKeys() as key}
-				<Card>
-					<div class="key-card" class:revoked={key.revokedAt}>
-						<div class="key-info">
-							<div class="key-header">
-								<span class="key-name" class:revoked={key.revokedAt}>{key.name}</span>
-								{#if key.revokedAt}
-									<Badge variant="danger">Revoked</Badge>
-								{/if}
-							</div>
-							<div class="key-prefix" class:revoked={key.revokedAt}>key_{key.prefix}***</div>
-							<div class="key-meta">
-								<span class="key-date">Created {formatDate(key.createdAt)}</span>
-								{#if key.lastUsedAt}
-									<span class="key-date">Last used {formatDateTime(key.lastUsedAt)}</span>
-								{:else}
-									<span class="key-date">Never used</span>
-								{/if}
-								{#if key.revokedAt}
-									<span class="key-date revoked-date">Revoked {formatDate(key.revokedAt)}</span>
-								{/if}
-							</div>
-							<div class="key-scopes">
-								{#each key.scopes as scope}
-									<Badge>{scope}</Badge>
-								{/each}
-							</div>
+				<div class="key-row" class:revoked={key.revokedAt}>
+					<div class="key-main">
+						<div class="key-name-row">
+							<span class="key-name" class:strikethrough={key.revokedAt}>{key.name}</span>
+							{#if key.revokedAt}
+								<Badge variant="danger">revoked</Badge>
+							{:else}
+								<Badge variant="success">active</Badge>
+							{/if}
 						</div>
-						{#if canManage && !key.revokedAt}
-							<Button variant="danger" size="sm" onclick={() => confirmDelete(key.id)}>
-								Revoke
-							</Button>
-						{/if}
+						<div class="key-prefix">key_{key.prefix}***</div>
+						<div class="key-meta">
+							<span>created {formatDate(key.createdAt)}</span>
+							<span class="meta-sep">·</span>
+							{#if key.lastUsedAt}
+								<span>last used {formatDateTime(key.lastUsedAt)}</span>
+							{:else}
+								<span>never used</span>
+							{/if}
+							{#if key.revokedAt}
+								<span class="meta-sep">·</span>
+								<span class="revoked-date">revoked {formatDate(key.revokedAt)}</span>
+							{/if}
+						</div>
+						<div class="key-scopes">
+							{#each key.scopes as scope}
+								<span class="scope-tag">{scope}</span>
+							{/each}
+						</div>
 					</div>
-				</Card>
+					{#if canManage && !key.revokedAt}
+						<Button variant="danger" size="sm" onclick={() => confirmDelete(key.id)}>
+							revoke
+						</Button>
+					{/if}
+				</div>
 			{/each}
 		</div>
 	{/if}
 </div>
 
-<Modal bind:open={showCreateModal} title="Create API Key" onclose={() => (showCreateModal = false)}>
+<Modal bind:open={showCreateModal} title="create api key" onclose={() => (showCreateModal = false)}>
 	<form
 		method="POST"
 		action="?/create"
@@ -220,50 +203,37 @@
 		}}
 	>
 		<div class="form-group">
-			<label for="key-name">Name</label>
-			<input
-				type="text"
-				id="key-name"
-				name="name"
-				bind:value={keyName}
-				placeholder="My API Key"
-				required
-			/>
+			<label for="key-name">name</label>
+			<input type="text" id="key-name" name="name" bind:value={keyName} placeholder="my-api-key" required />
 		</div>
 
 		<div class="form-group">
-			<label>Scopes</label>
+			<label>scopes</label>
 			<div class="scopes-grid">
-				<label class="scope-checkbox">
-					<input type="checkbox" name="scopes" value="read" bind:group={selectedScopes} />
-					<span>Read</span>
-				</label>
-				<label class="scope-checkbox">
-					<input type="checkbox" name="scopes" value="write" bind:group={selectedScopes} />
-					<span>Write</span>
-				</label>
-				<label class="scope-checkbox">
-					<input type="checkbox" name="scopes" value="admin" bind:group={selectedScopes} />
-					<span>Admin</span>
-				</label>
+				{#each ['read', 'write', 'admin'] as scope}
+					<label class="scope-checkbox">
+						<input type="checkbox" name="scopes" value={scope} bind:group={selectedScopes} />
+						<span>{scope}</span>
+					</label>
+				{/each}
 			</div>
 		</div>
 
 		{#if createError}
-			<div class="error-message">{createError}</div>
+			<div class="error-message">// {createError}</div>
 		{/if}
 
 		<div class="form-actions">
-			<Button variant="secondary" onclick={() => (showCreateModal = false)}>Cancel</Button>
-			<Button type="submit" loading={creating}>Create Key</Button>
+			<Button variant="secondary" onclick={() => (showCreateModal = false)}>cancel</Button>
+			<Button type="submit" loading={creating}>create key</Button>
 		</div>
 	</form>
 </Modal>
 
 <ConfirmDialog
 	bind:open={showDeleteConfirm}
-	title="Revoke API Key"
-	message="Are you sure you want to revoke this API key? Any applications using this key will stop working."
+	title="revoke api key"
+	message="Are you sure you want to revoke this API key? Any applications using this key will stop working immediately."
 	confirmLabel="Revoke"
 	variant="danger"
 	onconfirm={handleDelete}
@@ -272,7 +242,7 @@
 
 <style>
 	.keys-page {
-		max-width: 900px;
+		max-width: 880px;
 	}
 
 	.page-header {
@@ -282,65 +252,55 @@
 		margin-bottom: var(--space-5);
 	}
 
-	.header-content {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2);
-	}
-
-	.prompt {
+	.section-label {
 		font-family: var(--font-mono);
-		color: var(--color-success);
-		font-weight: 600;
+		font-size: var(--font-size-2xs);
+		color: var(--color-text-ghost);
+		text-transform: uppercase;
+		letter-spacing: 1.5px;
 	}
 
-	.command {
-		font-family: var(--font-mono);
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
-	}
-
+	/* Key reveal banner */
 	.key-reveal {
 		background: var(--color-bg-2);
-		border: 1px solid var(--color-warning);
+		border: 1px solid var(--color-warning-border);
+		border-left: 3px solid var(--color-warning);
 		border-radius: var(--radius-lg);
-		padding: var(--space-4);
-		margin-bottom: var(--space-6);
+		padding: var(--space-4) var(--space-5);
+		margin-bottom: var(--space-5);
 	}
 
 	.key-reveal-header {
 		display: flex;
 		align-items: center;
-		gap: var(--space-2);
+		justify-content: space-between;
 		margin-bottom: var(--space-2);
 	}
 
-	.key-reveal-icon {
-		font-size: var(--font-size-lg);
-	}
-
 	.key-reveal-title {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
 		font-weight: 600;
 		color: var(--color-text);
-		flex: 1;
 	}
 
 	.dismiss-btn {
 		background: none;
 		border: none;
 		color: var(--color-text-muted);
+		font-size: var(--font-size-xs);
 		cursor: pointer;
 		padding: var(--space-1);
-		font-size: var(--font-size-sm);
 	}
 
 	.dismiss-btn:hover {
-		color: var(--color-text);
+		color: var(--color-text-dim);
 	}
 
 	.key-reveal-warning {
 		color: var(--color-warning);
-		font-size: var(--font-size-sm);
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
 		margin-bottom: var(--space-3);
 	}
 
@@ -356,120 +316,156 @@
 		padding: var(--space-3);
 		border-radius: var(--radius-md);
 		font-family: var(--font-mono);
-		font-size: var(--font-size-sm);
+		font-size: var(--font-size-xs);
 		color: var(--color-text);
 		word-break: break-all;
+		border: 1px solid var(--color-border-2);
 	}
 
+	/* Empty state */
 	.empty-state {
-		text-align: center;
-		padding: var(--space-10) var(--space-4);
+		display: flex;
+		align-items: center;
+		gap: var(--space-4);
+		padding: var(--space-8) var(--space-5);
+		background: var(--color-bg-2);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-lg);
 	}
 
-	.empty-icon {
-		font-size: 48px;
-		display: block;
-		margin-bottom: var(--space-4);
-	}
-
-	.empty-state h3 {
+	.empty-prefix {
+		font-family: var(--font-mono);
+		color: var(--color-success);
+		font-weight: 700;
 		font-size: var(--font-size-lg);
-		font-weight: 600;
-		color: var(--color-text);
-		margin: 0 0 var(--space-2);
 	}
 
-	.empty-state p {
-		color: var(--color-text-muted);
-		margin: 0 0 var(--space-4);
-	}
-
-	.keys-list {
+	.empty-text {
+		flex: 1;
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-3);
+		gap: 2px;
 	}
 
-	.key-card.revoked {
-		opacity: 0.6;
+	.empty-cmd {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-sm);
+		color: var(--color-text-dim);
 	}
 
+	.empty-result {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
+		color: var(--color-text-ghost);
+	}
+
+	/* Filters */
 	.filter-tabs {
 		display: flex;
-		gap: var(--space-1);
+		gap: 2px;
 		margin-bottom: var(--space-4);
+		background: var(--color-bg-2);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		padding: 3px;
 		width: fit-content;
 	}
 
 	.filter-tab {
-		padding: var(--space-2) var(--space-3);
+		padding: 4px var(--space-3);
 		background: transparent;
 		border: none;
+		border-radius: var(--radius-sm);
 		color: var(--color-text-muted);
 		font-family: var(--font-mono);
 		font-size: var(--font-size-xs);
 		cursor: pointer;
-		transition: all 0.15s ease;
-		border-radius: var(--radius-sm);
+		transition: all 0.1s ease;
 	}
 
 	.filter-tab:hover {
-		color: var(--color-text);
-		background: var(--color-bg-2);
+		color: var(--color-text-dim);
 	}
 
 	.filter-tab.active {
+		background: var(--color-bg-3);
 		color: var(--color-text);
-		background: var(--color-bg-2);
+		border: 1px solid var(--color-border-2);
 	}
 
-	.filter-marker {
-		color: var(--color-text-muted);
+	/* Keys list */
+	.keys-list {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
 	}
 
-	.key-header {
+	.key-row {
 		display: flex;
 		align-items: center;
-		gap: var(--space-2);
-		margin-bottom: var(--space-1);
+		gap: var(--space-4);
+		padding: var(--space-4) var(--space-5);
+		background: var(--color-bg-2);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-lg);
+		transition: border-color 0.1s ease;
 	}
 
-	.key-info {
+	.key-row:hover {
+		border-color: var(--color-border-2);
+	}
+
+	.key-row.revoked {
+		opacity: 0.5;
+	}
+
+	.key-main {
 		flex: 1;
 		min-width: 0;
 	}
 
-	.key-name {
-		font-weight: 600;
-		color: var(--color-text);
-		margin-bottom: var(--space-1);
+	.key-name-row {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		margin-bottom: var(--space-2);
 	}
 
-	.key-name.revoked {
+	.key-name {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-sm);
+		font-weight: 600;
+		color: var(--color-text);
+	}
+
+	.key-name.strikethrough {
 		text-decoration: line-through;
 		color: var(--color-text-muted);
 	}
 
 	.key-prefix {
 		font-family: var(--font-mono);
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
+		font-size: var(--font-size-xs);
+		color: var(--color-text-ghost);
 		margin-bottom: var(--space-2);
-	}
-
-	.key-prefix.revoked {
-		opacity: 0.6;
 	}
 
 	.key-meta {
 		display: flex;
-		gap: var(--space-4);
+		gap: var(--space-2);
+		font-family: var(--font-mono);
+		font-size: var(--font-size-2xs);
+		color: var(--color-text-ghost);
 		margin-bottom: var(--space-2);
 	}
 
-	.key-date {
-		font-size: var(--font-size-xs);
-		color: var(--color-text-muted);
+	.meta-sep {
+		color: var(--color-border-hover);
+	}
+
+	.revoked-date {
+		color: var(--color-danger);
+		opacity: 0.6;
 	}
 
 	.key-scopes {
@@ -477,37 +473,54 @@
 		gap: var(--space-2);
 	}
 
+	.scope-tag {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-2xs);
+		color: var(--color-text-ghost);
+		background: var(--color-bg-3);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		padding: 1px 6px;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+	}
+
+	/* Form */
 	.form-group {
 		margin-bottom: var(--space-4);
 	}
 
 	.form-group label {
 		display: block;
-		font-size: var(--font-size-sm);
-		font-weight: 500;
-		color: var(--color-text);
+		font-family: var(--font-mono);
+		font-size: var(--font-size-2xs);
+		color: var(--color-text-muted);
+		text-transform: uppercase;
+		letter-spacing: 1px;
 		margin-bottom: var(--space-2);
 	}
 
 	.form-group input[type='text'] {
 		width: 100%;
-		padding: var(--space-2) var(--space-3);
+		height: 36px;
+		padding: 0 var(--space-3);
 		background: var(--color-bg);
-		border: 1px solid var(--color-border);
+		border: 1px solid var(--color-border-2);
 		border-radius: var(--radius-md);
 		color: var(--color-text);
-		font-size: var(--font-size-base);
+		font-family: var(--font-mono);
+		font-size: var(--font-size-sm);
+		outline: none;
+		transition: border-color 0.1s ease;
 	}
 
 	.form-group input[type='text']:focus {
-		outline: none;
-		border-color: var(--color-accent);
+		border-color: var(--color-border-active);
 	}
 
 	.scopes-grid {
 		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
+		gap: var(--space-4);
 	}
 
 	.scope-checkbox {
@@ -518,19 +531,21 @@
 	}
 
 	.scope-checkbox input {
-		width: 16px;
-		height: 16px;
-		accent-color: var(--color-accent);
+		width: 14px;
+		height: 14px;
+		accent-color: var(--color-text);
 	}
 
 	.scope-checkbox span {
-		font-size: var(--font-size-sm);
-		color: var(--color-text);
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
+		color: var(--color-text-dim);
 	}
 
 	.error-message {
 		color: var(--color-danger);
-		font-size: var(--font-size-sm);
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
 		margin-bottom: var(--space-3);
 	}
 
@@ -538,6 +553,8 @@
 		display: flex;
 		justify-content: flex-end;
 		gap: var(--space-3);
-		margin-top: var(--space-4);
+		margin-top: var(--space-5);
+		padding-top: var(--space-4);
+		border-top: 1px solid var(--color-border);
 	}
 </style>
