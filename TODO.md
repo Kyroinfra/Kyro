@@ -1,110 +1,217 @@
-## The hard truth first
-
-The SDK is only as good as the API underneath it. Before writing a single line of SDK code, your API needs to be **stable and intentional**. That means:
-
-- **Consistent error shapes** — every error response must have the same structure (`{ error: { code, message, details } }`). If some endpoints return `{ error: "string" }` and others return `{ message: "..." }`, the SDK can't handle them uniformly and the developer experience breaks immediately.
-- **Versioned endpoints** — you already have `/api/v1/` which is great. Don't break this. Ever.
-- **Predictable pagination** — list endpoints (`/files`, `/keys`) need a consistent cursor or page-based pattern across the board, not ad-hoc per route.
-
-Audit your API for consistency before building the SDK. Any rough edge in the API becomes a sharp edge in the SDK.
+# Kyro — Language-Agnostic API Platform TODO (Final Structured Plan)
 
 ---
 
-## How to actually structure the SDK
-
-The pattern that works (Stripe uses this, it's the right approach):
-
-```
-@kyro/sdk/
-├── src/
-│   ├── client.ts          ← KyroClient class, holds config + http
-│   ├── http.ts            ← base fetch wrapper, auth headers, error handling
-│   ├── error.ts           ← KyroError class
-│   ├── resources/
-│   │   ├── files.ts       ← client.files.*
-│   │   ├── keys.ts        ← client.keys.*
-│   │   └── usage.ts       ← client.usage.*
-│   └── types/
-│       └── index.ts       ← all exported types
-```
-
-The `KyroClient` is just a container that instantiates resources and passes them a shared HTTP layer:
-
-```typescript
-export class KyroClient {
-  files: FilesResource;
-  keys: KeysResource;
-  usage: UsageResource;
-
-  constructor(config: { apiKey: string; baseUrl?: string }) {
-    const http = new KyroHttp(config);
-    this.files = new FilesResource(http);
-    this.keys = new KeysResource(http);
-    this.usage = new UsageResource(http);
-  }
-}
-```
-
-The HTTP layer handles everything cross-cutting — auth header injection, error parsing, retries — so individual resources stay clean.
+# 0. SOURCE OF TRUTH (NON-NEGOTIABLE)
+- [ ] Define OpenAPI 3.1 spec as single source of truth
+- [ ] Ensure every endpoint is documented in OpenAPI
+- [ ] Enforce schema-first development (API follows spec, not vice versa)
+- [ ] Add versioning strategy (`/api/v1/` locked and immutable)
 
 ---
 
-## The SDK experience that matters most
-
-Three things determine whether developers love or hate your SDK:
-
-**1. TypeScript types that actually help.** Return types should be exact — not `any`, not `object`. When a developer does `const file = await client.files.upload(...)` they should get full autocomplete on `file.url`, `file.sizeBytes`, `file.mimeType`. Generate these from your actual DB schema or OpenAPI spec, don't handwrite them separately and let them drift.
-
-**2. Errors you can act on.** Don't just throw a generic `Error`. Have a `KyroError` class with a machine-readable `code`:
-
-```typescript
-throw new KyroError({
-  code: "storage_quota_exceeded",
-  message: "Your organisation has reached its storage limit.",
-  statusCode: 402,
-});
-```
-
-A developer can then write `if (err.code === "storage_quota_exceeded")` and handle it properly. String-matching on `err.message` is fragile and awful.
-
-**3. File uploads that don't make people cry.** `client.files.upload()` should accept a `Buffer`, a `ReadableStream`, and ideally a `File` object (for browser use). Multipart encoding should be invisible — the developer shouldn't need to know it exists.
+# 1. CORE API (UNIVERSAL HTTP LAYER)
+- [ ] Build REST API foundation
+- [ ] Standardize request/response format:
+  - [ ] Success: `{ data, meta }`
+  - [ ] Error: `{ error: { code, message, details } }`
+- [ ] Implement API key authentication (Bearer token)
+- [ ] Add middleware pipeline:
+  - [ ] Auth middleware
+  - [ ] Scope/permission middleware
+  - [ ] Validation middleware
+  - [ ] Error handler (global)
+- [ ] Define consistent pagination (cursor-based preferred)
 
 ---
 
-## The `kyro_test_` prefix is non-negotiable
-
-From your roadmap you already know about sandbox keys. Implement this before shipping the SDK. Developers will run your SDK in tests and CI, and they need a way to do that without touching production data or getting billed. The SDK should warn loudly (but not throw) if a production key is used in a Node environment where `NODE_ENV=test`.
-
----
-
-## Realistic phasing for the SDK itself
-
-Given you're at Phase 4, here's what I'd actually build in order:
-
-**Right now:** A thin internal client — just a typed fetch wrapper you use in your own frontend/dashboard. No npm publish. This forces you to feel the rough edges before external developers do.
-
-**After Phase 5 (S3, stable storage):** Publish `@kyro/sdk` to npm with `files` and `keys` resources. These are your core value prop — get them perfect.
-
-**Later:** `usage` resource, webhook verification helpers, a browser-safe build (no Node-only APIs).
+# 2. MULTI-TENANT SYSTEM
+- [ ] Implement Users
+- [ ] Implement Workspaces (core isolation unit)
+- [ ] Optional: Projects under Workspaces
+- [ ] Enforce strict data isolation per workspace
+- [ ] Define roles (future: owner, admin, member)
 
 ---
 
-## One thing most people skip that kills developer adoption
-
-**A local test mode.** Something like:
-
-```typescript
-const client = new KyroClient({
-  apiKey: "kyro_test_...",
-});
-```
-
-...that hits a real sandbox environment with real responses but zero side effects. Without this, developers can't integrate your SDK in their own test suites confidently. This is table stakes for a platform people will actually build on.
+# 3. API KEY SYSTEM (SECURITY CORE)
+- [ ] Generate API keys per workspace
+- [ ] Hash API keys before storage (never store raw keys)
+- [ ] Show key only once at creation
+- [ ] Support multiple keys per workspace
+- [ ] Add key lifecycle:
+  - [ ] revoke
+  - [ ] regenerate
+  - [ ] disable
+- [ ] Add metadata:
+  - [ ] name
+  - [ ] created_at
+  - [ ] last_used_at
 
 ---
 
-## Bottom line
+# 4. SCOPES / PERMISSIONS SYSTEM
+- [ ] Replace simple read/write model
+- [ ] Define scopes:
+  - [ ] files:read
+  - [ ] files:write
+  - [ ] files:list
+  - [ ] files:delete
+- [ ] Middleware to enforce scope checks
+- [ ] Map UI permissions → internal scopes
 
-You're in a great position — Phases 1–4 done means your core infrastructure is solid. The SDK is absolutely the right next move after Phase 5 stabilises your storage layer, because the file upload experience is your killer feature and that needs S3 under it before it's worth wrapping in a nice SDK API.
+---
 
-The one thing I'd start *right now*, before Phase 5 even, is auditing your error responses and making them consistent. That work costs you nothing and it makes every subsequent phase — and the SDK itself — substantially cleaner.
+# 5. FILE STORAGE ENGINE (CORE PRODUCT VALUE)
+- [ ] Design bucket abstraction layer
+- [ ] Implement file upload API
+- [ ] Implement file download API
+- [ ] Implement file listing API
+- [ ] Implement file deletion API
+- [ ] Store file metadata:
+  - [ ] size
+  - [ ] mime type
+  - [ ] timestamps
+  - [ ] workspace ownership
+- [ ] Create storage adapter system:
+  - [ ] Local storage (MVP)
+  - [ ] S3-compatible adapter (future)
+
+---
+
+# 6. PLATFORM RELIABILITY
+- [ ] Rate limiting per API key
+- [ ] Request validation everywhere
+- [ ] Central logging system
+- [ ] Prevent sensitive data leakage in logs
+- [ ] Add retry-safe endpoints where needed
+- [ ] Add idempotency keys (future for uploads)
+
+---
+
+# 7. USAGE & OBSERVABILITY
+- [ ] Track API requests per key
+- [ ] Track storage usage per workspace
+- [ ] Track bandwidth usage (future)
+- [ ] Track last active timestamp
+- [ ] Build usage aggregation system
+- [ ] Internal analytics dashboard
+
+---
+
+# 8. DEVELOPER EXPERIENCE (DX CORE)
+- [ ] Clean, consistent error codes (machine-readable)
+- [ ] Stable pagination across all list endpoints
+- [ ] Predictable API behavior (no edge-case responses)
+- [ ] Strict backward compatibility rules
+- [ ] Sandbox environment:
+  - [ ] kyro_test_ keys
+  - [ ] isolated data environment
+
+---
+
+# 9. SDK ECOSYSTEM (LANGUAGE-AGNOSTIC STRATEGY)
+## 9.1 API CONTRACT FIRST
+- [ ] Maintain OpenAPI 3.1 as canonical contract
+- [ ] Ensure spec completeness for all endpoints
+- [ ] Auto-sync API changes → OpenAPI
+
+---
+
+## 9.2 SDK GENERATION SYSTEM
+- [ ] Generate SDKs from OpenAPI spec:
+  - [ ] TypeScript SDK (priority #1)
+  - [ ] Python SDK
+  - [ ] Go SDK
+  - [ ] Java SDK (future)
+  - [ ] Rust SDK (future)
+- [ ] Ensure consistent naming across all SDKs
+- [ ] Maintain versioned SDK releases aligned with API
+
+---
+
+## 9.3 CORE SDK DESIGN (TS REFERENCE IMPLEMENTATION)
+- [ ] Create `KyroClient`
+- [ ] Build HTTP abstraction layer:
+  - [ ] auth injection
+  - [ ] error normalization
+  - [ ] retry handling (optional)
+- [ ] Implement resource modules:
+  - [ ] files
+  - [ ] keys
+  - [ ] usage
+- [ ] Ensure full TypeScript strict typing
+
+---
+
+## 9.4 SDK FEATURE REQUIREMENTS
+- [ ] File upload abstraction:
+  - [ ] Buffer support
+  - [ ] Stream support
+  - [ ] Browser File support
+- [ ] Automatic multipart handling
+- [ ] Unified error class (`KyroError`)
+- [ ] No raw fetch exposure
+- [ ] Browser + Node compatibility builds
+
+---
+
+## 10. SDK DEVELOPER EXPERIENCE (DX LAYER)
+- [ ] Simple API surface:
+  - [ ] client.files.upload()
+  - [ ] client.files.list()
+  - [ ] client.files.delete()
+- [ ] Clear error codes:
+  - [ ] invalid_api_key
+  - [ ] insufficient_scope
+  - [ ] storage_quota_exceeded
+- [ ] Safe defaults (prevent production mistakes)
+- [ ] Test mode support (kyro_test_ enforcement)
+
+---
+
+# 11. TESTING & QUALITY
+- [ ] Unit tests for auth system
+- [ ] Unit tests for scope enforcement
+- [ ] Integration tests for file system
+- [ ] Load testing for upload endpoints
+- [ ] SDK integration tests against sandbox API
+- [ ] Contract testing against OpenAPI spec
+
+---
+
+# 12. DASHBOARD / CONTROL PLANE
+- [ ] Workspace dashboard
+- [ ] API key management UI
+- [ ] File browser UI
+- [ ] Usage analytics UI
+- [ ] Key creation UI (with scope selection)
+- [ ] Onboarding flow for new users
+
+---
+
+# 13. SCALABILITY PREPARATION
+- [ ] Storage abstraction layer (local → S3 migration ready)
+- [ ] Stateless API design
+- [ ] Background job system (future)
+- [ ] Caching layer (Redis optional future)
+- [ ] Queue system for uploads (future optimization)
+
+---
+
+# 14. EVENT SYSTEM (FUTURE PLATFORM UPGRADE)
+- [ ] Webhooks:
+  - [ ] file.uploaded
+  - [ ] file.deleted
+  - [ ] key.created
+- [ ] Webhook signing system
+- [ ] Retry mechanism for failed webhooks
+
+---
+
+# 15. PLATFORM EXPANSION (FUTURE)
+- [ ] CLI tool for developers
+- [ ] OAuth-based authentication (enterprise use case)
+- [ ] Billing system (Stripe integration)
+- [ ] Team collaboration (multi-user workspaces)
+- [ ] Public API ecosystem (third-party integrations)
