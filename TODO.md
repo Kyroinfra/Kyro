@@ -6,104 +6,104 @@
 - [ ] Define OpenAPI 3.1 spec as single source of truth
 - [ ] Ensure every endpoint is documented in OpenAPI
 - [ ] Enforce schema-first development (API follows spec, not vice versa)
-- [ ] Add versioning strategy (`/api/v1/` locked and immutable)
+- [x] Add versioning strategy (`/api/v1/` locked and immutable)
 
 ---
 
 # 1. CORE API (UNIVERSAL HTTP LAYER)
-- [ ] Build REST API foundation
-- [ ] Standardize request/response format:
-  - [ ] Success: `{ data, meta }`
-  - [ ] Error: `{ error: { code, message, details } }`
-- [ ] Implement API key authentication (Bearer token)
-- [ ] Add middleware pipeline:
-  - [ ] Auth middleware
-  - [ ] Scope/permission middleware
-  - [ ] Validation middleware
-  - [ ] Error handler (global)
-- [ ] Define consistent pagination (cursor-based preferred)
+- [x] Build REST API foundation
+- [x] Standardize request/response format:
+  - [x] Success: `{ data, meta }`
+  - [x] Error: `{ error: { code, message, details } }`
+- [x] Implement API key authentication (Bearer token)
+- [x] Add middleware pipeline:
+  - [x] Auth middleware
+  - [x] Scope/permission middleware
+  - [x] Validation middleware
+  - [x] Error handler (global)
+- [x] Define consistent pagination (cursor-based preferred)
 
 ---
 
 # 2. MULTI-TENANT SYSTEM
-- [ ] Implement Users
-- [ ] Implement Workspaces (core isolation unit)
-- [ ] Optional: Projects under Workspaces
-- [ ] Enforce strict data isolation per workspace
-- [ ] Define roles (future: owner, admin, member)
+- [x] Implement Users
+- [x] Implement Workspaces (core isolation unit)
+- [x] Optional: Projects under Workspaces
+- [x] Enforce strict data isolation per workspace
+- [x] Define roles (future: owner, admin, member)
 
 ---
 
 # 3. API KEY SYSTEM (SECURITY CORE)
-- [ ] Generate API keys per workspace
-- [ ] Hash API keys before storage (never store raw keys)
-- [ ] Show key only once at creation
-- [ ] Support multiple keys per workspace
-- [ ] Add key lifecycle:
-  - [ ] revoke
+- [x] Generate API keys per workspace
+- [x] Hash API keys before storage (never store raw keys)
+- [x] Show key only once at creation
+- [x] Support multiple keys per workspace
+- [x] Add key lifecycle:
+  - [x] revoke
   - [ ] regenerate
-  - [ ] disable
-- [ ] Add metadata:
-  - [ ] name
-  - [ ] created_at
-  - [ ] last_used_at
+  - [x] disable
+- [x] Add metadata:
+  - [x] name
+  - [x] created_at
+  - [x] last_used_at
 
 ---
 
 # 4. SCOPES / PERMISSIONS SYSTEM
-- [ ] Replace simple read/write model
-- [ ] Define scopes:
-  - [ ] files:read
-  - [ ] files:write
-  - [ ] files:list
-  - [ ] files:delete
-- [ ] Middleware to enforce scope checks
+- [x] Replace simple read/write model
+- [x] Define scopes:
+  - [x] files:read
+  - [x] files:write
+  - [x] files:list
+  - [x] files:delete
+- [x] Middleware to enforce scope checks
 - [ ] Map UI permissions → internal scopes
 
 ---
 
 # 5. FILE STORAGE ENGINE (CORE PRODUCT VALUE)
-- [ ] Design bucket abstraction layer
-- [ ] Implement file upload API
-- [ ] Implement file download API
-- [ ] Implement file listing API
-- [ ] Implement file deletion API
-- [ ] Store file metadata:
-  - [ ] size
-  - [ ] mime type
-  - [ ] timestamps
-  - [ ] workspace ownership
-- [ ] Create storage adapter system:
-  - [ ] Local storage (MVP)
+- [x] Design bucket abstraction layer
+- [x] Implement file upload API
+- [x] Implement file download API
+- [x] Implement file listing API
+- [x] Implement file deletion API
+- [x] Store file metadata:
+  - [x] size
+  - [x] mime type
+  - [x] timestamps
+  - [x] workspace ownership
+- [x] Create storage adapter system:
+  - [x] Local storage (MVP)
   - [ ] S3-compatible adapter (future)
 
 ---
 
 # 6. PLATFORM RELIABILITY
-- [ ] Rate limiting per API key
-- [ ] Request validation everywhere
-- [ ] Central logging system
-- [ ] Prevent sensitive data leakage in logs
+- [x] Rate limiting per API key
+- [x] Request validation everywhere
+- [x] Central logging system
+- [x] Prevent sensitive data leakage in logs
 - [ ] Add retry-safe endpoints where needed
 - [ ] Add idempotency keys (future for uploads)
 
 ---
 
 # 7. USAGE & OBSERVABILITY
-- [ ] Track API requests per key
-- [ ] Track storage usage per workspace
+- [x] Track API requests per key
+- [x] Track storage usage per workspace
 - [ ] Track bandwidth usage (future)
-- [ ] Track last active timestamp
+- [x] Track last active timestamp
 - [ ] Build usage aggregation system
 - [ ] Internal analytics dashboard
 
 ---
 
 # 8. DEVELOPER EXPERIENCE (DX CORE)
-- [ ] Clean, consistent error codes (machine-readable)
+- [x] Clean, consistent error codes (machine-readable)
 - [ ] Stable pagination across all list endpoints
-- [ ] Predictable API behavior (no edge-case responses)
-- [ ] Strict backward compatibility rules
+- [x] Predictable API behavior (no edge-case responses)
+- [x] Strict backward compatibility rules
 - [ ] Sandbox environment:
   - [ ] kyro_test_ keys
   - [ ] isolated data environment
@@ -171,8 +171,8 @@
 ---
 
 # 11. TESTING & QUALITY
-- [ ] Unit tests for auth system
-- [ ] Unit tests for scope enforcement
+- [x] Unit tests for auth system
+- [x] Unit tests for scope enforcement
 - [ ] Integration tests for file system
 - [ ] Load testing for upload endpoints
 - [ ] SDK integration tests against sandbox API
@@ -181,18 +181,18 @@
 ---
 
 # 12. DASHBOARD / CONTROL PLANE
-- [ ] Workspace dashboard
-- [ ] API key management UI
-- [ ] File browser UI
-- [ ] Usage analytics UI
-- [ ] Key creation UI (with scope selection)
+- [x] Workspace dashboard
+- [x] API key management UI
+- [x] File browser UI
+- [x] Usage analytics UI
+- [x] Key creation UI (with scope selection)
 - [ ] Onboarding flow for new users
 
 ---
 
 # 13. SCALABILITY PREPARATION
-- [ ] Storage abstraction layer (local → S3 migration ready)
-- [ ] Stateless API design
+- [x] Storage abstraction layer (local → S3 migration ready)
+- [x] Stateless API design
 - [ ] Background job system (future)
 - [ ] Caching layer (Redis optional future)
 - [ ] Queue system for uploads (future optimization)
