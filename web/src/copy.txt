@@ -1,26 +1,46 @@
 # Prompt:
-This is the frontend codebase
+This is my current codebase
 
 # File collection from: /home/nyxox/Documents/Projects/Kyro/web/src
-# Generated: 2026-04-09 14:29:22
+# Generated: 2026-04-10 14:50:15
 ------------------------------------------------------------
 
 ## app.css
 
 :root {
-	/* Monochrome Palette */
-	--color-bg: #000000;
-	--color-bg-2: #0a0a0a;
+	/* Core palette — true blacks with deliberate surface steps */
+	--color-bg: #050505;
+	--color-bg-2: #0c0c0c;
 	--color-bg-3: #111111;
-	--color-border: #1a1a1a;
+	--color-bg-4: #161616;
+	--color-bg-hover: #1a1a1a;
+
+	/* Borders — wider spread so surfaces feel distinct */
+	--color-border: #161616;
+	--color-border-2: #222222;
 	--color-border-hover: #333333;
-	--color-text: #ffffff;
-	--color-text-muted: #666666;
-	--color-accent: #ffffff;
-	--color-accent-hover: #cccccc;
+	--color-border-active: #444444;
+
+	/* Text */
+	--color-text: #e8e8e8;
+	--color-text-dim: #999999;
+	--color-text-muted: #444444;
+	--color-text-ghost: #2a2a2a;
+
+	/* Accent — keep white for interactive elements */
+	--color-accent: #e8e8e8;
+	--color-accent-hover: #aaaaaa;
+
+	/* Semantic */
+	--color-success: #00cc66;
+	--color-success-dim: rgba(0, 204, 102, 0.12);
+	--color-success-border: rgba(0, 204, 102, 0.2);
 	--color-danger: #ff4444;
-	--color-success: #00ff00;
+	--color-danger-dim: rgba(255, 68, 68, 0.1);
+	--color-danger-border: rgba(255, 68, 68, 0.25);
 	--color-warning: #ffaa00;
+	--color-warning-dim: rgba(255, 170, 0, 0.1);
+	--color-warning-border: rgba(255, 170, 0, 0.25);
 
 	/* Spacing */
 	--space-1: 4px;
@@ -36,6 +56,7 @@ This is the frontend codebase
 	/* Typography */
 	--font-sans: 'Inter', system-ui, sans-serif;
 	--font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
+	--font-size-2xs: 10px;
 	--font-size-xs: 11px;
 	--font-size-sm: 13px;
 	--font-size-base: 14px;
@@ -44,10 +65,10 @@ This is the frontend codebase
 	--font-size-2xl: 24px;
 	--font-size-3xl: 30px;
 
-	/* Minimal border-radius */
+	/* Radius — keep it minimal for terminal feel */
 	--radius-sm: 2px;
-	--radius-md: 4px;
-	--radius-lg: 6px;
+	--radius-md: 3px;
+	--radius-lg: 5px;
 	--radius-full: 9999px;
 }
 
@@ -59,7 +80,7 @@ This is the frontend codebase
 
 html, body {
 	height: 100%;
-	font-family: var(--font-sans);
+	font-family: var(--font-mono);
 	font-size: var(--font-size-base);
 	line-height: 1.5;
 	color: var(--color-text);
@@ -69,22 +90,22 @@ html, body {
 }
 
 a {
-	color: var(--color-accent);
+	color: var(--color-text);
 	text-decoration: none;
-	transition: color 0.15s ease;
+	transition: color 0.1s ease;
 }
 
 a:hover {
-	color: var(--color-accent-hover);
+	color: var(--color-text-dim);
 }
 
 button {
-	font-family: inherit;
+	font-family: var(--font-mono);
 	cursor: pointer;
 }
 
 input, textarea, select {
-	font-family: inherit;
+	font-family: var(--font-mono);
 	font-size: inherit;
 }
 
@@ -93,13 +114,13 @@ code, pre {
 }
 
 ::selection {
-	background-color: var(--color-accent);
-	color: var(--color-bg);
+	background-color: rgba(232, 232, 232, 0.15);
+	color: var(--color-text);
 }
 
 ::-webkit-scrollbar {
-	width: 6px;
-	height: 6px;
+	width: 4px;
+	height: 4px;
 }
 
 ::-webkit-scrollbar-track {
@@ -107,7 +128,7 @@ code, pre {
 }
 
 ::-webkit-scrollbar-thumb {
-	background: var(--color-border);
+	background: var(--color-bg-4);
 	border-radius: var(--radius-full);
 }
 
@@ -803,49 +824,51 @@ export { default as Check } from './Check.svelte';
 		align-items: center;
 		font-family: var(--font-mono);
 		font-weight: 500;
-		border: 1px solid var(--color-border);
+		border: 1px solid;
 		border-radius: var(--radius-sm);
 		white-space: nowrap;
+		letter-spacing: 0.3px;
+		text-transform: uppercase;
 	}
 
 	.badge-sm {
-		padding: 2px 6px;
-		font-size: var(--font-size-xs);
+		padding: 1px 5px;
+		font-size: var(--font-size-2xs);
 	}
 
 	.badge-md {
-		padding: 4px 8px;
-		font-size: var(--font-size-sm);
+		padding: 3px 7px;
+		font-size: var(--font-size-xs);
 	}
 
 	.badge-default {
-		background: transparent;
+		background: var(--color-bg-3);
 		color: var(--color-text-muted);
-		border-color: var(--color-border);
+		border-color: var(--color-border-2);
 	}
 
 	.badge-success {
-		background: transparent;
+		background: var(--color-success-dim);
 		color: var(--color-success);
-		border-color: var(--color-success);
+		border-color: var(--color-success-border);
 	}
 
 	.badge-warning {
-		background: transparent;
+		background: var(--color-warning-dim);
 		color: var(--color-warning);
-		border-color: var(--color-warning);
+		border-color: var(--color-warning-border);
 	}
 
 	.badge-danger {
-		background: transparent;
+		background: var(--color-danger-dim);
 		color: var(--color-danger);
-		border-color: var(--color-danger);
+		border-color: var(--color-danger-border);
 	}
 
 	.badge-info {
-		background: transparent;
-		color: var(--color-text);
-		border-color: var(--color-border);
+		background: var(--color-bg-3);
+		color: var(--color-text-dim);
+		border-color: var(--color-border-2);
 	}
 </style>
 ------------------------------------------------------------
@@ -898,35 +921,36 @@ export { default as Check } from './Check.svelte';
 		justify-content: center;
 		gap: var(--space-2);
 		font-family: var(--font-mono);
-		font-size: var(--font-size-sm);
+		font-size: var(--font-size-xs);
 		font-weight: 500;
+		letter-spacing: 0.3px;
 		border-radius: var(--radius-md);
-		transition: all 0.15s ease;
+		transition: all 0.1s ease;
 		position: relative;
 		white-space: nowrap;
 		cursor: pointer;
 	}
 
 	.btn:disabled {
-		opacity: 0.4;
+		opacity: 0.3;
 		cursor: not-allowed;
 	}
 
 	.btn-sm {
-		height: 32px;
+		height: 28px;
 		padding: 0 var(--space-3);
-		font-size: var(--font-size-xs);
+		font-size: var(--font-size-2xs);
 	}
 
 	.btn-md {
-		height: 40px;
+		height: 36px;
 		padding: 0 var(--space-4);
 	}
 
 	.btn-lg {
-		height: 48px;
-		padding: 0 var(--space-6);
-		font-size: var(--font-size-base);
+		height: 44px;
+		padding: 0 var(--space-5);
+		font-size: var(--font-size-sm);
 	}
 
 	.btn-primary {
@@ -936,30 +960,31 @@ export { default as Check } from './Check.svelte';
 	}
 
 	.btn-primary:hover:not(:disabled) {
-		background: var(--color-text-muted);
-		border-color: var(--color-text-muted);
+		background: var(--color-text-dim);
+		border-color: var(--color-text-dim);
 	}
 
 	.btn-secondary {
 		background: var(--color-bg-2);
-		color: var(--color-text);
-		border: 1px solid var(--color-border);
+		color: var(--color-text-dim);
+		border: 1px solid var(--color-border-2);
 	}
 
 	.btn-secondary:hover:not(:disabled) {
 		background: var(--color-bg-3);
-		border-color: var(--color-text-muted);
+		border-color: var(--color-border-hover);
+		color: var(--color-text);
 	}
 
 	.btn-danger {
 		background: transparent;
 		color: var(--color-danger);
-		border: 1px solid var(--color-danger);
+		border: 1px solid var(--color-danger-border);
 	}
 
 	.btn-danger:hover:not(:disabled) {
-		background: var(--color-danger);
-		color: var(--color-bg);
+		background: var(--color-danger-dim);
+		border-color: var(--color-danger);
 	}
 
 	.btn-ghost {
@@ -969,7 +994,7 @@ export { default as Check } from './Check.svelte';
 	}
 
 	.btn-ghost:hover:not(:disabled) {
-		color: var(--color-text);
+		color: var(--color-text-dim);
 		background: var(--color-bg-2);
 		border-color: var(--color-border);
 	}
@@ -986,18 +1011,16 @@ export { default as Check } from './Check.svelte';
 
 	.spinner {
 		position: absolute;
-		width: 14px;
-		height: 14px;
-		border: 2px solid currentColor;
+		width: 12px;
+		height: 12px;
+		border: 1.5px solid currentColor;
 		border-top-color: transparent;
 		border-radius: 50%;
 		animation: spin 0.6s linear infinite;
 	}
 
 	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
+		to { transform: rotate(360deg); }
 	}
 </style>
 ------------------------------------------------------------
@@ -1027,36 +1050,19 @@ export { default as Check } from './Check.svelte';
 <style>
 	.card {
 		background: var(--color-bg-2);
-		border-radius: var(--radius-md);
+		border-radius: var(--radius-lg);
 	}
 
-	.card-default {
-		border: 1px solid var(--color-border);
-	}
-
-	.card-bordered {
-		border: 1px solid var(--color-border);
-	}
-
+	.card-default,
+	.card-bordered,
 	.card-flat {
 		border: 1px solid var(--color-border);
 	}
 
-	.padding-none {
-		padding: 0;
-	}
-
-	.padding-sm {
-		padding: var(--space-3);
-	}
-
-	.padding-md {
-		padding: var(--space-4);
-	}
-
-	.padding-lg {
-		padding: var(--space-5);
-	}
+	.padding-none { padding: 0; }
+	.padding-sm   { padding: var(--space-3); }
+	.padding-md   { padding: var(--space-4) var(--space-5); }
+	.padding-lg   { padding: var(--space-5) var(--space-6); }
 </style>
 ------------------------------------------------------------
 
@@ -1088,22 +1094,23 @@ export { default as Check } from './Check.svelte';
 	}: Props = $props();
 
 	function handleKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') {
-			oncancel();
-		}
+		if (e.key === 'Escape') oncancel();
 	}
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
 {#if open}
-	<div class="dialog-backdrop" transition:fade={{ duration: 100 }} onclick={oncancel} role="dialog" aria-modal="true" tabindex="-1">
-		<div class="dialog" transition:scale={{ duration: 100, start: 0.98 }} onclick={(e) => e.stopPropagation()}>
-			<h3 class="dialog-title">{title}</h3>
-			<p class="dialog-message">{message}</p>
-			<div class="actions">
-				<button class="btn-cancel" onclick={oncancel}>{cancelLabel}</button>
-				<button class="btn-confirm btn-{variant}" onclick={onconfirm}>{confirmLabel}</button>
+	<div class="dialog-backdrop" transition:fade={{ duration: 80 }} onclick={oncancel} role="dialog" aria-modal="true" tabindex="-1">
+		<div class="dialog" transition:scale={{ duration: 80, start: 0.97 }} onclick={(e) => e.stopPropagation()}>
+			<div class="dialog-line variant-{variant}"></div>
+			<div class="dialog-inner">
+				<h3 class="dialog-title">// {title}</h3>
+				<p class="dialog-message">{message}</p>
+				<div class="actions">
+					<button class="btn-cancel" onclick={oncancel}>{cancelLabel}</button>
+					<button class="btn-confirm btn-{variant}" onclick={onconfirm}>{confirmLabel}</button>
+				</div>
 			</div>
 		</div>
 	</div>
@@ -1113,21 +1120,34 @@ export { default as Check } from './Check.svelte';
 	.dialog-backdrop {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.8);
+		background: rgba(0, 0, 0, 0.85);
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		z-index: 1001;
 		padding: var(--space-4);
+		backdrop-filter: blur(2px);
 	}
 
 	.dialog {
 		background: var(--color-bg-2);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
-		padding: var(--space-5);
+		border: 1px solid var(--color-border-2);
+		border-radius: var(--radius-lg);
 		width: 100%;
-		max-width: 400px;
+		max-width: 380px;
+		overflow: hidden;
+		box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+	}
+
+	.dialog-line {
+		height: 2px;
+	}
+
+	.variant-danger  { background: var(--color-danger); }
+	.variant-warning { background: var(--color-warning); }
+
+	.dialog-inner {
+		padding: var(--space-5);
 	}
 
 	.dialog-title {
@@ -1136,15 +1156,14 @@ export { default as Check } from './Check.svelte';
 		font-weight: 600;
 		color: var(--color-text);
 		margin: 0 0 var(--space-3);
-		text-transform: uppercase;
-		letter-spacing: 0.5px;
+		letter-spacing: 0.3px;
 	}
 
 	.dialog-message {
-		color: var(--color-text-muted);
+		color: var(--color-text-dim);
 		font-size: var(--font-size-sm);
 		margin: 0 0 var(--space-5);
-		line-height: 1.5;
+		line-height: 1.6;
 	}
 
 	.actions {
@@ -1155,22 +1174,24 @@ export { default as Check } from './Check.svelte';
 
 	button {
 		font-family: var(--font-mono);
-		font-size: var(--font-size-sm);
+		font-size: var(--font-size-xs);
 		padding: var(--space-2) var(--space-4);
-		border-radius: var(--radius-sm);
+		border-radius: var(--radius-md);
 		font-weight: 500;
 		cursor: pointer;
-		transition: all 0.15s ease;
+		transition: all 0.1s ease;
+		letter-spacing: 0.3px;
 	}
 
 	.btn-cancel {
 		background: transparent;
-		border: 1px solid var(--color-border);
-		color: var(--color-text);
+		border: 1px solid var(--color-border-2);
+		color: var(--color-text-dim);
 	}
 
 	.btn-cancel:hover {
-		border-color: var(--color-text-muted);
+		border-color: var(--color-border-hover);
+		color: var(--color-text);
 	}
 
 	.btn-confirm {
@@ -1179,20 +1200,20 @@ export { default as Check } from './Check.svelte';
 
 	.btn-danger {
 		background: var(--color-danger);
-		color: var(--color-bg);
+		color: #fff;
 	}
 
 	.btn-danger:hover {
-		background: #ff6666;
+		opacity: 0.85;
 	}
 
 	.btn-warning {
 		background: var(--color-warning);
-		color: var(--color-bg);
+		color: #000;
 	}
 
 	.btn-warning:hover {
-		background: #ffcc00;
+		opacity: 0.85;
 	}
 </style>
 ------------------------------------------------------------
@@ -1229,7 +1250,9 @@ export { default as Check } from './Check.svelte';
 
 <div class="input-wrapper">
 	{#if label}
-		<label class="label" for={name}>{label}{#if required}<span class="required">*</span>{/if}</label>
+		<label class="label" for={name}>
+			{label}{#if required}<span class="required">*</span>{/if}
+		</label>
 	{/if}
 	<input
 		{name}
@@ -1244,7 +1267,7 @@ export { default as Check } from './Check.svelte';
 		{onchange}
 	/>
 	{#if error}
-		<span class="error-text">{error}</span>
+		<span class="error-text">// {error}</span>
 	{/if}
 </div>
 
@@ -1257,10 +1280,10 @@ export { default as Check } from './Check.svelte';
 
 	.label {
 		font-family: var(--font-mono);
-		font-size: var(--font-size-xs);
+		font-size: var(--font-size-2xs);
 		color: var(--color-text-muted);
 		text-transform: uppercase;
-		letter-spacing: 0.5px;
+		letter-spacing: 1px;
 	}
 
 	.required {
@@ -1269,39 +1292,40 @@ export { default as Check } from './Check.svelte';
 	}
 
 	.input {
-		height: 40px;
+		height: 36px;
 		padding: 0 var(--space-3);
 		background: var(--color-bg);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
+		border: 1px solid var(--color-border-2);
+		border-radius: var(--radius-md);
 		color: var(--color-text);
 		font-family: var(--font-mono);
 		font-size: var(--font-size-sm);
-		transition: border-color 0.15s ease;
+		transition: border-color 0.1s ease;
+		outline: none;
 	}
 
 	.input::placeholder {
-		color: var(--color-text-muted);
+		color: var(--color-text-ghost);
 		font-family: var(--font-mono);
 	}
 
 	.input:focus {
-		outline: none;
-		border-color: var(--color-accent);
+		border-color: var(--color-border-active);
 	}
 
 	.input:disabled {
-		opacity: 0.4;
+		opacity: 0.3;
 		cursor: not-allowed;
 	}
 
 	.input.error {
-		border-color: var(--color-danger);
+		border-color: var(--color-danger-border);
 	}
 
 	.error-text {
 		font-size: var(--font-size-xs);
 		color: var(--color-danger);
+		font-family: var(--font-mono);
 	}
 </style>
 ------------------------------------------------------------
@@ -1322,27 +1346,26 @@ export { default as Check } from './Check.svelte';
 	let { open = $bindable(), title, onclose, children }: Props = $props();
 
 	function handleBackdrop(e: MouseEvent) {
-		if (e.target === e.currentTarget) {
-			onclose();
-		}
+		if (e.target === e.currentTarget) onclose();
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') {
-			onclose();
-		}
+		if (e.key === 'Escape') onclose();
 	}
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
 {#if open}
-	<div class="modal-backdrop" transition:fade={{ duration: 100 }} onclick={handleBackdrop} role="dialog" aria-modal="true">
-		<div class="modal" transition:scale={{ duration: 100, start: 0.98 }}>
+	<div class="modal-backdrop" transition:fade={{ duration: 80 }} onclick={handleBackdrop} role="dialog" aria-modal="true">
+		<div class="modal" transition:scale={{ duration: 80, start: 0.97 }}>
 			<header class="modal-header">
-				<h2 class="modal-title">{title}</h2>
+				<div class="modal-title-row">
+					<span class="title-prefix">_</span>
+					<h2 class="modal-title">{title}</h2>
+				</div>
 				<button class="close-btn" onclick={onclose} aria-label="Close">
-					<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 						<line x1="18" y1="6" x2="6" y2="18" />
 						<line x1="6" y1="6" x2="18" y2="18" />
 					</svg>
@@ -1359,32 +1382,46 @@ export { default as Check } from './Check.svelte';
 	.modal-backdrop {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.8);
+		background: rgba(0, 0, 0, 0.85);
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		z-index: 1000;
 		padding: var(--space-4);
+		backdrop-filter: blur(2px);
 	}
 
 	.modal {
 		background: var(--color-bg-2);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
+		border: 1px solid var(--color-border-2);
+		border-radius: var(--radius-lg);
 		width: 100%;
 		max-width: 480px;
 		max-height: 90vh;
 		overflow: hidden;
 		display: flex;
 		flex-direction: column;
+		box-shadow: 0 0 0 1px var(--color-border), 0 20px 60px rgba(0,0,0,0.6);
 	}
 
 	.modal-header {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: var(--space-4);
+		padding: var(--space-4) var(--space-5);
 		border-bottom: 1px solid var(--color-border);
+	}
+
+	.modal-title-row {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+	}
+
+	.title-prefix {
+		color: var(--color-success);
+		font-weight: 700;
+		font-size: var(--font-size-sm);
 	}
 
 	.modal-title {
@@ -1393,8 +1430,8 @@ export { default as Check } from './Check.svelte';
 		font-weight: 600;
 		color: var(--color-text);
 		margin: 0;
-		text-transform: uppercase;
-		letter-spacing: 0.5px;
+		text-transform: lowercase;
+		letter-spacing: 0.3px;
 	}
 
 	.close-btn {
@@ -1407,11 +1444,11 @@ export { default as Check } from './Check.svelte';
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		transition: color 0.15s ease;
+		transition: color 0.1s ease;
 	}
 
 	.close-btn:hover {
-		color: var(--color-text);
+		color: var(--color-text-dim);
 	}
 
 	.modal-body {
@@ -1541,28 +1578,17 @@ export { default as Check } from './Check.svelte';
 	toast.subscribe((value) => {
 		toasts = value;
 	});
-
-	function getIcon(type: Toast['type']) {
-		switch (type) {
-			case 'success':
-				return '✓';
-			case 'error':
-				return '✕';
-			case 'warning':
-				return '⚠';
-			case 'info':
-				return 'ℹ';
-		}
-	}
 </script>
 
 {#if toasts.length > 0}
 	<div class="toast-container">
 		{#each toasts as t (t.id)}
 			<div class="toast toast-{t.type}">
-				<span class="icon">{getIcon(t.type)}</span>
-				<span class="message">{t.message}</span>
-				<button class="close" onclick={() => toast.remove(t.id)}>✕</button>
+				<div class="toast-bar"></div>
+				<div class="toast-content">
+					<span class="message">{t.message}</span>
+					<button class="close" onclick={() => toast.remove(t.id)}>✕</button>
+				</div>
 			</div>
 		{/each}
 	</div>
@@ -1571,88 +1597,68 @@ export { default as Check } from './Check.svelte';
 <style>
 	.toast-container {
 		position: fixed;
-		bottom: var(--space-4);
-		right: var(--space-4);
+		bottom: var(--space-5);
+		right: var(--space-5);
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-2);
 		z-index: 9999;
-		max-width: 400px;
+		max-width: 380px;
 	}
 
 	.toast {
 		display: flex;
+		overflow: hidden;
+		background: var(--color-bg-2);
+		border: 1px solid var(--color-border-2);
+		border-radius: var(--radius-lg);
+		animation: slideIn 0.15s ease;
+		box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+	}
+
+	.toast-bar {
+		width: 3px;
+		flex-shrink: 0;
+	}
+
+	.toast-success .toast-bar { background: var(--color-success); }
+	.toast-error   .toast-bar { background: var(--color-danger); }
+	.toast-warning .toast-bar { background: var(--color-warning); }
+	.toast-info    .toast-bar { background: var(--color-text-dim); }
+
+	.toast-content {
+		display: flex;
 		align-items: center;
 		gap: var(--space-3);
 		padding: var(--space-3) var(--space-4);
-		background: var(--color-bg-2);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
-		box-shadow: var(--shadow-md);
-		animation: slideIn 0.2s ease;
-	}
-
-	.toast-success {
-		border-left: 3px solid var(--color-success);
-	}
-
-	.toast-error {
-		border-left: 3px solid var(--color-danger);
-	}
-
-	.toast-warning {
-		border-left: 3px solid var(--color-warning);
-	}
-
-	.toast-info {
-		border-left: 3px solid var(--color-accent);
-	}
-
-	.icon {
-		font-size: var(--font-size-sm);
-		font-weight: 600;
-	}
-
-	.toast-success .icon {
-		color: var(--color-success);
-	}
-
-	.toast-error .icon {
-		color: var(--color-danger);
-	}
-
-	.toast-warning .icon {
-		color: var(--color-warning);
-	}
-
-	.toast-info .icon {
-		color: var(--color-accent);
+		flex: 1;
 	}
 
 	.message {
 		flex: 1;
 		font-size: var(--font-size-sm);
-		color: var(--color-text);
+		color: var(--color-text-dim);
+		line-height: 1.4;
 	}
 
 	.close {
 		background: none;
 		border: none;
-		color: var(--color-text-muted);
+		color: var(--color-text-ghost);
 		font-size: var(--font-size-xs);
-		padding: var(--space-1);
+		padding: 2px;
 		cursor: pointer;
-		opacity: 0.7;
-		transition: opacity 0.15s;
+		transition: color 0.1s;
+		line-height: 1;
 	}
 
 	.close:hover {
-		opacity: 1;
+		color: var(--color-text-muted);
 	}
 
 	@keyframes slideIn {
 		from {
-			transform: translateX(100%);
+			transform: translateX(110%);
 			opacity: 0;
 		}
 		to {
@@ -2717,10 +2723,7 @@ export const actions: Actions = {
 		if (!keyToDelete) return;
 		const formData = new FormData();
 		formData.append('id', keyToDelete);
-		await fetch('?/delete', {
-			method: 'POST',
-			body: formData
-		});
+		await fetch('?/delete', { method: 'POST', body: formData });
 		showDeleteConfirm = false;
 		keyToDelete = null;
 		window.location.reload();
@@ -2728,111 +2731,97 @@ export const actions: Actions = {
 </script>
 
 <svelte:head>
-	<title>API Keys - Kyro</title>
+	<title>API Keys — Kyro</title>
 </svelte:head>
 
 <div class="keys-page">
 	<header class="page-header">
-		<div class="header-content">
-			<span class="prompt">$</span>
-			<span class="command">./keys.sh</span>
-		</div>
+		<div class="section-label">// api keys</div>
 		{#if canManage}
-			<Button onclick={() => (showCreateModal = true)}>+ New Key</Button>
+			<Button onclick={() => (showCreateModal = true)}>+ new key</Button>
 		{/if}
 	</header>
 
 	{#if newKey}
 		<div class="key-reveal">
 			<div class="key-reveal-header">
-				<span class="key-reveal-title">> API Key Generated</span>
-				<button class="dismiss-btn" onclick={dismissKey}>
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-						<line x1="18" y1="6" x2="6" y2="18" />
-						<line x1="6" y1="6" x2="18" y2="18" />
-					</svg>
-				</button>
+				<span class="key-reveal-title">key generated — copy now</span>
+				<button class="dismiss-btn" onclick={dismissKey}>✕</button>
 			</div>
-			<p class="key-reveal-warning">// Copy now - cannot be retrieved again</p>
+			<p class="key-reveal-warning">// this value will not be shown again</p>
 			<div class="key-value">
 				<code>{newKey}</code>
 				<Button variant="secondary" size="sm" onclick={handleCopy}>
-					{copied ? 'Copied' : 'Copy'}
+					{copied ? '✓ copied' : 'copy'}
 				</Button>
 			</div>
 		</div>
 	{/if}
 
 	{#if data.keys.length === 0}
-		<Card>
-			<div class="empty-state">
-				<span class="empty-icon">
-					<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-						<path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
-					</svg>
-				</span>
-				<h3>No API keys</h3>
-				<p>Create your first key to authenticate with the API</p>
-				{#if canManage}
-					<Button onclick={() => (showCreateModal = true)}>+ Create First Key</Button>
-				{/if}
+		<div class="empty-state">
+			<span class="empty-prefix">$</span>
+			<div class="empty-text">
+				<span class="empty-cmd">ls ./keys</span>
+				<span class="empty-result">// no keys found</span>
 			</div>
-		</Card>
+			{#if canManage}
+				<Button onclick={() => (showCreateModal = true)}>+ create first key</Button>
+			{/if}
+		</div>
 	{:else}
 		<div class="filter-tabs">
-			<button class="filter-tab" class:active={filter === 'all'} onclick={() => (filter = 'all')}>
-				<span class="filter-marker">[</span>all<span class="filter-marker">]</span>
-			</button>
-			<button class="filter-tab" class:active={filter === 'active'} onclick={() => (filter = 'active')}>
-				<span class="filter-marker">[</span>active<span class="filter-marker">]</span>
-			</button>
-			<button class="filter-tab" class:active={filter === 'revoked'} onclick={() => (filter = 'revoked')}>
-				<span class="filter-marker">[</span>revoked<span class="filter-marker">]</span>
-			</button>
+			{#each ['all', 'active', 'revoked'] as f}
+				<button class="filter-tab" class:active={filter === f} onclick={() => (filter = f as any)}>
+					{f}
+				</button>
+			{/each}
 		</div>
 
 		<div class="keys-list">
 			{#each filteredKeys() as key}
-				<Card>
-					<div class="key-card" class:revoked={key.revokedAt}>
-						<div class="key-info">
-							<div class="key-header">
-								<span class="key-name" class:revoked={key.revokedAt}>{key.name}</span>
-								{#if key.revokedAt}
-									<Badge variant="danger">Revoked</Badge>
-								{/if}
-							</div>
-							<div class="key-prefix" class:revoked={key.revokedAt}>key_{key.prefix}***</div>
-							<div class="key-meta">
-								<span class="key-date">Created {formatDate(key.createdAt)}</span>
-								{#if key.lastUsedAt}
-									<span class="key-date">Last used {formatDateTime(key.lastUsedAt)}</span>
-								{:else}
-									<span class="key-date">Never used</span>
-								{/if}
-								{#if key.revokedAt}
-									<span class="key-date revoked-date">Revoked {formatDate(key.revokedAt)}</span>
-								{/if}
-							</div>
-							<div class="key-scopes">
-								{#each key.scopes as scope}
-									<Badge>{scope}</Badge>
-								{/each}
-							</div>
+				<div class="key-row" class:revoked={key.revokedAt}>
+					<div class="key-main">
+						<div class="key-name-row">
+							<span class="key-name" class:strikethrough={key.revokedAt}>{key.name}</span>
+							{#if key.revokedAt}
+								<Badge variant="danger">revoked</Badge>
+							{:else}
+								<Badge variant="success">active</Badge>
+							{/if}
 						</div>
-						{#if canManage && !key.revokedAt}
-							<Button variant="danger" size="sm" onclick={() => confirmDelete(key.id)}>
-								Revoke
-							</Button>
-						{/if}
+						<div class="key-prefix">key_{key.prefix}***</div>
+						<div class="key-meta">
+							<span>created {formatDate(key.createdAt)}</span>
+							<span class="meta-sep">·</span>
+							{#if key.lastUsedAt}
+								<span>last used {formatDateTime(key.lastUsedAt)}</span>
+							{:else}
+								<span>never used</span>
+							{/if}
+							{#if key.revokedAt}
+								<span class="meta-sep">·</span>
+								<span class="revoked-date">revoked {formatDate(key.revokedAt)}</span>
+							{/if}
+						</div>
+						<div class="key-scopes">
+							{#each key.scopes as scope}
+								<span class="scope-tag">{scope}</span>
+							{/each}
+						</div>
 					</div>
-				</Card>
+					{#if canManage && !key.revokedAt}
+						<Button variant="danger" size="sm" onclick={() => confirmDelete(key.id)}>
+							revoke
+						</Button>
+					{/if}
+				</div>
 			{/each}
 		</div>
 	{/if}
 </div>
 
-<Modal bind:open={showCreateModal} title="Create API Key" onclose={() => (showCreateModal = false)}>
+<Modal bind:open={showCreateModal} title="create api key" onclose={() => (showCreateModal = false)}>
 	<form
 		method="POST"
 		action="?/create"
@@ -2851,50 +2840,37 @@ export const actions: Actions = {
 		}}
 	>
 		<div class="form-group">
-			<label for="key-name">Name</label>
-			<input
-				type="text"
-				id="key-name"
-				name="name"
-				bind:value={keyName}
-				placeholder="My API Key"
-				required
-			/>
+			<label for="key-name">name</label>
+			<input type="text" id="key-name" name="name" bind:value={keyName} placeholder="my-api-key" required />
 		</div>
 
 		<div class="form-group">
-			<label>Scopes</label>
+			<label>scopes</label>
 			<div class="scopes-grid">
-				<label class="scope-checkbox">
-					<input type="checkbox" name="scopes" value="read" bind:group={selectedScopes} />
-					<span>Read</span>
-				</label>
-				<label class="scope-checkbox">
-					<input type="checkbox" name="scopes" value="write" bind:group={selectedScopes} />
-					<span>Write</span>
-				</label>
-				<label class="scope-checkbox">
-					<input type="checkbox" name="scopes" value="admin" bind:group={selectedScopes} />
-					<span>Admin</span>
-				</label>
+				{#each ['read', 'write', 'admin'] as scope}
+					<label class="scope-checkbox">
+						<input type="checkbox" name="scopes" value={scope} bind:group={selectedScopes} />
+						<span>{scope}</span>
+					</label>
+				{/each}
 			</div>
 		</div>
 
 		{#if createError}
-			<div class="error-message">{createError}</div>
+			<div class="error-message">// {createError}</div>
 		{/if}
 
 		<div class="form-actions">
-			<Button variant="secondary" onclick={() => (showCreateModal = false)}>Cancel</Button>
-			<Button type="submit" loading={creating}>Create Key</Button>
+			<Button variant="secondary" onclick={() => (showCreateModal = false)}>cancel</Button>
+			<Button type="submit" loading={creating}>create key</Button>
 		</div>
 	</form>
 </Modal>
 
 <ConfirmDialog
 	bind:open={showDeleteConfirm}
-	title="Revoke API Key"
-	message="Are you sure you want to revoke this API key? Any applications using this key will stop working."
+	title="revoke api key"
+	message="Are you sure you want to revoke this API key? Any applications using this key will stop working immediately."
 	confirmLabel="Revoke"
 	variant="danger"
 	onconfirm={handleDelete}
@@ -2903,7 +2879,7 @@ export const actions: Actions = {
 
 <style>
 	.keys-page {
-		max-width: 900px;
+		max-width: 880px;
 	}
 
 	.page-header {
@@ -2913,65 +2889,55 @@ export const actions: Actions = {
 		margin-bottom: var(--space-5);
 	}
 
-	.header-content {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2);
-	}
-
-	.prompt {
+	.section-label {
 		font-family: var(--font-mono);
-		color: var(--color-success);
-		font-weight: 600;
+		font-size: var(--font-size-2xs);
+		color: var(--color-text-ghost);
+		text-transform: uppercase;
+		letter-spacing: 1.5px;
 	}
 
-	.command {
-		font-family: var(--font-mono);
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
-	}
-
+	/* Key reveal banner */
 	.key-reveal {
 		background: var(--color-bg-2);
-		border: 1px solid var(--color-warning);
+		border: 1px solid var(--color-warning-border);
+		border-left: 3px solid var(--color-warning);
 		border-radius: var(--radius-lg);
-		padding: var(--space-4);
-		margin-bottom: var(--space-6);
+		padding: var(--space-4) var(--space-5);
+		margin-bottom: var(--space-5);
 	}
 
 	.key-reveal-header {
 		display: flex;
 		align-items: center;
-		gap: var(--space-2);
+		justify-content: space-between;
 		margin-bottom: var(--space-2);
 	}
 
-	.key-reveal-icon {
-		font-size: var(--font-size-lg);
-	}
-
 	.key-reveal-title {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
 		font-weight: 600;
 		color: var(--color-text);
-		flex: 1;
 	}
 
 	.dismiss-btn {
 		background: none;
 		border: none;
 		color: var(--color-text-muted);
+		font-size: var(--font-size-xs);
 		cursor: pointer;
 		padding: var(--space-1);
-		font-size: var(--font-size-sm);
 	}
 
 	.dismiss-btn:hover {
-		color: var(--color-text);
+		color: var(--color-text-dim);
 	}
 
 	.key-reveal-warning {
 		color: var(--color-warning);
-		font-size: var(--font-size-sm);
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
 		margin-bottom: var(--space-3);
 	}
 
@@ -2987,120 +2953,156 @@ export const actions: Actions = {
 		padding: var(--space-3);
 		border-radius: var(--radius-md);
 		font-family: var(--font-mono);
-		font-size: var(--font-size-sm);
+		font-size: var(--font-size-xs);
 		color: var(--color-text);
 		word-break: break-all;
+		border: 1px solid var(--color-border-2);
 	}
 
+	/* Empty state */
 	.empty-state {
-		text-align: center;
-		padding: var(--space-10) var(--space-4);
+		display: flex;
+		align-items: center;
+		gap: var(--space-4);
+		padding: var(--space-8) var(--space-5);
+		background: var(--color-bg-2);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-lg);
 	}
 
-	.empty-icon {
-		font-size: 48px;
-		display: block;
-		margin-bottom: var(--space-4);
-	}
-
-	.empty-state h3 {
+	.empty-prefix {
+		font-family: var(--font-mono);
+		color: var(--color-success);
+		font-weight: 700;
 		font-size: var(--font-size-lg);
-		font-weight: 600;
-		color: var(--color-text);
-		margin: 0 0 var(--space-2);
 	}
 
-	.empty-state p {
-		color: var(--color-text-muted);
-		margin: 0 0 var(--space-4);
-	}
-
-	.keys-list {
+	.empty-text {
+		flex: 1;
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-3);
+		gap: 2px;
 	}
 
-	.key-card.revoked {
-		opacity: 0.6;
+	.empty-cmd {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-sm);
+		color: var(--color-text-dim);
 	}
 
+	.empty-result {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
+		color: var(--color-text-ghost);
+	}
+
+	/* Filters */
 	.filter-tabs {
 		display: flex;
-		gap: var(--space-1);
+		gap: 2px;
 		margin-bottom: var(--space-4);
+		background: var(--color-bg-2);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		padding: 3px;
 		width: fit-content;
 	}
 
 	.filter-tab {
-		padding: var(--space-2) var(--space-3);
+		padding: 4px var(--space-3);
 		background: transparent;
 		border: none;
+		border-radius: var(--radius-sm);
 		color: var(--color-text-muted);
 		font-family: var(--font-mono);
 		font-size: var(--font-size-xs);
 		cursor: pointer;
-		transition: all 0.15s ease;
-		border-radius: var(--radius-sm);
+		transition: all 0.1s ease;
 	}
 
 	.filter-tab:hover {
-		color: var(--color-text);
-		background: var(--color-bg-2);
+		color: var(--color-text-dim);
 	}
 
 	.filter-tab.active {
+		background: var(--color-bg-3);
 		color: var(--color-text);
-		background: var(--color-bg-2);
+		border: 1px solid var(--color-border-2);
 	}
 
-	.filter-marker {
-		color: var(--color-text-muted);
+	/* Keys list */
+	.keys-list {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
 	}
 
-	.key-header {
+	.key-row {
 		display: flex;
 		align-items: center;
-		gap: var(--space-2);
-		margin-bottom: var(--space-1);
+		gap: var(--space-4);
+		padding: var(--space-4) var(--space-5);
+		background: var(--color-bg-2);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-lg);
+		transition: border-color 0.1s ease;
 	}
 
-	.key-info {
+	.key-row:hover {
+		border-color: var(--color-border-2);
+	}
+
+	.key-row.revoked {
+		opacity: 0.5;
+	}
+
+	.key-main {
 		flex: 1;
 		min-width: 0;
 	}
 
-	.key-name {
-		font-weight: 600;
-		color: var(--color-text);
-		margin-bottom: var(--space-1);
+	.key-name-row {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		margin-bottom: var(--space-2);
 	}
 
-	.key-name.revoked {
+	.key-name {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-sm);
+		font-weight: 600;
+		color: var(--color-text);
+	}
+
+	.key-name.strikethrough {
 		text-decoration: line-through;
 		color: var(--color-text-muted);
 	}
 
 	.key-prefix {
 		font-family: var(--font-mono);
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
+		font-size: var(--font-size-xs);
+		color: var(--color-text-ghost);
 		margin-bottom: var(--space-2);
-	}
-
-	.key-prefix.revoked {
-		opacity: 0.6;
 	}
 
 	.key-meta {
 		display: flex;
-		gap: var(--space-4);
+		gap: var(--space-2);
+		font-family: var(--font-mono);
+		font-size: var(--font-size-2xs);
+		color: var(--color-text-ghost);
 		margin-bottom: var(--space-2);
 	}
 
-	.key-date {
-		font-size: var(--font-size-xs);
-		color: var(--color-text-muted);
+	.meta-sep {
+		color: var(--color-border-hover);
+	}
+
+	.revoked-date {
+		color: var(--color-danger);
+		opacity: 0.6;
 	}
 
 	.key-scopes {
@@ -3108,37 +3110,54 @@ export const actions: Actions = {
 		gap: var(--space-2);
 	}
 
+	.scope-tag {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-2xs);
+		color: var(--color-text-ghost);
+		background: var(--color-bg-3);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		padding: 1px 6px;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+	}
+
+	/* Form */
 	.form-group {
 		margin-bottom: var(--space-4);
 	}
 
 	.form-group label {
 		display: block;
-		font-size: var(--font-size-sm);
-		font-weight: 500;
-		color: var(--color-text);
+		font-family: var(--font-mono);
+		font-size: var(--font-size-2xs);
+		color: var(--color-text-muted);
+		text-transform: uppercase;
+		letter-spacing: 1px;
 		margin-bottom: var(--space-2);
 	}
 
 	.form-group input[type='text'] {
 		width: 100%;
-		padding: var(--space-2) var(--space-3);
+		height: 36px;
+		padding: 0 var(--space-3);
 		background: var(--color-bg);
-		border: 1px solid var(--color-border);
+		border: 1px solid var(--color-border-2);
 		border-radius: var(--radius-md);
 		color: var(--color-text);
-		font-size: var(--font-size-base);
+		font-family: var(--font-mono);
+		font-size: var(--font-size-sm);
+		outline: none;
+		transition: border-color 0.1s ease;
 	}
 
 	.form-group input[type='text']:focus {
-		outline: none;
-		border-color: var(--color-accent);
+		border-color: var(--color-border-active);
 	}
 
 	.scopes-grid {
 		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
+		gap: var(--space-4);
 	}
 
 	.scope-checkbox {
@@ -3149,19 +3168,21 @@ export const actions: Actions = {
 	}
 
 	.scope-checkbox input {
-		width: 16px;
-		height: 16px;
-		accent-color: var(--color-accent);
+		width: 14px;
+		height: 14px;
+		accent-color: var(--color-text);
 	}
 
 	.scope-checkbox span {
-		font-size: var(--font-size-sm);
-		color: var(--color-text);
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
+		color: var(--color-text-dim);
 	}
 
 	.error-message {
 		color: var(--color-danger);
-		font-size: var(--font-size-sm);
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
 		margin-bottom: var(--space-3);
 	}
 
@@ -3169,7 +3190,9 @@ export const actions: Actions = {
 		display: flex;
 		justify-content: flex-end;
 		gap: var(--space-3);
-		margin-top: var(--space-4);
+		margin-top: var(--space-5);
+		padding-top: var(--space-4);
+		border-top: 1px solid var(--color-border);
 	}
 </style>
 ------------------------------------------------------------
@@ -4001,332 +4024,366 @@ export const load: PageServerLoad = async ({ locals }) => {
 ## routes/(app)/dashboard/usage/+page.svelte
 
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import Chart from 'chart.js/auto';
-	import Button from '$lib/components/ui/Button.svelte';
-	import Card from '$lib/components/ui/Card.svelte';
-	import { formatBytes, formatNumber } from '$lib/utils/format';
+  import { onMount } from "svelte";
+  import Chart from "chart.js/auto";
+  import Button from "$lib/components/ui/Button.svelte";
+  import Card from "$lib/components/ui/Card.svelte";
+  import { formatBytes, formatNumber } from "$lib/utils/format";
 
-	interface Props {
-		data: {
-			stats: {
-				totalRequests: number;
-				totalBytesIn: number;
-				totalBytesOut: number;
-				totalStorage: number;
-				activeApiKeys: number;
-			};
-			daily: Array<{
-				date: string;
-				requests: number;
-				bytesIn: number;
-				bytesOut: number;
-			}>;
-		};
-	}
+  interface Props {
+    data: {
+      stats: {
+        totalRequests: number;
+        totalBytesIn: number;
+        totalBytesOut: number;
+        totalStorage: number;
+        activeApiKeys: number;
+      };
+      daily: Array<{
+        date: string;
+        requests: number;
+        bytesIn: number;
+        bytesOut: number;
+      }>;
+    };
+  }
 
-	let { data }: Props = $props();
+  let { data }: Props = $props();
 
-	let chartCanvas: HTMLCanvasElement;
-	let chart: Chart | null = null;
-	let selectedRange = $state<'7' | '30' | '90'>('30');
+  let chartCanvas: HTMLCanvasElement;
+  let chart: Chart | null = null;
+  let selectedRange = $state<"7" | "30" | "90">("30");
 
-	const filteredData = $derived(() => {
-		const days = parseInt(selectedRange);
-		return data.daily.slice(0, days).reverse();
-	});
+  const filteredData = $derived(() => {
+    const days = parseInt(selectedRange);
+    return data.daily.slice(0, days).reverse();
+  });
 
-	const totalBandwidth = $derived(data.stats.totalBytesIn + data.stats.totalBytesOut);
+  const totalBandwidth = $derived(
+    data.stats.totalBytesIn + data.stats.totalBytesOut,
+  );
 
-	function renderChart() {
-		if (chart) {
-			chart.destroy();
-		}
+  function renderChart() {
+    if (chart) {
+      chart.destroy();
+    }
 
-		const ctx = chartCanvas.getContext('2d');
-		if (!ctx) return;
+    const ctx = chartCanvas.getContext("2d");
+    if (!ctx) return;
 
-		const chartData = filteredData();
+    const chartData = filteredData();
 
-		chart = new Chart(ctx, {
-			type: 'line',
-			data: {
-				labels: chartData.map(d => {
-					const date = new Date(d.date);
-					return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-				}),
-				datasets: [
-					{
-						label: 'Requests',
-						data: chartData.map(d => d.requests),
-						borderColor: '#ffffff',
-						backgroundColor: 'rgba(255, 255, 255, 0.05)',
-						fill: true,
-						tension: 0.3,
-						yAxisID: 'y'
-					}
-				]
-			},
-			options: {
-				responsive: true,
-				maintainAspectRatio: false,
-				interaction: {
-					intersect: false,
-					mode: 'index'
-				},
-				plugins: {
-					legend: {
-						display: false
-					},
-					tooltip: {
-						backgroundColor: '#0a0a0a',
-						titleColor: '#ffffff',
-						bodyColor: '#666666',
-						borderColor: '#1a1a1a',
-						borderWidth: 1,
-						padding: 12,
-						displayColors: false
-					}
-				},
-				scales: {
-					x: {
-						grid: {
-							color: '#1a1a1a',
-							drawTicks: false
-						},
-						ticks: {
-							color: '#6b6b78',
-							font: { size: 11 }
-						}
-					},
-					y: {
-						position: 'right',
-						grid: {
-							color: '#2a2a30',
-							drawTicks: false
-						},
-						ticks: {
-							color: '#6b6b78',
-							font: { size: 11 },
-							callback: (value: number | string) => formatNumber(Number(value))
-						}
-					}
-				}
-			}
-		});
-	}
+    chart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: chartData.map((d) => {
+          const date = new Date(d.date);
+          return date.toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+          });
+        }),
+        datasets: [
+          {
+            label: "Requests",
+            data: chartData.map((d) => d.requests),
+            borderColor: "#ffffff",
+            backgroundColor: "rgba(255, 255, 255, 0.05)",
+            fill: true,
+            tension: 0.3,
+            yAxisID: "y",
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          intersect: false,
+          mode: "index",
+        },
+        plugins: {
+          legend: {
+            display: false,
+          },
+          tooltip: {
+            backgroundColor: "#0a0a0a",
+            titleColor: "#ffffff",
+            bodyColor: "#666666",
+            borderColor: "#1a1a1a",
+            borderWidth: 1,
+            padding: 12,
+            displayColors: false,
+          },
+        },
+        scales: {
+          x: {
+            grid: {
+              color: "#1a1a1a",
+              drawTicks: false,
+            },
+            ticks: {
+              color: "#6b6b78",
+              font: { size: 11 },
+            },
+          },
+          y: {
+            position: "right",
+            grid: {
+              color: "#2a2a30",
+              drawTicks: false,
+            },
+            ticks: {
+              color: "#6b6b78",
+              font: { size: 11 },
+              callback: (value: number | string) => formatNumber(Number(value)),
+            },
+          },
+        },
+      },
+    });
+  }
 
-	onMount(() => {
-		renderChart();
-		return () => {
-			if (chart) chart.destroy();
-		};
-	});
+  onMount(() => {
+    renderChart();
+    return () => {
+      if (chart) chart.destroy();
+    };
+  });
 
-	$effect(() => {
-		selectedRange;
-		if (chartCanvas) {
-			renderChart();
-		}
-	});
+  $effect(() => {
+    selectedRange;
+    if (chartCanvas) {
+      renderChart();
+    }
+  });
 </script>
 
 <svelte:head>
-	<title>Usage - Kyro</title>
+  <title>Usage - Kyro</title>
 </svelte:head>
 
 <div class="usage-page">
-	<header class="page-header">
-		<div class="header-content">
-			<span class="prompt">$</span>
-			<span class="command">./usage.sh</span>
-		</div>
-	</header>
+  <header class="page-header">
+    <div class="header-content">
+      <span class="prompt">$</span>
+      <span class="command">./usage.sh</span>
+    </div>
+  </header>
 
-	<div class="stats-grid">
-		<Card>
-			<div class="stat-card">
-				<div class="stat-info">
-					<span class="stat-label">Total Requests</span>
-					<span class="stat-value">
-						<span class="bracket">[</span>
-						{formatNumber(data.stats.totalRequests)}
-						<span class="bracket">]</span>
-					</span>
-				</div>
-			</div>
-		</Card>
-		<Card>
-			<div class="stat-card">
-				<div class="stat-info">
-					<span class="stat-label">Data In</span>
-					<span class="stat-value">
-						<span class="bracket">[</span>
-						{formatBytes(data.stats.totalBytesIn)}
-						<span class="bracket">]</span>
-					</span>
-				</div>
-			</div>
-		</Card>
-		<Card>
-			<div class="stat-card">
-				<div class="stat-info">
-					<span class="stat-label">Data Out</span>
-					<span class="stat-value">
-						<span class="bracket">[</span>
-						{formatBytes(data.stats.totalBytesOut)}
-						<span class="bracket">]</span>
-					</span>
-				</div>
-			</div>
-		</Card>
-		<Card>
-			<div class="stat-card">
-				<div class="stat-info">
-					<span class="stat-label">Storage</span>
-					<span class="stat-value">
-						<span class="bracket">[</span>
-						{formatBytes(data.stats.totalStorage)}
-						<span class="bracket">]</span>
-					</span>
-				</div>
-			</div>
-		</Card>
-	</div>
+  <div class="stats-grid">
+    <Card>
+      <div class="stat-card">
+        <div class="stat-info">
+          <span class="stat-label">Total Requests</span>
+          <span class="stat-value">
+            <span class="bracket">[</span>
+            {formatNumber(data.stats.totalRequests)}
+            <span class="bracket">]</span>
+          </span>
+        </div>
+      </div>
+    </Card>
+    <Card>
+      <div class="stat-card">
+        <div class="stat-info">
+          <span class="stat-label">Data In</span>
+          <span class="stat-value">
+            <span class="bracket">[</span>
+            {formatBytes(data.stats.totalBytesIn)}
+            <span class="bracket">]</span>
+          </span>
+        </div>
+      </div>
+    </Card>
+    <Card>
+      <div class="stat-card">
+        <div class="stat-info">
+          <span class="stat-label">Data Out</span>
+          <span class="stat-value">
+            <span class="bracket">[</span>
+            {formatBytes(data.stats.totalBytesOut)}
+            <span class="bracket">]</span>
+          </span>
+        </div>
+      </div>
+    </Card>
+    <Card>
+      <div class="stat-card">
+        <div class="stat-info">
+          <span class="stat-label">Storage</span>
+          <span class="stat-value">
+            <span class="bracket">[</span>
+            {formatBytes(data.stats.totalStorage)}
+            <span class="bracket">]</span>
+          </span>
+        </div>
+      </div>
+    </Card>
+  </div>
 
-	<Card>
-		<div class="chart-header">
-			<span class="chart-title">// Request History</span>
-			<div class="range-selector">
-				<button class="range-btn" class:active={selectedRange === '7'} onclick={() => (selectedRange = '7')}>
-					<span class="range-marker">[</span>7d<span class="range-marker">]</span>
-				</button>
-				<button class="range-btn" class:active={selectedRange === '30'} onclick={() => (selectedRange = '30')}>
-					<span class="range-marker">[</span>30d<span class="range-marker">]</span>
-				</button>
-				<button class="range-btn" class:active={selectedRange === '90'} onclick={() => (selectedRange = '90')}>
-					<span class="range-marker">[</span>90d<span class="range-marker">]</span>
-				</button>
-			</div>
-		</div>
-		<div class="chart-container">
-			<canvas bind:this={chartCanvas}></canvas>
-		</div>
-	</Card>
+  <Card>
+    <div class="chart-header">
+      <span class="chart-title">// Request History</span>
+      <div class="range-selector">
+        <button
+          class="range-btn"
+          class:active={selectedRange === "7"}
+          onclick={() => (selectedRange = "7")}
+        >
+          <span class="range-marker">[</span>7d<span class="range-marker"
+            >]</span
+          >
+        </button>
+        <button
+          class="range-btn"
+          class:active={selectedRange === "30"}
+          onclick={() => (selectedRange = "30")}
+        >
+          <span class="range-marker">[</span>30d<span class="range-marker"
+            >]</span
+          >
+        </button>
+        <button
+          class="range-btn"
+          class:active={selectedRange === "90"}
+          onclick={() => (selectedRange = "90")}
+        >
+          <span class="range-marker">[</span>90d<span class="range-marker"
+            >]</span
+          >
+        </button>
+      </div>
+    </div>
+    <div class="chart-container">
+      <canvas bind:this={chartCanvas}></canvas>
+    </div>
+  </Card>
 </div>
 
 <style>
-	.usage-page {
-		max-width: 1200px;
-	}
+  .usage-page {
+    max-width: 1200px;
+  }
 
-	.page-header {
-		margin-bottom: var(--space-5);
-	}
+  .page-header {
+    margin-bottom: var(--space-5);
+  }
 
-	.header-content {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2);
-	}
+  .header-content {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
 
-	.prompt {
-		font-family: var(--font-mono);
-		color: var(--color-success);
-		font-weight: 600;
-	}
+  .prompt {
+    font-family: var(--font-mono);
+    color: var(--color-success);
+    font-weight: 600;
+  }
 
-	.command {
-		font-family: var(--font-mono);
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
-	}
+  .command {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+  }
 
-	.stats-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-		gap: var(--space-3);
-		margin-bottom: var(--space-5);
-	}
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: var(--space-3);
+    margin-bottom: var(--space-5);
+  }
 
-	.stat-card {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
-	}
+  .stat-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
 
-	.stat-info {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1);
-	}
+  .stat-info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
 
-	.stat-label {
-		font-family: var(--font-mono);
-		font-size: var(--font-size-xs);
-		color: var(--color-text-muted);
-		text-transform: uppercase;
-	}
+  .stat-label {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+  }
 
-	.stat-value {
-		font-family: var(--font-mono);
-		font-size: var(--font-size-lg);
-		font-weight: 600;
-		color: var(--color-text);
-	}
+  .stat-value {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    color: var(--color-text);
+  }
 
-	.bracket {
-		color: var(--color-text-muted);
-	}
+  .bracket {
+    color: var(--color-text-muted);
+  }
 
-	.chart-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: var(--space-4);
-	}
+  .chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-4);
+  }
 
-	.chart-title {
-		font-family: var(--font-mono);
-		font-size: var(--font-size-xs);
-		color: var(--color-text-muted);
-		text-transform: uppercase;
-	}
+  .chart-title {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+  }
 
-	.range-selector {
-		display: flex;
-		gap: var(--space-1);
-		background: var(--color-bg);
-		padding: var(--space-1);
-		border-radius: var(--radius-md);
-	}
+  .range-selector {
+    display: flex;
+    gap: var(--space-1);
+    background: var(--color-bg);
+    padding: var(--space-1);
+    border-radius: var(--radius-md);
+  }
 
-	.range-btn {
-		padding: var(--space-1) var(--space-3);
-		background: transparent;
-		border: none;
-		border-radius: var(--radius-sm);
-		color: var(--color-text-muted);
-		font-size: var(--font-size-sm);
-		font-weight: 500;
-		cursor: pointer;
-		transition: all 0.15s ease;
-	}
+  .range-btn {
+    padding: var(--space-1) var(--space-3);
+    background: transparent;
+    border: 1px solid transparent; /* subtle structure */
+    border-radius: var(--radius-sm);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
 
-	.range-btn:hover {
-		color: var(--color-text);
-	}
+  /* improve readability */
+  .range-btn:hover {
+    color: var(--color-text);
+    background: rgba(255, 255, 255, 0.03);
+  }
 
-	.range-btn.active {
-		background: var(--color-accent);
-		color: white;
-	}
+  /* active state — more contrast but still on-theme */
+  .range-btn.active {
+    background: var(--color-accent);
+    color: var(--color-bg); /* instead of white */
+    border-color: var(--color-accent);
+    font-weight: 600;
+  }
 
-	.chart-container {
-		height: 300px;
-		position: relative;
-	}
+  /* optional: slightly brighter inactive text */
+  .range-btn:not(.active) {
+    color: #8b8b98; /* or tweak your muted variable slightly */
+  }
+
+  .chart-container {
+    height: 300px;
+    position: relative;
+  }
 </style>
+
 ------------------------------------------------------------
 
 ## routes/(app)/+layout.server.ts
@@ -4368,16 +4425,36 @@ export const load = (async ({ locals }) => {
 		});
 	});
 
-	const navItems = [
-		{ href: '/dashboard', label: 'Dashboard', icon: Dashboard },
-		{ href: '/dashboard/keys', label: 'API Keys', icon: Key },
-		{ href: '/dashboard/files', label: 'Files', icon: File },
-		{ href: '/dashboard/usage', label: 'Usage', icon: Usage },
-		{ href: '/dashboard/settings', label: 'Settings', icon: Settings }
+	const navSections = [
+		{
+			label: '// workspace',
+			items: [
+				{ href: '/dashboard', label: 'dashboard', icon: Dashboard },
+				{ href: '/dashboard/keys', label: 'api keys', icon: Key },
+				{ href: '/dashboard/files', label: 'files', icon: File }
+			]
+		},
+		{
+			label: '// analytics',
+			items: [
+				{ href: '/dashboard/usage', label: 'usage', icon: Usage }
+			]
+		},
+		{
+			label: '// config',
+			items: [
+				{ href: '/dashboard/settings', label: 'settings', icon: Settings }
+			]
+		}
 	];
 
 	function getInitials(email: string): string {
 		return email ? email.substring(0, 2).toUpperCase() : 'U';
+	}
+
+	function getPagePath(): string {
+		const path = $page.url.pathname;
+		return '~/' + path.replace(/^\//, '').replace(/\/$/, '');
 	}
 
 	function handleLogout() {
@@ -4397,30 +4474,37 @@ export const load = (async ({ locals }) => {
 		</div>
 
 		<nav class="sidebar-nav">
-			{#each navItems as item}
-				{@const isActive = $page.url.pathname === item.href || ($page.url.pathname.startsWith(item.href) && item.href !== '/dashboard')}
-				<a href={item.href} class="nav-item" class:active={isActive}>
-					<span class="nav-icon">
-						<item.icon size={16} />
-					</span>
-					<span class="nav-label">{item.label}</span>
-					{#if isActive}
-						<span class="nav-indicator">></span>
-					{/if}
-				</a>
+			{#each navSections as section}
+				<div class="nav-section-label">{section.label}</div>
+				{#each section.items as item}
+					{@const isActive = $page.url.pathname === item.href || ($page.url.pathname.startsWith(item.href) && item.href !== '/dashboard')}
+					<a href={item.href} class="nav-item" class:active={isActive}>
+						<span class="nav-icon">
+							<item.icon size={14} />
+						</span>
+						<span class="nav-label">{item.label}</span>
+					</a>
+				{/each}
 			{/each}
 		</nav>
 
 		<div class="sidebar-footer">
+			<div class="user-chip">
+				<div class="user-avatar">
+					{getInitials($user?.email || '')}
+				</div>
+				<div class="user-details">
+					<span class="user-email">{$user?.email || 'user'}</span>
+					<span class="user-role">{$user?.role || 'member'}</span>
+				</div>
+			</div>
 			<button class="logout-btn" onclick={handleLogout}>
-				<span class="nav-icon">
-					<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-						<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-						<polyline points="16 17 21 12 16 7" />
-						<line x1="21" y1="12" x2="9" y2="12" />
-					</svg>
-				</span>
-				<span>Logout</span>
+				<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+					<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+					<polyline points="16 17 21 12 16 7" />
+					<line x1="21" y1="12" x2="9" y2="12" />
+				</svg>
+				<span>logout</span>
 			</button>
 		</div>
 	</aside>
@@ -4428,18 +4512,13 @@ export const load = (async ({ locals }) => {
 	<div class="main-wrapper">
 		<header class="topbar">
 			<div class="topbar-left">
-				<span class="prompt">$</span>
-				<h1 class="page-title">{$page.url.pathname.replace('/dashboard', 'dashboard').replace('/', '')}</h1>
+				<span class="prompt-char">$</span>
+				<span class="topbar-path">{getPagePath()}</span>
+				<span class="cursor"></span>
 			</div>
 			<div class="topbar-right">
-				<div class="user-menu">
-					<div class="user-avatar">
-						{getInitials($user?.email || '')}
-					</div>
-					<div class="user-info">
-						<span class="user-role">{$user?.role}</span>
-					</div>
-				</div>
+				<span class="status-indicator"></span>
+				<span class="status-text">connected</span>
 			</div>
 		</header>
 
@@ -4455,8 +4534,9 @@ export const load = (async ({ locals }) => {
 		min-height: 100vh;
 	}
 
+	/* ── Sidebar ── */
 	.sidebar {
-		width: 200px;
+		width: 196px;
 		background: var(--color-bg);
 		border-right: 1px solid var(--color-border);
 		display: flex;
@@ -4465,7 +4545,7 @@ export const load = (async ({ locals }) => {
 	}
 
 	.sidebar-header {
-		padding: var(--space-4);
+		padding: var(--space-4) var(--space-4);
 		border-bottom: 1px solid var(--color-border);
 	}
 
@@ -4482,8 +4562,8 @@ export const load = (async ({ locals }) => {
 	}
 
 	.logo-mark {
-		width: 24px;
-		height: 24px;
+		width: 22px;
+		height: 22px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -4491,80 +4571,159 @@ export const load = (async ({ locals }) => {
 		color: var(--color-bg);
 		border-radius: var(--radius-sm);
 		font-weight: 700;
+		font-size: 12px;
+		flex-shrink: 0;
 	}
 
+	/* ── Nav ── */
 	.sidebar-nav {
 		flex: 1;
-		padding: var(--space-3);
+		padding: var(--space-3) var(--space-2);
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-1);
+		overflow-y: auto;
+	}
+
+	.nav-section-label {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-2xs);
+		color: var(--color-text-ghost);
+		letter-spacing: 0.8px;
+		padding: var(--space-3) var(--space-2) var(--space-2);
+		user-select: none;
+	}
+
+	.nav-section-label:first-child {
+		padding-top: var(--space-2);
 	}
 
 	.nav-item {
 		display: flex;
 		align-items: center;
 		gap: var(--space-3);
-		padding: var(--space-2) var(--space-3);
-		border-radius: var(--radius-sm);
+		padding: 7px var(--space-3);
+		border-radius: var(--radius-md);
 		color: var(--color-text-muted);
 		text-decoration: none;
 		font-family: var(--font-mono);
 		font-size: var(--font-size-xs);
-		transition: all 0.15s ease;
+		transition: all 0.1s ease;
 		position: relative;
+		margin-bottom: 1px;
 	}
 
 	.nav-item:hover {
-		color: var(--color-text);
+		color: var(--color-text-dim);
 		background: var(--color-bg-2);
 	}
 
 	.nav-item.active {
 		color: var(--color-text);
-		background: var(--color-bg-2);
+		background: var(--color-bg-3);
+	}
+
+	.nav-item.active::before {
+		content: '';
+		position: absolute;
+		left: 0;
+		top: 50%;
+		transform: translateY(-50%);
+		width: 2px;
+		height: 16px;
+		background: var(--color-text);
+		border-radius: 0 2px 2px 0;
 	}
 
 	.nav-icon {
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		opacity: 0.7;
+		opacity: 0.5;
+		flex-shrink: 0;
 	}
 
 	.nav-item:hover .nav-icon,
 	.nav-item.active .nav-icon {
-		opacity: 1;
+		opacity: 0.8;
 	}
 
 	.nav-label {
 		flex: 1;
 	}
 
-	.nav-indicator {
-		color: var(--color-text);
-		font-weight: 600;
+	/* ── Footer ── */
+	.sidebar-footer {
+		padding: var(--space-3) var(--space-2);
+		border-top: 1px solid var(--color-border);
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
 	}
 
-	.sidebar-footer {
-		padding: var(--space-3);
-		border-top: 1px solid var(--color-border);
+	.user-chip {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		padding: var(--space-2) var(--space-3);
+		background: var(--color-bg-2);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		margin-bottom: var(--space-1);
+	}
+
+	.user-avatar {
+		width: 22px;
+		height: 22px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--color-bg-3);
+		border: 1px solid var(--color-border-2);
+		border-radius: var(--radius-sm);
+		font-family: var(--font-mono);
+		font-size: var(--font-size-2xs);
+		font-weight: 600;
+		color: var(--color-text-muted);
+		flex-shrink: 0;
+	}
+
+	.user-details {
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+		min-width: 0;
+	}
+
+	.user-email {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-2xs);
+		color: var(--color-text-muted);
+		text-overflow: ellipsis;
+		overflow: hidden;
+		white-space: nowrap;
+	}
+
+	.user-role {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-2xs);
+		color: var(--color-text-ghost);
 	}
 
 	.logout-btn {
 		display: flex;
 		align-items: center;
-		gap: var(--space-3);
+		gap: var(--space-2);
 		width: 100%;
-		padding: var(--space-2) var(--space-3);
+		padding: 7px var(--space-3);
 		background: none;
 		border: none;
-		border-radius: var(--radius-sm);
-		color: var(--color-text-muted);
+		border-radius: var(--radius-md);
+		color: var(--color-text-ghost);
 		font-family: var(--font-mono);
 		font-size: var(--font-size-xs);
 		cursor: pointer;
-		transition: all 0.15s ease;
+		transition: all 0.1s ease;
+		text-align: left;
 	}
 
 	.logout-btn:hover {
@@ -4572,6 +4731,7 @@ export const load = (async ({ locals }) => {
 		background: var(--color-bg-2);
 	}
 
+	/* ── Main ── */
 	.main-wrapper {
 		flex: 1;
 		display: flex;
@@ -4580,71 +4740,74 @@ export const load = (async ({ locals }) => {
 	}
 
 	.topbar {
-		height: 48px;
-		padding: 0 var(--space-4);
+		height: 42px;
+		padding: 0 var(--space-5);
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		border-bottom: 1px solid var(--color-border);
 		background: var(--color-bg);
+		flex-shrink: 0;
 	}
 
 	.topbar-left {
 		display: flex;
 		align-items: center;
 		gap: var(--space-2);
+		font-size: var(--font-size-xs);
 	}
 
-	.prompt {
+	.prompt-char {
 		font-family: var(--font-mono);
 		color: var(--color-success);
-		font-weight: 600;
+		font-weight: 700;
 	}
 
-	.page-title {
+	.topbar-path {
 		font-family: var(--font-mono);
-		font-size: var(--font-size-sm);
-		font-weight: 500;
-		color: var(--color-text);
-		text-transform: lowercase;
+		color: var(--color-text-muted);
 	}
 
-	.user-menu {
+	.cursor {
+		display: inline-block;
+		width: 7px;
+		height: 13px;
+		background: var(--color-success);
+		opacity: 0.6;
+		animation: blink 1s step-end infinite;
+		vertical-align: middle;
+		border-radius: 1px;
+	}
+
+	@keyframes blink {
+		0%, 100% { opacity: 0.6; }
+		50% { opacity: 0; }
+	}
+
+	.topbar-right {
 		display: flex;
 		align-items: center;
 		gap: var(--space-2);
 	}
 
-	.user-avatar {
-		width: 28px;
-		height: 28px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background: var(--color-bg-2);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		font-family: var(--font-mono);
-		font-size: var(--font-size-xs);
-		font-weight: 600;
-		color: var(--color-text);
+	.status-indicator {
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: var(--color-success);
+		box-shadow: 0 0 6px var(--color-success);
 	}
 
-	.user-info {
-		display: flex;
-		flex-direction: column;
-	}
-
-	.user-role {
+	.status-text {
 		font-family: var(--font-mono);
-		font-size: var(--font-size-xs);
-		color: var(--color-text-muted);
-		text-transform: capitalize;
+		font-size: var(--font-size-2xs);
+		color: var(--color-text-ghost);
+		letter-spacing: 0.5px;
 	}
 
 	.main-content {
 		flex: 1;
-		padding: var(--space-5);
+		padding: var(--space-5) var(--space-6);
 		overflow-y: auto;
 	}
 </style>
@@ -4663,6 +4826,7 @@ export const load = (async ({ locals }) => {
 </script>
 
 <div class="auth-layout">
+	<div class="scanlines"></div>
 	<div class="auth-container">
 		{@render children()}
 	</div>
@@ -4676,11 +4840,14 @@ export const load = (async ({ locals }) => {
 		justify-content: center;
 		padding: var(--space-4);
 		background: var(--color-bg);
+		position: relative;
 	}
 
 	.auth-container {
 		width: 100%;
-		max-width: 400px;
+		max-width: 380px;
+		position: relative;
+		z-index: 1;
 	}
 </style>
 ------------------------------------------------------------
@@ -4753,16 +4920,20 @@ export const actions: Actions = {
 </script>
 
 <svelte:head>
-	<title>Sign In - Kyro</title>
+	<title>Sign In — Kyro</title>
 </svelte:head>
 
 <div class="auth-page">
 	<div class="auth-header">
-		<div class="logo">
+		<a href="/" class="logo">
 			<span class="logo-mark">K</span>
 			<span class="logo-text">kyro</span>
+		</a>
+		<div class="auth-prompt">
+			<span class="prompt-char">$</span>
+			<span class="prompt-cmd">auth signin</span>
+			<span class="cursor"></span>
 		</div>
-		<p class="auth-command">$ signin</p>
 	</div>
 
 	<Card padding="lg">
@@ -4778,19 +4949,19 @@ export const actions: Actions = {
 		>
 			<div class="auth-form">
 				{#if form?.error}
-					<div class="form-error">{form.error}</div>
+					<div class="form-error">// {form.error}</div>
 				{/if}
 				<Input name="email" label="Email" type="email" placeholder="user@domain.com" bind:value={email} required />
-				<Input name="password" label="Password" type="password" placeholder="********" bind:value={password} required />
+				<Input name="password" label="Password" type="password" placeholder="••••••••" bind:value={password} required />
 				<Button type="submit" {loading} disabled={loading}>
-					{loading ? 'Authenticating...' : 'Sign In'}
+					{loading ? 'authenticating...' : 'sign in'}
 				</Button>
 			</div>
 		</form>
 	</Card>
 
 	<p class="footer-text">
-		<span class="prompt">></span> No account? <a href="/register">Register</a>
+		<span class="prompt-char">›</span> No account? <a href="/register">register</a>
 	</p>
 </div>
 
@@ -4798,11 +4969,15 @@ export const actions: Actions = {
 	.auth-page {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-6);
+		gap: var(--space-5);
 	}
 
 	.auth-header {
 		text-align: center;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: var(--space-3);
 	}
 
 	.logo {
@@ -4811,10 +4986,10 @@ export const actions: Actions = {
 		gap: var(--space-2);
 		font-family: var(--font-mono);
 		font-size: var(--font-size-lg);
-		font-weight: 600;
+		font-weight: 700;
 		color: var(--color-text);
 		text-decoration: none;
-		margin-bottom: var(--space-2);
+		text-transform: lowercase;
 	}
 
 	.logo-mark {
@@ -4827,13 +5002,40 @@ export const actions: Actions = {
 		color: var(--color-bg);
 		border-radius: var(--radius-sm);
 		font-weight: 700;
+		font-size: var(--font-size-base);
 	}
 
-	.auth-command {
+	.auth-prompt {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
 		font-family: var(--font-mono);
 		font-size: var(--font-size-xs);
+	}
+
+	.prompt-char {
+		color: var(--color-success);
+		font-weight: 700;
+	}
+
+	.prompt-cmd {
 		color: var(--color-text-muted);
-		margin: 0;
+	}
+
+	.cursor {
+		display: inline-block;
+		width: 7px;
+		height: 13px;
+		background: var(--color-success);
+		opacity: 0.6;
+		animation: blink 1s step-end infinite;
+		border-radius: 1px;
+		vertical-align: middle;
+	}
+
+	@keyframes blink {
+		0%, 100% { opacity: 0.6; }
+		50% { opacity: 0; }
 	}
 
 	.auth-form {
@@ -4852,27 +5054,27 @@ export const actions: Actions = {
 		font-size: var(--font-size-xs);
 		color: var(--color-danger);
 		padding: var(--space-3);
-		background: rgba(255, 68, 68, 0.1);
-		border: 1px solid var(--color-danger);
-		border-radius: var(--radius-sm);
+		background: var(--color-danger-dim);
+		border: 1px solid var(--color-danger-border);
+		border-left: 3px solid var(--color-danger);
+		border-radius: var(--radius-md);
 	}
 
 	.footer-text {
 		text-align: center;
 		font-family: var(--font-mono);
 		font-size: var(--font-size-xs);
-		color: var(--color-text-muted);
-		margin: 0;
-	}
-
-	.prompt {
-		color: var(--color-text);
-		margin-right: var(--space-1);
+		color: var(--color-text-ghost);
 	}
 
 	.footer-text a {
-		color: var(--color-text);
+		color: var(--color-text-dim);
 		font-weight: 500;
+		transition: color 0.1s ease;
+	}
+
+	.footer-text a:hover {
+		color: var(--color-text);
 	}
 </style>
 ------------------------------------------------------------
@@ -4951,16 +5153,20 @@ export const actions: Actions = {
 </script>
 
 <svelte:head>
-	<title>Register - Kyro</title>
+	<title>Register — Kyro</title>
 </svelte:head>
 
 <div class="auth-page">
 	<div class="auth-header">
-		<div class="logo">
+		<a href="/" class="logo">
 			<span class="logo-mark">K</span>
 			<span class="logo-text">kyro</span>
+		</a>
+		<div class="auth-prompt">
+			<span class="prompt-char">$</span>
+			<span class="prompt-cmd">auth register</span>
+			<span class="cursor"></span>
 		</div>
-		<p class="auth-command">$ register</p>
 	</div>
 
 	<Card padding="lg">
@@ -4976,20 +5182,20 @@ export const actions: Actions = {
 		>
 			<div class="auth-form">
 				{#if form?.error}
-					<div class="form-error">{form.error}</div>
+					<div class="form-error">// {form.error}</div>
 				{/if}
 				<Input name="orgName" label="Organization" type="text" placeholder="my-org" bind:value={orgName} required />
 				<Input name="email" label="Email" type="email" placeholder="user@domain.com" bind:value={email} required />
-				<Input name="password" label="Password" type="password" placeholder="********" bind:value={password} required />
+				<Input name="password" label="Password" type="password" placeholder="min. 8 characters" bind:value={password} required />
 				<Button type="submit" {loading} disabled={loading}>
-					{loading ? 'Creating...' : 'Create Account'}
+					{loading ? 'creating...' : 'create account'}
 				</Button>
 			</div>
 		</form>
 	</Card>
 
 	<p class="footer-text">
-		<span class="prompt">></span> Have account? <a href="/login">Sign in</a>
+		<span class="prompt-char">›</span> Have account? <a href="/login">sign in</a>
 	</p>
 </div>
 
@@ -4997,11 +5203,15 @@ export const actions: Actions = {
 	.auth-page {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-6);
+		gap: var(--space-5);
 	}
 
 	.auth-header {
 		text-align: center;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: var(--space-3);
 	}
 
 	.logo {
@@ -5010,10 +5220,10 @@ export const actions: Actions = {
 		gap: var(--space-2);
 		font-family: var(--font-mono);
 		font-size: var(--font-size-lg);
-		font-weight: 600;
+		font-weight: 700;
 		color: var(--color-text);
 		text-decoration: none;
-		margin-bottom: var(--space-2);
+		text-transform: lowercase;
 	}
 
 	.logo-mark {
@@ -5026,13 +5236,40 @@ export const actions: Actions = {
 		color: var(--color-bg);
 		border-radius: var(--radius-sm);
 		font-weight: 700;
+		font-size: var(--font-size-base);
 	}
 
-	.auth-command {
+	.auth-prompt {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
 		font-family: var(--font-mono);
 		font-size: var(--font-size-xs);
+	}
+
+	.prompt-char {
+		color: var(--color-success);
+		font-weight: 700;
+	}
+
+	.prompt-cmd {
 		color: var(--color-text-muted);
-		margin: 0;
+	}
+
+	.cursor {
+		display: inline-block;
+		width: 7px;
+		height: 13px;
+		background: var(--color-success);
+		opacity: 0.6;
+		animation: blink 1s step-end infinite;
+		border-radius: 1px;
+		vertical-align: middle;
+	}
+
+	@keyframes blink {
+		0%, 100% { opacity: 0.6; }
+		50% { opacity: 0; }
 	}
 
 	.auth-form {
@@ -5051,27 +5288,27 @@ export const actions: Actions = {
 		font-size: var(--font-size-xs);
 		color: var(--color-danger);
 		padding: var(--space-3);
-		background: rgba(255, 68, 68, 0.1);
-		border: 1px solid var(--color-danger);
-		border-radius: var(--radius-sm);
+		background: var(--color-danger-dim);
+		border: 1px solid var(--color-danger-border);
+		border-left: 3px solid var(--color-danger);
+		border-radius: var(--radius-md);
 	}
 
 	.footer-text {
 		text-align: center;
 		font-family: var(--font-mono);
 		font-size: var(--font-size-xs);
-		color: var(--color-text-muted);
-		margin: 0;
-	}
-
-	.prompt {
-		color: var(--color-text);
-		margin-right: var(--space-1);
+		color: var(--color-text-ghost);
 	}
 
 	.footer-text a {
-		color: var(--color-text);
+		color: var(--color-text-dim);
 		font-weight: 500;
+		transition: color 0.1s ease;
+	}
+
+	.footer-text a:hover {
+		color: var(--color-text);
 	}
 </style>
 ------------------------------------------------------------
@@ -5450,7 +5687,6 @@ export const actions = {
 
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import Button from '$lib/components/ui/Button.svelte';
 
 	type HealthStatus = 'checking' | 'connected' | 'degraded' | 'error';
 
@@ -5481,14 +5717,14 @@ export const actions = {
 		const m = Math.floor((seconds % 3600) / 60);
 		if (d > 0) return `${d}d ${h}h`;
 		if (h > 0) return `${h}h ${m}m`;
-		return `${m}m ${seconds % 60}s`;
+		return `${m}m`;
 	}
 
 	const statusConfig = {
-		checking: { label: 'Connecting…', dot: 'dot-pulse', color: 'var(--color-warning)' },
-		connected: { label: 'All systems operational', dot: 'dot-online', color: 'var(--color-success)' },
-		degraded:  { label: 'Degraded', dot: 'dot-degraded', color: 'var(--color-warning)' },
-		error:     { label: 'Backend unreachable', dot: 'dot-error', color: 'var(--color-danger)' },
+		checking: { label: 'connecting...', color: 'var(--color-warning)', dot: 'pulse' },
+		connected: { label: 'all systems operational', color: 'var(--color-success)', dot: 'online' },
+		degraded:  { label: 'degraded', color: 'var(--color-warning)', dot: 'warn' },
+		error:     { label: 'backend unreachable', color: 'var(--color-danger)', dot: 'error' },
 	};
 
 	let cfg = $derived(statusConfig[status]);
@@ -5499,84 +5735,72 @@ export const actions = {
 </svelte:head>
 
 <div class="landing">
-	<!-- Header -->
 	<header class="header">
 		<a href="/" class="logo">
 			<span class="logo-mark">K</span>
-			<span class="logo-text">Kyro</span>
+			<span class="logo-text">kyro</span>
 		</a>
 		<nav class="nav">
-			<a href="/health" class="nav-link">Status</a>
-			<a href="/login" class="nav-link">Sign In</a>
-			<a href="/register" class="nav-btn">Get Started</a>
+			<a href="/health" class="nav-link">status</a>
+			<a href="/login" class="nav-link">sign in</a>
+			<a href="/register" class="nav-cta">get started</a>
 		</nav>
 	</header>
 
-	<!-- Status bar -->
-	<div class="status-bar" style="--status-color: {cfg.color}">
-		<span class="dot {cfg.dot}"></span>
-		<span class="status-label">{cfg.label}</span>
-
+	<div class="statusbar" style="--s: {cfg.color}">
+		<span class="dot dot-{cfg.dot}"></span>
+		<span class="status-text">{cfg.label}</span>
 		{#if status === 'connected' || status === 'degraded'}
-			<span class="status-divider">·</span>
-			<span class="status-detail">
-				DB <span class="chip" class:chip-ok={health.database === 'connected'} class:chip-err={health.database !== 'connected'}>{health.database}</span>
-			</span>
-			<span class="status-divider">·</span>
-			<span class="status-detail">
-				Redis <span class="chip" class:chip-ok={health.redis === 'connected'} class:chip-err={health.redis !== 'connected'}>{health.redis}</span>
-			</span>
-			<span class="status-divider">·</span>
-			<span class="status-detail muted">up {formatUptime(health.uptime ?? 0)}</span>
+			<span class="sep">·</span>
+			<span>db <span class="chip chip-{health.database === 'connected' ? 'ok' : 'err'}">{health.database}</span></span>
+			<span class="sep">·</span>
+			<span>redis <span class="chip chip-{health.redis === 'connected' ? 'ok' : 'err'}">{health.redis}</span></span>
+			<span class="sep">·</span>
+			<span class="muted">up {formatUptime(health.uptime ?? 0)}</span>
 		{/if}
 	</div>
 
-	<!-- Hero -->
 	<main class="hero">
 		<div class="hero-inner">
-			<div class="eyebrow">API Management Platform</div>
+			<div class="terminal-line">
+				<span class="term-prompt">$</span>
+				<span class="term-cmd">kyro --init production</span>
+				<span class="term-cursor"></span>
+			</div>
+
 			<h1 class="hero-title">
-				Build faster.<br />
-				Ship with&nbsp;<span class="accent">confidence.</span>
+				Build with<br />
+				<span class="accent">confidence.</span>
 			</h1>
 			<p class="hero-sub">
-				Manage API keys, track usage in real time, and store files —
-				all in one unified platform built for modern teams.
+				API key management, real-time usage analytics, and file storage — 
+				in one unified platform built for engineering teams.
 			</p>
 			<div class="hero-cta">
-				<a href="/register" class="cta-primary">Start Building Free</a>
-				<a href="/login" class="cta-secondary">Sign In →</a>
+				<a href="/register" class="cta-primary">start building free</a>
+				<a href="/login" class="cta-ghost">sign in →</a>
 			</div>
 		</div>
 
-		<!-- Feature cards -->
 		<div class="features">
-			<div class="feature-card">
-				<div class="feature-icon">🔑</div>
-				<h3>API Key Management</h3>
-				<p>Create, scope, and revoke keys with fine-grained permission control.</p>
-			</div>
-			<div class="feature-card">
-				<div class="feature-icon">📊</div>
-				<h3>Usage Analytics</h3>
-				<p>Real-time dashboards with daily breakdowns and bandwidth tracking.</p>
-			</div>
-			<div class="feature-card">
-				<div class="feature-icon">📁</div>
-				<h3>File Storage</h3>
-				<p>Upload, serve, and manage files with per-org storage quotas.</p>
-			</div>
-			<div class="feature-card">
-				<div class="feature-icon">🛡️</div>
-				<h3>Rate Limiting</h3>
-				<p>Redis-backed rate limiting protects your infrastructure automatically.</p>
-			</div>
+			{#each [
+				{ icon: '◇', title: 'API Key Management', desc: 'Create, scope, and revoke keys with fine-grained permission control.' },
+				{ icon: '↑', title: 'Usage Analytics', desc: 'Real-time dashboards with daily breakdowns and bandwidth tracking.' },
+				{ icon: '▤', title: 'File Storage', desc: 'Upload, serve, and manage files with per-org storage quotas.' },
+				{ icon: '⊙', title: 'Rate Limiting', desc: 'Redis-backed rate limiting protects your infrastructure automatically.' }
+			] as feat}
+				<div class="feat-card">
+					<span class="feat-icon">{feat.icon}</span>
+					<h3>{feat.title}</h3>
+					<p>{feat.desc}</p>
+				</div>
+			{/each}
 		</div>
 	</main>
 
 	<footer class="footer">
-		<span>© 2026 Kyro</span>
-		<a href="/health">System Status</a>
+		<span>© 2026 kyro</span>
+		<a href="/health">system status</a>
 	</footer>
 </div>
 
@@ -5601,128 +5825,115 @@ export const actions = {
 		display: flex;
 		align-items: center;
 		gap: var(--space-2);
-		text-decoration: none;
-		font-size: var(--font-size-lg);
+		font-family: var(--font-mono);
+		font-size: var(--font-size-base);
 		font-weight: 700;
 		color: var(--color-text);
+		text-decoration: none;
+		text-transform: lowercase;
 	}
 
 	.logo-mark {
-		width: 30px;
-		height: 30px;
+		width: 26px;
+		height: 26px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: var(--color-accent);
-		color: white;
+		background: var(--color-text);
+		color: var(--color-bg);
 		border-radius: var(--radius-sm);
-		font-size: var(--font-size-base);
+		font-weight: 700;
+		font-size: 12px;
 	}
 
 	.nav {
 		display: flex;
 		align-items: center;
 		gap: var(--space-5);
+		font-family: var(--font-mono);
 	}
 
 	.nav-link {
 		color: var(--color-text-muted);
-		font-size: var(--font-size-sm);
-		font-weight: 500;
+		font-size: var(--font-size-xs);
 		text-decoration: none;
-		transition: color 0.15s;
+		transition: color 0.1s;
 	}
 
 	.nav-link:hover {
-		color: var(--color-text);
-		text-decoration: none;
+		color: var(--color-text-dim);
 	}
 
-	.nav-btn {
-		height: 34px;
+	.nav-cta {
+		height: 30px;
 		padding: 0 var(--space-4);
-		background: var(--color-accent);
-		color: white;
+		background: var(--color-text);
+		color: var(--color-bg);
 		border-radius: var(--radius-md);
-		font-size: var(--font-size-sm);
-		font-weight: 500;
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
+		font-weight: 600;
 		text-decoration: none;
 		display: flex;
 		align-items: center;
-		transition: background 0.15s;
+		transition: opacity 0.1s;
 	}
 
-	.nav-btn:hover {
-		background: var(--color-accent-hover);
-		text-decoration: none;
+	.nav-cta:hover {
+		opacity: 0.85;
 	}
 
 	/* ── Status bar ── */
-	.status-bar {
+	.statusbar {
 		display: flex;
 		align-items: center;
 		gap: var(--space-2);
-		padding: var(--space-2) var(--space-8);
+		padding: 6px var(--space-8);
 		background: var(--color-bg-2);
 		border-bottom: 1px solid var(--color-border);
-		font-size: var(--font-size-xs);
+		font-family: var(--font-mono);
+		font-size: var(--font-size-2xs);
 		color: var(--color-text-muted);
 	}
 
 	.dot {
-		width: 7px;
-		height: 7px;
+		width: 6px;
+		height: 6px;
 		border-radius: 50%;
 		flex-shrink: 0;
 	}
 
-	.dot-online  { background: var(--color-success); }
-	.dot-degraded { background: var(--color-warning); }
-	.dot-error   { background: var(--color-danger); }
-
-	.dot-pulse {
+	.dot-online { background: var(--color-success); box-shadow: 0 0 5px var(--color-success); }
+	.dot-warn   { background: var(--color-warning); }
+	.dot-error  { background: var(--color-danger); }
+	.dot-pulse  {
 		background: var(--color-warning);
-		animation: pulse 1.2s ease-in-out infinite;
+		animation: dpulse 1.2s ease-in-out infinite;
 	}
 
-	@keyframes pulse {
+	@keyframes dpulse {
 		0%, 100% { opacity: 1; }
-		50% { opacity: 0.3; }
+		50% { opacity: 0.2; }
 	}
 
-	.status-label {
-		color: var(--status-color);
-		font-weight: 500;
-	}
-
-	.status-divider {
-		color: var(--color-border);
-	}
-
-	.status-detail {
-		display: flex;
-		align-items: center;
-		gap: var(--space-1);
-	}
-
-	.status-detail.muted {
-		color: var(--color-text-muted);
-	}
+	.status-text { color: var(--s); font-weight: 500; }
+	.sep { color: var(--color-border-hover); }
+	.muted { color: var(--color-text-ghost); }
 
 	.chip {
 		display: inline-flex;
 		align-items: center;
 		padding: 0 5px;
-		height: 16px;
+		height: 14px;
 		border-radius: var(--radius-sm);
-		font-size: 10px;
-		font-weight: 600;
+		font-size: 9px;
+		font-weight: 700;
 		text-transform: uppercase;
-		letter-spacing: 0.03em;
+		letter-spacing: 0.5px;
 	}
 
-	.chip-ok  { background: rgba(34,197,94,0.15); color: var(--color-success); }
-	.chip-err { background: rgba(239,68,68,0.15);  color: var(--color-danger); }
+	.chip-ok  { background: var(--color-success-dim); color: var(--color-success); }
+	.chip-err { background: var(--color-danger-dim); color: var(--color-danger); }
 
 	/* ── Hero ── */
 	.hero {
@@ -5735,129 +5946,159 @@ export const actions = {
 	}
 
 	.hero-inner {
-		max-width: 680px;
+		max-width: 640px;
 		text-align: center;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: var(--space-5);
 	}
 
-	.eyebrow {
-		display: inline-block;
-		padding: 0 var(--space-3);
-		height: 24px;
-		line-height: 24px;
-		border-radius: var(--radius-full);
-		background: rgba(99,102,241,0.12);
-		color: var(--color-accent);
+	.terminal-line {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		background: var(--color-bg-2);
+		border: 1px solid var(--color-border-2);
+		border-radius: var(--radius-md);
+		padding: var(--space-2) var(--space-4);
+		font-family: var(--font-mono);
 		font-size: var(--font-size-xs);
-		font-weight: 600;
-		letter-spacing: 0.06em;
-		text-transform: uppercase;
-		margin-bottom: var(--space-5);
+	}
+
+	.term-prompt {
+		color: var(--color-success);
+		font-weight: 700;
+	}
+
+	.term-cmd {
+		color: var(--color-text-dim);
+	}
+
+	.term-cursor {
+		display: inline-block;
+		width: 7px;
+		height: 12px;
+		background: var(--color-success);
+		opacity: 0.6;
+		animation: blink 1s step-end infinite;
+		border-radius: 1px;
+	}
+
+	@keyframes blink {
+		0%, 100% { opacity: 0.6; }
+		50% { opacity: 0; }
 	}
 
 	.hero-title {
-		font-size: clamp(36px, 6vw, 56px);
+		font-family: var(--font-mono);
+		font-size: clamp(38px, 6vw, 58px);
 		font-weight: 700;
 		line-height: 1.1;
 		color: var(--color-text);
 		letter-spacing: -0.02em;
-		margin-bottom: var(--space-5);
 	}
 
 	.accent {
-		color: var(--color-accent);
+		color: var(--color-success);
 	}
 
 	.hero-sub {
-		font-size: var(--font-size-lg);
+		font-family: var(--font-mono);
+		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
-		line-height: 1.6;
-		max-width: 520px;
-		margin: 0 auto var(--space-8);
+		line-height: 1.7;
+		max-width: 500px;
 	}
 
 	.hero-cta {
 		display: flex;
 		align-items: center;
-		justify-content: center;
 		gap: var(--space-4);
 		flex-wrap: wrap;
+		justify-content: center;
 	}
 
 	.cta-primary {
-		height: 48px;
+		height: 42px;
 		padding: 0 var(--space-6);
-		background: var(--color-accent);
-		color: white;
+		background: var(--color-text);
+		color: var(--color-bg);
 		border-radius: var(--radius-md);
-		font-size: var(--font-size-base);
+		font-family: var(--font-mono);
+		font-size: var(--font-size-sm);
 		font-weight: 600;
 		text-decoration: none;
 		display: flex;
 		align-items: center;
-		transition: background 0.15s, transform 0.1s;
+		transition: opacity 0.1s;
 	}
 
 	.cta-primary:hover {
-		background: var(--color-accent-hover);
-		text-decoration: none;
-		transform: translateY(-1px);
+		opacity: 0.85;
 	}
 
-	.cta-secondary {
-		height: 48px;
-		padding: 0 var(--space-5);
+	.cta-ghost {
+		height: 42px;
+		padding: 0 var(--space-4);
 		color: var(--color-text-muted);
-		font-size: var(--font-size-base);
-		font-weight: 500;
+		font-family: var(--font-mono);
+		font-size: var(--font-size-sm);
 		text-decoration: none;
 		display: flex;
 		align-items: center;
-		transition: color 0.15s;
+		border: 1px solid var(--color-border-2);
+		border-radius: var(--radius-md);
+		transition: all 0.1s;
 	}
 
-	.cta-secondary:hover {
-		color: var(--color-text);
-		text-decoration: none;
+	.cta-ghost:hover {
+		color: var(--color-text-dim);
+		border-color: var(--color-border-hover);
 	}
 
-	/* ── Features ── */
+	/* ── Feature cards ── */
 	.features {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-		gap: var(--space-4);
+		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+		gap: var(--space-3);
 		width: 100%;
-		max-width: 900px;
+		max-width: 880px;
 	}
 
-	.feature-card {
-		padding: var(--space-6);
+	.feat-card {
+		padding: var(--space-5);
 		background: var(--color-bg-2);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-lg);
-		transition: border-color 0.15s, transform 0.15s;
+		transition: border-color 0.1s ease;
 	}
 
-	.feature-card:hover {
-		border-color: var(--color-accent);
-		transform: translateY(-2px);
+	.feat-card:hover {
+		border-color: var(--color-border-2);
 	}
 
-	.feature-icon {
-		font-size: 28px;
+	.feat-icon {
+		display: block;
+		font-size: 18px;
+		color: var(--color-text-muted);
 		margin-bottom: var(--space-3);
+		font-family: var(--font-mono);
 	}
 
-	.feature-card h3 {
-		font-size: var(--font-size-base);
+	.feat-card h3 {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-sm);
 		font-weight: 600;
 		color: var(--color-text);
 		margin-bottom: var(--space-2);
 	}
 
-	.feature-card p {
-		font-size: var(--font-size-sm);
+	.feat-card p {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
-		line-height: 1.5;
+		line-height: 1.6;
 	}
 
 	/* ── Footer ── */
@@ -5867,17 +6108,19 @@ export const actions = {
 		justify-content: space-between;
 		padding: var(--space-4) var(--space-8);
 		border-top: 1px solid var(--color-border);
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
+		font-family: var(--font-mono);
+		font-size: var(--font-size-2xs);
+		color: var(--color-text-ghost);
 	}
 
 	.footer a {
-		color: var(--color-text-muted);
+		color: var(--color-text-ghost);
 		text-decoration: none;
+		transition: color 0.1s;
 	}
 
 	.footer a:hover {
-		color: var(--color-text);
+		color: var(--color-text-muted);
 	}
 </style>
 ------------------------------------------------------------
