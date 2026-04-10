@@ -357,5 +357,34 @@
     height: 300px;
     position: relative;
   }
+  @media (max-width: 640px) {
+    .usage-page {
+      max-width: 100%;
+    }
+
+    .stats-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    .chart-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--space-3);
+    }
+
+    .range-selector {
+      align-self: stretch;
+      justify-content: space-between;
+    }
+
+    .range-btn {
+      flex: 1;
+      text-align: center;
+    }
+
+    .chart-container {
+      height: 220px;
+    }
+  }
 </style>
 

@@ -180,12 +180,12 @@
 </svelte:head>
 
 <div class="files-page">
-	<header class="page-header">
-		<div class="header-content">
-			<span class="prompt">$</span>
-			<span class="command">./files.sh</span>
-		</div>
-	</header>
+  <header class="page-header">
+    <div class="header-content">
+      <span class="prompt">$</span>
+      <span class="command">./files.sh</span>
+    </div>
+  </header>
 
   {#if !hasApiKey}
     <Card>
@@ -348,79 +348,79 @@
 />
 
 <style>
-	.files-page {
-		max-width: 900px;
-	}
+  .files-page {
+    max-width: 900px;
+  }
 
-	.page-header {
-		margin-bottom: var(--space-5);
-	}
+  .page-header {
+    margin-bottom: var(--space-5);
+  }
 
-	.header-content {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2);
-	}
+  .header-content {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
 
-	.prompt {
-		font-family: var(--font-mono);
-		color: var(--color-success);
-		font-weight: 600;
-	}
+  .prompt {
+    font-family: var(--font-mono);
+    color: var(--color-success);
+    font-weight: 600;
+  }
 
-	.command {
-		font-family: var(--font-mono);
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
-	}
+  .command {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+  }
 
-	.empty-state {
-		text-align: center;
-		padding: var(--space-8) var(--space-4);
-	}
+  .empty-state {
+    text-align: center;
+    padding: var(--space-8) var(--space-4);
+  }
 
-	.empty-icon {
-		display: block;
-		margin-bottom: var(--space-3);
-		color: var(--color-text-muted);
-	}
+  .empty-icon {
+    display: block;
+    margin-bottom: var(--space-3);
+    color: var(--color-text-muted);
+  }
 
-	.empty-state h3 {
-		font-family: var(--font-mono);
-		font-size: var(--font-size-sm);
-		font-weight: 600;
-		color: var(--color-text);
-		margin: 0 0 var(--space-2);
-	}
+  .empty-state h3 {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-text);
+    margin: 0 0 var(--space-2);
+  }
 
-	.empty-state p {
-		color: var(--color-text-muted);
-		font-size: var(--font-size-sm);
-		margin: 0 0 var(--space-4);
-	}
+  .empty-state p {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    margin: 0 0 var(--space-4);
+  }
 
-	.api-key-section {
-		padding: var(--space-2) 0;
-	}
+  .api-key-section {
+    padding: var(--space-2) 0;
+  }
 
-	.api-key-header {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2);
-		margin-bottom: var(--space-3);
-	}
+  .api-key-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+  }
 
-	.api-key-icon {
-		color: var(--color-text-muted);
-	}
+  .api-key-icon {
+    color: var(--color-text-muted);
+  }
 
-	.api-key-title {
-		font-family: var(--font-mono);
-		font-size: var(--font-size-xs);
-		font-weight: 600;
-		color: var(--color-text);
-		text-transform: uppercase;
-	}
+  .api-key-title {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--color-text);
+    text-transform: uppercase;
+  }
 
   .api-key-input-section {
     display: flex;
@@ -582,5 +582,36 @@
     gap: var(--space-2);
     flex-shrink: 0;
   }
-</style>
+  @media (max-width: 640px) {
+    .files-page {
+      max-width: 100%;
+    }
 
+    .api-key-row {
+      flex-direction: column;
+    }
+
+    .api-key-input {
+      max-width: 100%;
+    }
+
+    .file-card {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--space-3);
+    }
+
+    .file-actions {
+      width: 100%;
+      justify-content: flex-end;
+    }
+
+    .file-meta {
+      flex-wrap: wrap;
+    }
+
+    .upload-zone {
+      padding: var(--space-5) var(--space-3);
+    }
+  }
+</style>
