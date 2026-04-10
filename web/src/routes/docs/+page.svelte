@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import Logo from "$lib/components/Logo.svelte";
 
   let sidebarOpen = $state(false);
   let activeSection = $state("authentication");
@@ -173,12 +174,8 @@
   <!-- HEADER -->
   <header class="header">
     <a href="/" class="logo">
-      <div class="logo-mark">
-        <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
-          <path d="M2 2L6 10L10 2" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </div>
-      kyro
+      <Logo size={20} />
+      <span class="logo-text">kyro</span>
     </a>
     <nav class="header-nav">
       <button class="hamburger" onclick={() => (sidebarOpen = true)} aria-label="Open menu">

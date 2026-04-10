@@ -46,6 +46,13 @@
     $user?.role === "owner" || $user?.role === "admin",
   );
 
+  const availableScopes = $derived(() => {
+    if ($user?.role === 'owner' || $user?.role === 'admin') {
+      return ['read', 'write', 'admin'];
+    }
+    return ['read'];
+  });
+
   const filteredKeys = $derived(() => {
     if (filter === "active") return data.keys.filter((k) => !k.revokedAt);
     if (filter === "revoked") return data.keys.filter((k) => k.revokedAt);
@@ -239,7 +246,7 @@
     <div class="form-group">
       <label>scopes</label>
       <div class="scopes-grid">
-        {#each ["read", "write", "admin"] as scope}
+        {#each availableScopes() as scope}
           <label class="scope-checkbox">
             <input
               type="checkbox"

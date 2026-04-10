@@ -58,7 +58,7 @@
   - [x] files:list
   - [x] files:delete
 - [x] Middleware to enforce scope checks
-- [ ] Map UI permissions → internal scopes
+- [x] Map UI permissions → internal scopes
 
 ---
 
