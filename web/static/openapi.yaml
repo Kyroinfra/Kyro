@@ -1,0 +1,936 @@
+openapi: 3.1.0
+info:
+  title: Kyro API
+  version: 1.0.0
+  description: |
+    Kyro is a language-agnostic API platform for file storage and management.
+    
+    ## Authentication
+    Kyro supports two authentication methods:
+    
+    ### Bearer Token (JWT)
+    For dashboard/API management operations:
+    ```
+    Authorization: Bearer <jwt_token>
+    ```
+    
+    ### API Key
+    For file operations:
+    ```
+    X-API-Key: kyro_live_<key>
+    ```
+    
+    ## Base URL
+    - Production: `https://api.kyro.io/api/v1`
+    - Development: `http://localhost:3000/api/v1`
+    
+    ## Response Format
+    
+    ### Success Response
+    ```json
+    {
+      "data": { ... }
+    }
+    ```
+    
+    ### Error Response
+    ```json
+    {
+      "error": {
+        "message": "Error description",
+        "code": "error_code",
+        "details": [ ... ]
+      }
+    }
+    ```
+    
+    ## Rate Limiting
+    - 100 requests per minute per API key
+    - Returns `429 Too Many Requests` when exceeded
+    
+    ## Pagination
+    List endpoints support cursor-based pagination via `limit` and `cursor` query parameters.
+
+  contact:
+    name: Kyro Support
+    url: https://kyro.io
+  license:
+    name: Proprietary
+
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Development
+  - url: https://api.kyro.io/api/v1
+    description: Production
+
+tags:
+  - name: Authentication
+    description: User registration and login
+  - name: Organisation
+    description: Workspace management
+  - name: API Keys
+    description: API key lifecycle management
+  - name: Files
+    description: File upload, download, and management
+  - name: Usage
+    description: Usage analytics and reporting
+
+paths:
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register new user and organisation
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+                - orgName
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: User email address
+                  example: john@example.com
+                password:
+                  type: string
+                  format: password
+                  minLength: 8
+                  description: User password (min 8 characters)
+                  example: securePassword123
+                orgName:
+                  type: string
+                  minLength: 1
+                  maxLength: 255
+                  description: Organisation name
+                  example: Acme Inc
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: JWT authentication token
+                  user:
+                    $ref: '#/components/schemas/User'
+              example:
+                token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                user:
+                  id: 550e8400-e29b-41d4-a716-446655440000
+                  email: john@example.com
+                  role: owner
+                  orgId: 550e8400-e29b-41d4-a716-446655440001
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Login user
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: john@example.com
+                password:
+                  type: string
+                  format: password
+                  example: securePassword123
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/me:
+    get:
+      tags:
+        - Authentication
+      summary: Get current user
+      operationId: getMe
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current user details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /org:
+    get:
+      tags:
+        - Organisation
+      summary: Get current organisation
+      operationId: getOrg
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Organisation details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organisation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /org/members:
+    get:
+      tags:
+        - Organisation
+      summary: List organisation members
+      operationId: listMembers
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Member'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags:
+        - Organisation
+      summary: Invite new member
+      operationId: inviteMember
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+                role:
+                  type: string
+                  enum: [owner, admin, member]
+                  default: member
+      responses:
+        '201':
+          description: Member invited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Member'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /org/members/{id}:
+    delete:
+      tags:
+        - Organisation
+      summary: Remove member
+      operationId: removeMember
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Member removed
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /keys:
+    get:
+      tags:
+        - API Keys
+      summary: List API keys
+      operationId: listKeys
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+            maximum: 100
+        - name: cursor
+          in: query
+          schema:
+            type: string
+          description: Pagination cursor
+      responses:
+        '200':
+          description: List of API keys
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApiKey'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags:
+        - API Keys
+      summary: Create API key
+      operationId: createKey
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 255
+                  description: Key name
+                scopes:
+                  type: array
+                  items:
+                    type: string
+                    enum: [read, write, admin]
+                  default: [read]
+                  description: Key permissions
+      responses:
+        '201':
+          description: API key created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                  key_prefix:
+                    type: string
+                  scopes:
+                    type: array
+                    items:
+                      type: string
+                  last_used_at:
+                    type: string
+                    format: date-time
+                    nullable: true
+                  revoked_at:
+                    type: string
+                    format: date-time
+                    nullable: true
+                  created_at:
+                    type: string
+                    format: date-time
+                  key:
+                    type: string
+                    description: The raw API key - only shown once at creation!
+              example:
+                id: 550e8400-e29b-41d4-a716-446655440000
+                name: Production Key
+                key_prefix: kyro_live_abc
+                scopes: ["read", "write"]
+                last_used_at: null
+                revoked_at: null
+                created_at: 2024-01-15T10:30:00Z
+                key: kyro_live_abc123def456...
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /keys/{id}:
+    delete:
+      tags:
+        - API Keys
+      summary: Revoke API key
+      operationId: revokeKey
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Key revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  id:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /files:
+    get:
+      tags:
+        - Files
+      summary: List files
+      operationId: listFiles
+      security:
+        - apiKey: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+            maximum: 100
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of files
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/File'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags:
+        - Files
+      summary: Upload file
+      operationId: uploadFile
+      security:
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: File to upload
+      responses:
+        '201':
+          description: File uploaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/File'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+
+  /files/{id}:
+    get:
+      tags:
+        - Files
+      summary: Download file
+      operationId: downloadFile
+      security:
+        - apiKey: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: File content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags:
+        - Files
+      summary: Delete file
+      operationId: deleteFile
+      security:
+        - apiKey: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: File UUID
+      responses:
+        '200':
+          description: File deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  id:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /usage:
+    get:
+      tags:
+        - Usage
+      summary: Get usage statistics
+      operationId: getUsage
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: start_date
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Start date (YYYY-MM-DD)
+        - name: end_date
+          in: query
+          schema:
+            type: string
+            format: date
+          description: End date (YYYY-MM-DD)
+      responses:
+        '200':
+          description: Usage statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageStats'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /usage/daily:
+    get:
+      tags:
+        - Usage
+      summary: Get daily usage breakdown
+      operationId: getDailyUsage
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: start_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Daily usage data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    date:
+                      type: string
+                      format: date
+                    requests:
+                      type: integer
+                    bytes_in:
+                      type: integer
+                    bytes_out:
+                      type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check endpoint
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT token obtained from `/auth/login` or `/auth/register`.
+        Include in Authorization header: `Bearer <token>`
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: |
+        API key with `kyro_live_` prefix. Obtained from `/keys` endpoint.
+        Required for file operations.
+
+  responses:
+    BadRequest:
+      description: Invalid request body
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              message: Invalid input
+              code: invalid_request
+              details:
+                - message: Email is required
+                  path: email
+
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              message: No token provided
+              code: unauthorized
+
+    Forbidden:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              message: Insufficient permissions
+              code: forbidden
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              message: Resource not found
+              code: not_found
+
+    Conflict:
+      description: Resource already exists
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              message: Email already registered
+              code: conflict
+
+    PayloadTooLarge:
+      description: File too large
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              message: File too large
+              code: payload_too_large
+
+    TooManyRequests:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  retryAfter:
+                    type: number
+          example:
+            error:
+              message: Too many requests
+              retryAfter: 30
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              message: Internal server error
+              code: internal_error
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            message:
+              type: string
+              description: Human-readable error message
+            code:
+              type: string
+              description: Machine-readable error code
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  path:
+                    type: string
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [owner, admin, member]
+        orgId:
+          type: string
+          format: uuid
+      example:
+        id: 550e8400-e29b-41d4-a716-446655440000
+        email: john@example.com
+        role: owner
+        orgId: 550e8400-e29b-41d4-a716-446655440001
+
+    Organisation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        plan:
+          type: string
+          enum: [free, pro, enterprise]
+          default: free
+        createdAt:
+          type: string
+          format: date-time
+      example:
+        id: 550e8400-e29b-41d4-a716-446655440001
+        name: Acme Inc
+        slug: acme-inc
+        plan: free
+        createdAt: 2024-01-15T10:00:00Z
+
+    Member:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [owner, admin, member]
+        createdAt:
+          type: string
+          format: date-time
+
+    ApiKey:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        key_prefix:
+          type: string
+          description: First 16 characters of the key
+        scopes:
+          type: array
+          items:
+            type: string
+            enum: [read, write, admin]
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    File:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Original filename
+        mimeType:
+          type: string
+          description: MIME type
+        sizeBytes:
+          type: integer
+          description: File size in bytes
+        createdAt:
+          type: string
+          format: date-time
+      example:
+        id: 550e8400-e29b-41d4-a716-446655440002
+        name: document.pdf
+        mimeType: application/pdf
+        sizeBytes: 1048576
+        createdAt: 2024-01-15T10:30:00Z
+
+    UsageStats:
+      type: object
+      properties:
+        total_requests:
+          type: integer
+          description: Total API requests
+        total_bytes_in:
+          type: integer
+          description: Total bytes received
+        total_bytes_out:
+          type: integer
+          description: Total bytes sent
+        total_storage:
+          type: integer
+          description: Total storage used in bytes
+        active_api_keys:
+          type: integer
+          description: Number of active API keys
+      example:
+        total_requests: 1523
+        total_bytes_in: 52428800
+        total_bytes_out: 104857600
+        total_storage: 1073741824
+        active_api_keys: 3

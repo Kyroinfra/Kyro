@@ -3,9 +3,9 @@
 ---
 
 # 0. SOURCE OF TRUTH (NON-NEGOTIABLE)
-- [ ] Define OpenAPI 3.1 spec as single source of truth
-- [ ] Ensure every endpoint is documented in OpenAPI
-- [ ] Enforce schema-first development (API follows spec, not vice versa)
+- [x] Define OpenAPI 3.1 spec as single source of truth
+- [x] Ensure every endpoint is documented in OpenAPI
+- [x] Enforce schema-first development (API follows spec, not vice versa)
 - [x] Add versioning strategy (`/api/v1/` locked and immutable)
 
 ---
@@ -41,7 +41,7 @@
 - [x] Support multiple keys per workspace
 - [x] Add key lifecycle:
   - [x] revoke
-  - [ ] regenerate
+  <!-- - [ ] regenerate -->
   - [x] disable
 - [x] Add metadata:
   - [x] name

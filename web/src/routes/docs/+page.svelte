@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import Logo from "$lib/components/Logo.svelte";
 
   let sidebarOpen = $state(false);
   let activeSection = $state("authentication");
@@ -9,314 +8,160 @@
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            activeSection = entry.target.id;
-          }
+          if (entry.isIntersecting) activeSection = entry.target.id;
         });
       },
-      { rootMargin: "-100px 0px -60% 0px" }
+      { rootMargin: "-80px 0px -60% 0px" }
     );
-
-    document.querySelectorAll(".doc-section").forEach((section) => {
-      observer.observe(section);
-    });
-
+    document.querySelectorAll(".doc-section").forEach((s) => observer.observe(s));
     return () => observer.disconnect();
   });
 
   const sections = [
-    { id: "authentication", label: "Authentication" },
-    { id: "scopes", label: "Scopes" },
+    { id: "openapi",       label: "OpenAPI Spec" },
+    { id: "authentication",label: "Authentication" },
+    { id: "scopes",        label: "Scopes" },
     { id: "rate-limiting", label: "Rate Limiting" },
-    { id: "files", label: "Files" },
-    { id: "keys", label: "API Keys" },
-    { id: "usage", label: "Usage" },
-    { id: "org", label: "Organisation" },
-    { id: "auth", label: "Auth" },
-    { id: "quickstart", label: "Quickstart" },
-    { id: "errors", label: "Errors" },
+    { id: "files",         label: "Files" },
+    { id: "keys",          label: "API Keys" },
+    { id: "usage",         label: "Usage" },
+    { id: "org",           label: "Organisation" },
+    { id: "auth",          label: "Auth" },
+    { id: "quickstart",    label: "Quickstart" },
+    { id: "errors",        label: "Errors" },
   ];
 
   const scopes = [
-    { name: "read", desc: "Read files, list files, get usage data" },
+    { name: "read",  desc: "Read files, list files, get usage data" },
     { name: "write", desc: "Upload, delete files, create keys" },
     { name: "admin", desc: "Full access including org management" },
   ];
 
   const fileTypes = [
-    "image/jpeg", "image/png", "image/gif", "image/webp",
-    "application/pdf", "text/plain", "text/csv", "application/json",
-    "application/zip", "application/x-zip-compressed", "application/octet-stream",
-    "audio/mpeg", "audio/wav", "video/mp4", "video/webp"
+    "image/jpeg","image/png","image/gif","image/webp",
+    "application/pdf","text/plain","text/csv","application/json",
+    "application/zip","application/x-zip-compressed","application/octet-stream",
+    "audio/mpeg","audio/wav","video/mp4","video/webp",
   ];
 
   const errors = [
-    { code: 400, msg: "Bad Request - Invalid input or missing fields" },
-    { code: 401, msg: "Unauthorized - Missing or invalid API key / JWT token" },
-    { code: 403, msg: "Forbidden - Insufficient scope or permissions" },
-    { code: 404, msg: "Not Found - Resource does not exist" },
-    { code: 409, msg: "Conflict - Resource already exists" },
-    { code: 413, msg: "Payload Too Large - File exceeds 100MB limit" },
-    { code: 415, msg: "Unsupported Media Type - Invalid file MIME type" },
-    { code: 422, msg: "Unprocessable Entity - Validation failed" },
-    { code: 429, msg: "Too Many Requests - Rate limit exceeded" },
-    { code: 500, msg: "Internal Server Error - Unexpected server error" },
-    { code: 503, msg: "Service Unavailable - Backend degraded" },
+    { code: 400, msg: "Bad Request — invalid input or missing fields" },
+    { code: 401, msg: "Unauthorized — missing or invalid API key / JWT" },
+    { code: 403, msg: "Forbidden — insufficient scope or permissions" },
+    { code: 404, msg: "Not Found — resource does not exist" },
+    { code: 409, msg: "Conflict — resource already exists" },
+    { code: 413, msg: "Payload Too Large — file exceeds 100MB limit" },
+    { code: 415, msg: "Unsupported Media Type — invalid MIME type" },
+    { code: 422, msg: "Unprocessable Entity — validation failed" },
+    { code: 429, msg: "Too Many Requests — rate limit exceeded" },
+    { code: 500, msg: "Internal Server Error — unexpected server error" },
+    { code: 503, msg: "Service Unavailable — backend degraded" },
   ];
 
   const endpoints = {
     files: [
       {
-        method: "POST",
-        path: "/api/v1/files",
-        desc: "Upload a new file",
-        scope: "write",
-        body: { file: "File (multipart/form-data)" },
-        response: `{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "name": "document.pdf",
-  "mimeType": "application/pdf",
-  "sizeBytes": 1024000,
-  "createdAt": "2026-04-10T12:00:00Z"
-}`,
-        errors: [400, 413, 415, 403, 500]
+        method: "POST", path: "/api/v1/files", scope: "write",
+        desc: "Upload a new file.",
+        body: `file — File (multipart/form-data)`,
+        response: `{\n  "id": "550e8400-e29b-41d4-a716-446655440000",\n  "name": "document.pdf",\n  "mimeType": "application/pdf",\n  "sizeBytes": 1024000,\n  "createdAt": "2026-04-10T12:00:00Z"\n}`,
       },
       {
-        method: "GET",
-        path: "/api/v1/files",
-        desc: "List all files",
-        scope: "read",
-        params: [],
-        response: `[
-  {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "name": "document.pdf",
-    "mimeType": "application/pdf",
-    "sizeBytes": 1024000,
-    "createdAt": "2026-04-10T12:00:00Z"
-  }
-]`,
-        errors: [500]
+        method: "GET", path: "/api/v1/files", scope: "read",
+        desc: "List all files.",
+        response: `[{\n  "id": "550e8400-e29b-41d4-a716-446655440000",\n  "name": "document.pdf",\n  "mimeType": "application/pdf",\n  "sizeBytes": 1024000,\n  "createdAt": "2026-04-10T12:00:00Z"\n}]`,
       },
       {
-        method: "GET",
-        path: "/api/v1/files/:id",
-        desc: "Download a file",
-        scope: "read",
-        params: [{ name: "id", type: "string", desc: "File ID" }],
-        response: "Binary file data with appropriate Content-Type header",
-        errors: [404, 500]
+        method: "GET", path: "/api/v1/files/:id", scope: "read",
+        desc: "Download a file by ID.",
+        params: [{ name: "id", type: "string", desc: "File UUID" }],
+        response: `Binary file data with appropriate Content-Type header.`,
+        responsePlain: true,
       },
       {
-        method: "DELETE",
-        path: "/api/v1/files/:id",
-        desc: "Delete a file",
-        scope: "write",
-        params: [{ name: "id", type: "string", desc: "File ID" }],
-        response: `{
-  "message": "File deleted",
-  "id": "550e8400-e29b-41d4-a716-446655440000"
-}`,
-        errors: [404, 500]
-      }
+        method: "DELETE", path: "/api/v1/files/:id", scope: "write",
+        desc: "Delete a file permanently.",
+        params: [{ name: "id", type: "string", desc: "File UUID" }],
+        response: `{\n  "message": "File deleted",\n  "id": "550e8400-e29b-41d4-a716-446655440000"\n}`,
+      },
     ],
     keys: [
       {
-        method: "POST",
-        path: "/api/v1/keys",
-        desc: "Create a new API key (JWT required)",
-        auth: "Bearer JWT",
+        method: "POST", path: "/api/v1/keys", auth: "Bearer JWT",
+        desc: "Create a new API key.",
         body: `{ "name": "Production Key", "scopes": ["read", "write"] }`,
-        response: `{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "name": "Production Key",
-  "key_prefix": "kyr_abc123",
-  "scopes": ["read", "write"],
-  "key": "kyr_abc123xyz...",
-  "created_at": "2026-04-10T12:00:00Z"
-}`,
-        errors: [400, 401, 403, 500]
+        response: `{\n  "id": "550e8400-e29b-41d4-a716-446655440000",\n  "name": "Production Key",\n  "key_prefix": "kyr_abc123",\n  "scopes": ["read", "write"],\n  "key": "kyr_abc123xyz...",\n  "created_at": "2026-04-10T12:00:00Z"\n}`,
       },
       {
-        method: "GET",
-        path: "/api/v1/keys",
-        desc: "List all API keys (JWT required)",
-        auth: "Bearer JWT",
-        response: `[
-  {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "name": "Production Key",
-    "key_prefix": "kyr_abc123",
-    "scopes": ["read", "write"],
-    "last_used_at": "2026-04-10T12:00:00Z",
-    "revoked_at": null,
-    "created_at": "2026-04-10T12:00:00Z"
-  }
-]`,
-        errors: [401, 500]
+        method: "GET", path: "/api/v1/keys", auth: "Bearer JWT",
+        desc: "List all API keys for the authenticated user.",
+        response: `[{\n  "id": "550e8400-e29b-41d4-a716-446655440000",\n  "name": "Production Key",\n  "key_prefix": "kyr_abc123",\n  "scopes": ["read", "write"],\n  "last_used_at": "2026-04-10T12:00:00Z",\n  "revoked_at": null,\n  "created_at": "2026-04-10T12:00:00Z"\n}]`,
       },
       {
-        method: "DELETE",
-        path: "/api/v1/keys/:id",
-        desc: "Revoke an API key (JWT required)",
-        auth: "Bearer JWT",
-        response: `{
-  "message": "API key revoked",
-  "id": "550e8400-e29b-41d4-a716-446655440000"
-}`,
-        errors: [401, 404, 500]
-      }
+        method: "DELETE", path: "/api/v1/keys/:id", auth: "Bearer JWT",
+        desc: "Revoke an API key permanently.",
+        response: `{\n  "message": "API key revoked",\n  "id": "550e8400-e29b-41d4-a716-446655440000"\n}`,
+      },
     ],
     usage: [
       {
-        method: "GET",
-        path: "/api/v1/usage",
-        desc: "Get overall usage statistics (JWT required)",
-        auth: "Bearer JWT",
-        response: `{
-  "total_requests": 1250,
-  "total_bytes_in": 52428800,
-  "total_bytes_out": 104857600,
-  "total_storage": 1073741824,
-  "active_api_keys": 3
-}`,
-        errors: [401, 500]
+        method: "GET", path: "/api/v1/usage", auth: "Bearer JWT",
+        desc: "Get overall usage statistics.",
+        response: `{\n  "total_requests": 1250,\n  "total_bytes_in": 52428800,\n  "total_bytes_out": 104857600,\n  "total_storage": 1073741824,\n  "active_api_keys": 3\n}`,
       },
       {
-        method: "GET",
-        path: "/api/v1/usage/daily",
-        desc: "Get daily usage breakdown (JWT required)",
-        auth: "Bearer JWT",
+        method: "GET", path: "/api/v1/usage/daily", auth: "Bearer JWT",
+        desc: "Get daily usage breakdown.",
         params: [
           { name: "start_date", type: "string", desc: "ISO date (optional)" },
-          { name: "end_date", type: "string", desc: "ISO date (optional)" }
+          { name: "end_date",   type: "string", desc: "ISO date (optional)" },
         ],
-        response: `[
-  {
-    "date": "2026-04-10",
-    "requests": 150,
-    "bytes_in": 5242880,
-    "bytes_out": 10485760
-  }
-]`,
-        errors: [401, 500]
-      }
+        response: `[{\n  "date": "2026-04-10",\n  "requests": 150,\n  "bytes_in": 5242880,\n  "bytes_out": 10485760\n}]`,
+      },
     ],
     org: [
       {
-        method: "GET",
-        path: "/api/v1/org",
-        desc: "Get current organisation (JWT required)",
-        auth: "Bearer JWT",
-        response: `{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "name": "Acme Inc",
-  "slug": "acme-inc",
-  "plan": "free",
-  "createdAt": "2026-04-10T12:00:00Z"
-}`,
-        errors: [401, 404, 500]
+        method: "GET", path: "/api/v1/org", auth: "Bearer JWT",
+        desc: "Get the current organisation.",
+        response: `{\n  "id": "550e8400-e29b-41d4-a716-446655440000",\n  "name": "Acme Inc",\n  "slug": "acme-inc",\n  "plan": "free",\n  "createdAt": "2026-04-10T12:00:00Z"\n}`,
       },
       {
-        method: "GET",
-        path: "/api/v1/org/members",
-        desc: "List organisation members (JWT required)",
-        auth: "Bearer JWT",
-        response: `[
-  {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "email": "admin@acme.com",
-    "role": "owner",
-    "createdAt": "2026-04-10T12:00:00Z"
-  }
-]`,
-        errors: [401, 500]
+        method: "GET", path: "/api/v1/org/members", auth: "Bearer JWT",
+        desc: "List all organisation members.",
+        response: `[{\n  "id": "550e8400-e29b-41d4-a716-446655440000",\n  "email": "admin@acme.com",\n  "role": "owner",\n  "createdAt": "2026-04-10T12:00:00Z"\n}]`,
       },
       {
-        method: "POST",
-        path: "/api/v1/org/members",
-        desc: "Invite a new member (JWT required, owner only)",
-        auth: "Bearer JWT",
+        method: "POST", path: "/api/v1/org/members", auth: "Bearer JWT · owner only",
+        desc: "Invite a new member to the organisation.",
         body: `{ "email": "user@acme.com", "password": "secure123", "role": "member" }`,
-        response: `{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "email": "user@acme.com",
-  "role": "member"
-}`,
-        errors: [400, 401, 403, 500]
+        response: `{ "id": "...", "email": "user@acme.com", "role": "member" }`,
       },
       {
-        method: "DELETE",
-        path: "/api/v1/org/members/:id",
-        desc: "Remove a member (JWT required, owner/admin)",
-        auth: "Bearer JWT",
-        response: "204 No Content",
-        errors: [401, 403, 404, 500]
-      }
+        method: "DELETE", path: "/api/v1/org/members/:id", auth: "Bearer JWT · owner/admin",
+        desc: "Remove a member from the organisation.",
+        response: `204 No Content`,
+        responsePlain: true,
+      },
     ],
     auth: [
       {
-        method: "POST",
-        path: "/api/v1/auth/register",
-        desc: "Register a new organisation and user",
+        method: "POST", path: "/api/v1/auth/register",
+        desc: "Register a new organisation and admin user.",
         body: `{ "orgName": "Acme Inc", "email": "admin@acme.com", "password": "secure123" }`,
-        response: `{
-  "token": "eyJhbGciOiJIUzI1NiIs...",
-  "user": {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "email": "admin@acme.com",
-    "role": "owner",
-    "orgId": "550e8400-e29b-41d4-a716-446655440000"
-  }
-}`,
-        errors: [400, 500]
+        response: `{\n  "token": "eyJhbGciOiJIUzI1NiIs...",\n  "user": {\n    "id": "550e8400-e29b-41d4-a716-446655440000",\n    "email": "admin@acme.com",\n    "role": "owner",\n    "orgId": "550e8400-e29b-41d4-a716-446655440000"\n  }\n}`,
       },
       {
-        method: "POST",
-        path: "/api/v1/auth/login",
-        desc: "Login with email and password",
+        method: "POST", path: "/api/v1/auth/login",
+        desc: "Login with email and password to receive a JWT.",
         body: `{ "email": "admin@acme.com", "password": "secure123" }`,
-        response: `{
-  "token": "eyJhbGciOiJIUzI1NiIs...",
-  "user": {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "email": "admin@acme.com",
-    "role": "owner",
-    "orgId": "550e8400-e29b-41d4-a716-446655440000"
-  }
-}`,
-        errors: [400, 401, 500]
+        response: `{\n  "token": "eyJhbGciOiJIUzI1NiIs...",\n  "user": { "id": "...", "email": "...", "role": "owner", "orgId": "..." }\n}`,
       },
       {
-        method: "GET",
-        path: "/api/v1/auth/me",
-        desc: "Get current authenticated user (JWT required)",
-        auth: "Bearer JWT",
-        response: `{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "email": "admin@acme.com",
-  "role": "owner",
-  "orgId": "550e8400-e29b-41d4-a716-446655440000"
-}`,
-        errors: [401, 404, 500]
-      }
+        method: "GET", path: "/api/v1/auth/me", auth: "Bearer JWT",
+        desc: "Get the current authenticated user.",
+        response: `{\n  "id": "550e8400-e29b-41d4-a716-446655440000",\n  "email": "admin@acme.com",\n  "role": "owner",\n  "orgId": "550e8400-e29b-41d4-a716-446655440000"\n}`,
+      },
     ],
-    health: [
-      {
-        method: "GET",
-        path: "/health",
-        desc: "Check API health status",
-        response: `{
-  "status": "ok",
-  "uptime": 3600,
-  "test": "Kyro",
-  "timestamp": "2026-04-10T12:00:00.000Z",
-  "database": "connected",
-  "redis": "connected"
-}`,
-        errors: [503]
-      }
-    ]
   };
 </script>
 
@@ -324,18 +169,23 @@
   <title>Docs — Kyro</title>
 </svelte:head>
 
-<div class="docs-page">
-  <header class="docs-header">
+<div class="page">
+  <!-- HEADER -->
+  <header class="header">
     <a href="/" class="logo">
-      <Logo size={20} />
-      <span>kyro</span>
+      <div class="logo-mark">
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+          <path d="M2 2L6 10L10 2" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      kyro
     </a>
-    <nav class="docs-nav">
+    <nav class="header-nav">
       <button class="hamburger" onclick={() => (sidebarOpen = true)} aria-label="Open menu">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <line x1="3" y1="6" x2="21" y2="6" />
-          <line x1="3" y1="12" x2="21" y2="12" />
-          <line x1="3" y1="18" x2="21" y2="18" />
+          <line x1="3" y1="6" x2="21" y2="6"/>
+          <line x1="3" y1="12" x2="21" y2="12"/>
+          <line x1="3" y1="18" x2="21" y2="18"/>
         </svg>
       </button>
       <a href="/health">status</a>
@@ -343,91 +193,129 @@
     </nav>
   </header>
 
-  <div class="docs-layout">
+  <div class="layout">
+    <!-- OVERLAY -->
     {#if sidebarOpen}
-      <div class="sidebar-overlay" onclick={() => (sidebarOpen = false)}></div>
+      <div class="overlay" onclick={() => (sidebarOpen = false)}></div>
     {/if}
 
-    <aside class="docs-sidebar" class:open={sidebarOpen}>
+    <!-- SIDEBAR -->
+    <aside class="sidebar" class:open={sidebarOpen}>
       <div class="sidebar-header">
-        <span class="sidebar-title">docs</span>
-        <button class="sidebar-close" onclick={() => (sidebarOpen = false)} aria-label="Close menu">✕</button>
+        <span>docs</span>
+        <button class="sidebar-close" onclick={() => (sidebarOpen = false)}>✕</button>
       </div>
+      <span class="sidebar-group-label">reference</span>
       <nav class="sidebar-nav">
-        {#each sections as section}
-          <a href="#{section.id}" class="sidebar-link" class:active={activeSection === section.id} onclick={() => (sidebarOpen = false)}>{section.label}</a>
+        {#each sections as s}
+          <a
+            href="#{s.id}"
+            class="sidebar-link"
+            class:active={activeSection === s.id}
+            onclick={() => (sidebarOpen = false)}
+          >{s.label}</a>
         {/each}
       </nav>
     </aside>
 
-    <main class="docs-content">
+    <!-- MAIN -->
+    <main class="content">
+
+      <!-- OPENAPI -->
+      <section id="openapi" class="doc-section">
+        <h2 class="section-title">OpenAPI 3.1 Specification</h2>
+        <p class="section-desc">The complete API specification as an OpenAPI 3.1 document — the single source of truth for the Kyro API.</p>
+
+        <div class="card-grid">
+          <div class="card">
+            <h3><span class="chip chip-green">OpenAPI YAML</span></h3>
+            <p>Full API spec with all endpoints, schemas, and examples.</p>
+            <a href="/openapi.yaml" target="_blank" class="spec-link">
+              View OpenAPI spec
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                <polyline points="15 3 21 3 21 9"/>
+                <line x1="10" y1="14" x2="21" y2="3"/>
+              </svg>
+            </a>
+          </div>
+          <div class="card">
+            <h3><span class="chip chip-blue">Generated SDKs</span></h3>
+            <p>Auto-generate TypeScript, Python, Go, and more from this spec.</p>
+            <div class="tag-row">
+              {#each ["TypeScript","Python","Go","Java","Rust"] as lang}
+                <span class="tag">{lang}</span>
+              {/each}
+            </div>
+          </div>
+        </div>
+
+        <h4 class="field-label">Specification details</h4>
+        <table class="data-table">
+          <tbody>
+            <tr><td class="td-key">Version</td><td><code>3.1.0</code></td></tr>
+            <tr><td class="td-key">Format</td><td><code>YAML</code></td></tr>
+            <tr><td class="td-key">Base URL</td><td><code>/api/v1</code></td></tr>
+            <tr><td class="td-key">Auth methods</td><td><code>Bearer JWT</code> &nbsp;<code>X-API-Key</code></td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- AUTHENTICATION -->
       <section id="authentication" class="doc-section">
         <h2 class="section-title">Authentication</h2>
-        <p class="section-desc">
-          Kyro supports two authentication methods depending on the endpoint:
-        </p>
+        <p class="section-desc">Kyro supports two authentication methods depending on the endpoint.</p>
 
-        <div class="auth-methods">
+        <div class="auth-grid">
           <div class="auth-card">
-            <h3><span class="chip chip-get">API Key</span> For API requests</h3>
+            <h3><span class="chip chip-green">API Key</span> For API requests</h3>
             <p>Pass your API key in the <code>X-Api-Key</code> header:</p>
-            <pre><code><span class="c-kw">X-Api-Key</span>: <span class="c-str">kyr_abc123xyz...</span></code></pre>
-            <p class="hint">Use for files, keys listing, and usage endpoints.</p>
+            <pre><code><span class="ck">X-Api-Key</span>: <span class="cs">kyr_abc123xyz...</span></code></pre>
+            <p class="hint">Use for files, key listing, and usage endpoints.</p>
           </div>
-
           <div class="auth-card">
-            <h3><span class="chip chip-post">JWT</span> For user actions</h3>
-            <p>Pass your JWT token in the <code>Authorization</code> header:</p>
-            <pre><code><span class="c-kw">Authorization</span>: <span class="c-str">Bearer eyJhbGciOiJIUzI1NiIs...</span></code></pre>
+            <h3><span class="chip chip-blue">JWT</span> For user actions</h3>
+            <p>Pass your JWT in the <code>Authorization</code> header:</p>
+            <pre><code><span class="ck">Authorization</span>: <span class="cs">Bearer eyJhbGci...</span></code></pre>
             <p class="hint">Use for creating keys, org management, and usage data.</p>
           </div>
         </div>
       </section>
 
+      <!-- SCOPES -->
       <section id="scopes" class="doc-section">
         <h2 class="section-title">Scopes</h2>
-        <p class="section-desc">
-          API keys are scoped to control access. Request the minimum scope needed.
-        </p>
+        <p class="section-desc">API keys are scoped to control access. Request the minimum scope needed.</p>
 
         <div class="scopes-grid">
           {#each scopes as scope}
             <div class="scope-card">
-              <div class="scope-header">
-                <code class="scope-name">{scope.name}</code>
-              </div>
+              <span class="scope-name">{scope.name}</span>
               <p class="scope-desc">{scope.desc}</p>
             </div>
           {/each}
         </div>
 
-        <div class="scope-example">
-          <h4>Example: Key with minimum necessary scope</h4>
-          <pre><code>{`{
+        <h4 class="field-label">Example — minimum necessary scope</h4>
+        <pre><code>{`{
   "name": "Read-only Key",
-  "scopes": ["read"]  // Only for listing/downloading files
+  "scopes": ["read"]
 }`}</code></pre>
-        </div>
       </section>
 
+      <!-- RATE LIMITING -->
       <section id="rate-limiting" class="doc-section">
         <h2 class="section-title">Rate Limiting</h2>
-        <p class="section-desc">
-          All API requests are rate-limited to protect your infrastructure.
-        </p>
+        <p class="section-desc">All API requests are rate-limited to protect your infrastructure.</p>
 
-        <div class="rate-info">
-          <div class="rate-stat">
-            <span class="rate-value">100</span>
-            <span class="rate-label">requests / minute</span>
-          </div>
+        <div class="rate-hero">
+          <span class="rate-num">100</span>
+          <span class="rate-unit">requests / minute</span>
         </div>
 
-        <h4>Response headers</h4>
+        <h4 class="field-label">Response headers</h4>
         <table class="data-table">
-          <thead>
-            <tr><th>Header</th><th>Description</th></tr>
-          </thead>
+          <thead><tr><th>Header</th><th>Description</th></tr></thead>
           <tbody>
             <tr><td><code>X-RateLimit-Limit</code></td><td>Maximum requests per window</td></tr>
             <tr><td><code>X-RateLimit-Remaining</code></td><td>Requests remaining in window</td></tr>
@@ -435,987 +323,925 @@
           </tbody>
         </table>
 
-        <h4>429 Response</h4>
-        <pre><code>{`{
-  "error": "Too many requests",
-  "retryAfter": 45.5
-}`}</code></pre>
+        <h4 class="field-label">429 response body</h4>
+        <pre><code>{`{\n  "error": "Too many requests",\n  "retryAfter": 45.5\n}`}</code></pre>
       </section>
 
+      <!-- FILES -->
       <section id="files" class="doc-section">
         <h2 class="section-title">Files</h2>
-        <p class="section-desc">
-          Upload, list, download, and delete files. Files are served via CDN.
-        </p>
+        <p class="section-desc">Upload, list, download, and delete files. Files are served via CDN.</p>
 
-        <div class="endpoint-group">
-          <h3 class="group-title">Allowed MIME Types</h3>
-          <div class="file-types">
-            {#each fileTypes as type}
-              <span class="type-chip">{type}</span>
-            {/each}
-          </div>
+        <h4 class="field-label">Allowed MIME types</h4>
+        <div class="file-types">
+          {#each fileTypes as t}<span class="type-chip">{t}</span>{/each}
         </div>
 
-        <div class="endpoint-group">
-          <h3 class="group-title">Limits</h3>
-          <ul class="limits-list">
-            <li>Maximum file size: <strong>100MB</strong></li>
-            <li>Storage quota: varies by plan (default 1GB)</li>
-            <li>Upload format: <code>multipart/form-data</code> with <code>file</code> field</li>
-          </ul>
-        </div>
+        <h4 class="field-label">Limits</h4>
+        <ul class="limits-list">
+          <li>Maximum file size: <strong>100MB</strong></li>
+          <li>Storage quota: varies by plan (default 1GB)</li>
+          <li>Upload format: <code>multipart/form-data</code> with <code>file</code> field</li>
+        </ul>
 
-        <h3 class="group-title">Endpoints</h3>
+        <h4 class="field-label" style="margin-top:28px">Endpoints</h4>
         {#each endpoints.files as ep}
           <div class="endpoint">
-            <div class="endpoint-header">
+            <div class="ep-head">
               <span class="method method-{ep.method.toLowerCase()}">{ep.method}</span>
-              <span class="path">{ep.path}</span>
-              {#if ep.scope}
-                <span class="scope-badge">requires: {ep.scope}</span>
-              {/if}
+              <span class="ep-path">{ep.path}</span>
+              {#if ep.scope}<span class="scope-badge">requires: {ep.scope}</span>{/if}
             </div>
-            <p class="endpoint-desc">{ep.desc}</p>
-            {#if ep.body}
-              <div class="endpoint-detail">
-                <span class="detail-label">Body:</span>
-                <pre><code>{ep.body}</code></pre>
+            <div class="ep-body">
+              <div class="ep-row"><p class="ep-desc">{ep.desc}</p></div>
+              {#if ep.body}
+                <div class="ep-row">
+                  <span class="ep-label">Body</span>
+                  <p class="ep-plain">{ep.body}</p>
+                </div>
+              {/if}
+              {#if ep.params}
+                <div class="ep-row">
+                  <span class="ep-label">Path params</span>
+                  <ul class="params-list">
+                    {#each ep.params as p}<li><code>{p.name}</code> ({p.type}) — {p.desc}</li>{/each}
+                  </ul>
+                </div>
+              {/if}
+              <div class="ep-row">
+                <span class="ep-label">Response</span>
+                {#if ep.responsePlain}
+                  <p class="ep-plain"><code>{ep.response}</code></p>
+                {:else}
+                  <pre><code>{ep.response}</code></pre>
+                {/if}
               </div>
-            {/if}
-            {#if ep.params && ep.params.length}
-              <div class="endpoint-detail">
-                <span class="detail-label">Params:</span>
-                <ul class="params-list">
-                  {#each ep.params as p}
-                    <li><code>{p.name}</code> ({p.type}) — {p.desc}</li>
-                  {/each}
-                </ul>
-              </div>
-            {/if}
-            <div class="endpoint-detail">
-              <span class="detail-label">Response:</span>
-              <pre><code>{ep.response}</code></pre>
             </div>
           </div>
         {/each}
       </section>
 
+      <!-- API KEYS -->
       <section id="keys" class="doc-section">
         <h2 class="section-title">API Keys</h2>
-        <p class="section-desc">
-          Create, list, and revoke API keys for programmatic access.
-        </p>
+        <p class="section-desc">Create, list, and revoke API keys for programmatic access. All key management requires a JWT token.</p>
 
         {#each endpoints.keys as ep}
           <div class="endpoint">
-            <div class="endpoint-header">
+            <div class="ep-head">
               <span class="method method-{ep.method.toLowerCase()}">{ep.method}</span>
-              <span class="path">{ep.path}</span>
-              {#if ep.auth}
-                <span class="scope-badge auth-badge">{ep.auth}</span>
-              {/if}
+              <span class="ep-path">{ep.path}</span>
+              {#if ep.auth}<span class="scope-badge auth-badge">{ep.auth}</span>{/if}
             </div>
-            <p class="endpoint-desc">{ep.desc}</p>
-            {#if ep.body}
-              <div class="endpoint-detail">
-                <span class="detail-label">Body:</span>
-                <pre><code>{ep.body}</code></pre>
+            <div class="ep-body">
+              <div class="ep-row"><p class="ep-desc">{ep.desc}</p></div>
+              {#if ep.body}
+                <div class="ep-row">
+                  <span class="ep-label">Body</span>
+                  <pre><code>{ep.body}</code></pre>
+                </div>
+              {/if}
+              <div class="ep-row">
+                <span class="ep-label">Response</span>
+                <pre><code>{ep.response}</code></pre>
               </div>
-            {/if}
-            <div class="endpoint-detail">
-              <span class="detail-label">Response:</span>
-              <pre><code>{ep.response}</code></pre>
             </div>
           </div>
         {/each}
       </section>
 
+      <!-- USAGE -->
       <section id="usage" class="doc-section">
         <h2 class="section-title">Usage</h2>
-        <p class="section-desc">
-          Track API usage, bandwidth, and storage consumption.
-        </p>
+        <p class="section-desc">Track API usage, bandwidth, and storage consumption.</p>
 
         {#each endpoints.usage as ep}
           <div class="endpoint">
-            <div class="endpoint-header">
+            <div class="ep-head">
               <span class="method method-{ep.method.toLowerCase()}">{ep.method}</span>
-              <span class="path">{ep.path}</span>
-              <span class="scope-badge auth-badge">Bearer JWT</span>
+              <span class="ep-path">{ep.path}</span>
+              <span class="scope-badge auth-badge">{ep.auth}</span>
             </div>
-            <p class="endpoint-desc">{ep.desc}</p>
-            {#if ep.params && ep.params.length}
-              <div class="endpoint-detail">
-                <span class="detail-label">Query:</span>
-                <ul class="params-list">
-                  {#each ep.params as p}
-                    <li><code>{p.name}</code> ({p.type}) — {p.desc}</li>
-                  {/each}
-                </ul>
+            <div class="ep-body">
+              <div class="ep-row"><p class="ep-desc">{ep.desc}</p></div>
+              {#if ep.params}
+                <div class="ep-row">
+                  <span class="ep-label">Query params</span>
+                  <ul class="params-list">
+                    {#each ep.params as p}<li><code>{p.name}</code> ({p.type}) — {p.desc}</li>{/each}
+                  </ul>
+                </div>
+              {/if}
+              <div class="ep-row">
+                <span class="ep-label">Response</span>
+                <pre><code>{ep.response}</code></pre>
               </div>
-            {/if}
-            <div class="endpoint-detail">
-              <span class="detail-label">Response:</span>
-              <pre><code>{ep.response}</code></pre>
             </div>
           </div>
         {/each}
       </section>
 
+      <!-- ORGANISATION -->
       <section id="org" class="doc-section">
         <h2 class="section-title">Organisation</h2>
-        <p class="section-desc">
-          Manage your organisation, view members, invite new users.
-        </p>
+        <p class="section-desc">Manage your organisation, view members, and invite new users.</p>
 
         {#each endpoints.org as ep}
           <div class="endpoint">
-            <div class="endpoint-header">
+            <div class="ep-head">
               <span class="method method-{ep.method.toLowerCase()}">{ep.method}</span>
-              <span class="path">{ep.path}</span>
-              <span class="scope-badge auth-badge">Bearer JWT</span>
+              <span class="ep-path">{ep.path}</span>
+              {#if ep.auth}<span class="scope-badge auth-badge">{ep.auth}</span>{/if}
             </div>
-            <p class="endpoint-desc">{ep.desc}</p>
-            {#if ep.body}
-              <div class="endpoint-detail">
-                <span class="detail-label">Body:</span>
-                <pre><code>{ep.body}</code></pre>
+            <div class="ep-body">
+              <div class="ep-row"><p class="ep-desc">{ep.desc}</p></div>
+              {#if ep.body}
+                <div class="ep-row">
+                  <span class="ep-label">Body</span>
+                  <pre><code>{ep.body}</code></pre>
+                </div>
+              {/if}
+              <div class="ep-row">
+                <span class="ep-label">Response</span>
+                {#if ep.responsePlain}
+                  <p class="ep-plain"><code>{ep.response}</code></p>
+                {:else}
+                  <pre><code>{ep.response}</code></pre>
+                {/if}
               </div>
-            {/if}
-            <div class="endpoint-detail">
-              <span class="detail-label">Response:</span>
-              <pre><code>{ep.response}</code></pre>
             </div>
           </div>
         {/each}
       </section>
 
+      <!-- AUTH -->
       <section id="auth" class="doc-section">
         <h2 class="section-title">Auth</h2>
-        <p class="section-desc">
-          Register new organisations and authenticate users.
-        </p>
+        <p class="section-desc">Register new organisations and authenticate users.</p>
 
         {#each endpoints.auth as ep}
           <div class="endpoint">
-            <div class="endpoint-header">
+            <div class="ep-head">
               <span class="method method-{ep.method.toLowerCase()}">{ep.method}</span>
-              <span class="path">{ep.path}</span>
+              <span class="ep-path">{ep.path}</span>
+              {#if ep.auth}<span class="scope-badge auth-badge">{ep.auth}</span>{/if}
             </div>
-            <p class="endpoint-desc">{ep.desc}</p>
-            {#if ep.body}
-              <div class="endpoint-detail">
-                <span class="detail-label">Body:</span>
-                <pre><code>{ep.body}</code></pre>
+            <div class="ep-body">
+              <div class="ep-row"><p class="ep-desc">{ep.desc}</p></div>
+              {#if ep.body}
+                <div class="ep-row">
+                  <span class="ep-label">Body</span>
+                  <pre><code>{ep.body}</code></pre>
+                </div>
+              {/if}
+              <div class="ep-row">
+                <span class="ep-label">Response</span>
+                <pre><code>{ep.response}</code></pre>
               </div>
-            {/if}
-            <div class="endpoint-detail">
-              <span class="detail-label">Response:</span>
-              <pre><code>{ep.response}</code></pre>
             </div>
           </div>
         {/each}
       </section>
 
+      <!-- QUICKSTART -->
       <section id="quickstart" class="doc-section">
         <h2 class="section-title">Quickstart</h2>
-        <p class="section-desc">
-          Complete example: create a key, upload a file, and get its URL.
-        </p>
+        <p class="section-desc">Complete example: create a key, upload a file, and get its URL.</p>
 
-        <div class="quickstart-steps">
+        <div class="steps">
           <div class="step">
             <div class="step-num">01</div>
-            <div class="step-content">
-              <h4>Create an API key (via dashboard or POST)</h4>
-              <pre><code><span class="c-comment">// After logging in via dashboard, create a key:</span>
-<span class="c-kw">const</span> res <span class="c-dim">=</span> <span class="c-kw">await</span> <span class="c-fn">fetch</span><span class="c-brace">(</span><span class="c-str">'/api/v1/keys'</span><span class="c-brace">,</span> <span class="c-brace">&#123;</span>
-  method<span class="c-dim">:</span> <span class="c-str">'POST'</span><span class="c-dim">,</span>
-  headers<span class="c-dim">:</span> <span class="c-brace">&#123;</span>
-    <span class="c-str">'Content-Type'</span><span class="c-dim">:</span> <span class="c-str">'application/json'</span><span class="c-dim">,</span>
-    <span class="c-str">'Authorization'</span><span class="c-dim">:</span> <span class="c-str">`Bearer </span><span class="c-prop">$&#123;jwt&#125;`</span>
-  <span class="c-brace">&#125;,</span>
-  body<span class="c-dim">:</span> JSON<span class="c-brace">.&#123;</span>name<span class="c-dim">:</span> <span class="c-str">'my-key'</span><span class="c-dim">,</span> scopes<span class="c-dim">:</span> [<span class="c-str">'read'</span><span class="c-dim">,</span> <span class="c-str">'write'</span>] <span class="c-brace">&#125;</span>
-<span class="c-brace">&#125;)</span><span class="c-dim">;</span>
-
-<span class="c-kw">const</span> data <span class="c-dim">=</span> <span class="c-kw">await</span> res<span class="c-dim">.</span><span class="c-fn">json</span><span class="c-brace">()</span><span class="c-dim">;</span>
-<span class="c-kw">const</span> apiKey <span class="c-dim">=</span> data<span class="c-dim">.</span><span class="c-prop">key</span><span class="c-dim">;</span> <span class="c-comment">// "kyr_abc123..."</span></code></pre>
+            <div class="step-body">
+              <h4>Create an API key</h4>
+              <pre><code><span class="cc">// Login via dashboard first, then:</span>
+<span class="ck">const</span> res = <span class="ck">await</span> fetch(<span class="cs">'/api/v1/keys'</span>, &#123;
+  method: <span class="cs">'POST'</span>,
+  headers: &#123;
+    <span class="cs">'Content-Type'</span>: <span class="cs">'application/json'</span>,
+    <span class="cs">'Authorization'</span>: <span class="cs">`Bearer $&#123;jwt&#125;`</span>
+  &#125;,
+  body: JSON.stringify(&#123; name: <span class="cs">'my-key'</span>, scopes: [<span class="cs">'read'</span>, <span class="cs">'write'</span>] &#125;)
+&#125;);
+<span class="ck">const</span> &#123; key: apiKey &#125; = <span class="ck">await</span> res.json(); <span class="cc">// "kyr_abc123..."</span></code></pre>
             </div>
           </div>
 
           <div class="step">
             <div class="step-num">02</div>
-            <div class="step-content">
+            <div class="step-body">
               <h4>Upload a file</h4>
-              <pre><code><span class="c-kw">const</span> formData <span class="c-dim">=</span> <span class="c-kw">new</span> <span class="c-fn">FormData</span><span class="c-brace">()</span><span class="c-dim">;</span>
-formData<span class="c-dim">.</span><span class="c-fn">append</span><span class="c-brace">(</span><span class="c-str">'file'</span><span class="c-dim">,</span> fileInput<span class="c-dim">.</span><span class="c-prop">files</span><span class="c-brace">[</span>0<span class="c-brace">])</span><span class="c-dim">;</span>
+              <pre><code><span class="ck">const</span> form = <span class="ck">new</span> FormData();
+form.append(<span class="cs">'file'</span>, fileInput.files[0]);
 
-<span class="c-kw">const</span> res <span class="c-dim">=</span> <span class="c-kw">await</span> <span class="c-fn">fetch</span><span class="c-brace">(</span><span class="c-str">'/api/v1/files'</span><span class="c-brace">,</span> <span class="c-brace">&#123;</span>
-  method<span class="c-dim">:</span> <span class="c-str">'POST'</span><span class="c-dim">,</span>
-  headers<span class="c-dim">:</span> <span class="c-brace">&#123;</span>
-    <span class="c-str">'X-Api-Key'</span><span class="c-dim">:</span> apiKey
-  <span class="c-brace">&#125;,</span>
-  body<span class="c-dim">:</span> formData
-<span class="c-brace">&#125;)</span><span class="c-dim">;</span>
-
-<span class="c-kw">const</span> file <span class="c-dim">=</span> <span class="c-kw">await</span> res<span class="c-dim">.</span><span class="c-fn">json</span><span class="c-brace">()</span><span class="c-dim">;</span>
-<span class="c-comment">// &#123; id: "550e...", name: "doc.pdf", ... &#125;</span></code></pre>
+<span class="ck">const</span> res = <span class="ck">await</span> fetch(<span class="cs">'/api/v1/files'</span>, &#123;
+  method: <span class="cs">'POST'</span>,
+  headers: &#123; <span class="cs">'X-Api-Key'</span>: apiKey &#125;,
+  body: form
+&#125;);
+<span class="ck">const</span> file = <span class="ck">await</span> res.json();
+<span class="cc">// &#123; id: "550e...", name: "doc.pdf", ... &#125;</span></code></pre>
             </div>
           </div>
 
           <div class="step">
             <div class="step-num">03</div>
-            <div class="step-content">
-              <h4>Download or get public URL</h4>
-              <pre><code><span class="c-comment">// Download directly:</span>
-<span class="c-kw">const</span> res <span class="c-dim">=</span> <span class="c-kw">await</span> <span class="c-fn">fetch</span><span class="c-brace">(</span><span class="c-str">`/api/v1/files/</span><span class="c-prop">$&#123;file.id&#125;`</span><span class="c-brace">,</span> <span class="c-brace">&#123;</span>
-  headers<span class="c-dim">:</span> <span class="c-brace">&#123;</span> <span class="c-str">'X-Api-Key'</span><span class="c-dim">:</span> apiKey <span class="c-brace">&#125;</span>
-<span class="c-brace">&#125;)</span><span class="c-dim">;</span>
+            <div class="step-body">
+              <h4>Download or get CDN URL</h4>
+              <pre><code><span class="cc">// Download directly:</span>
+<span class="ck">const</span> res = <span class="ck">await</span> fetch(<span class="cs">`/api/v1/files/$&#123;file.id&#125;`</span>, &#123;
+  headers: &#123; <span class="cs">'X-Api-Key'</span>: apiKey &#125;
+&#125;);
 
-<span class="c-comment">// Or construct public CDN URL:</span>
-<span class="c-kw">const</span> url <span class="c-dim">=</span> <span class="c-str">`https://cdn.kyro.dev/</span><span class="c-prop">$&#123;orgSlug&#125;</span><span class="c-str">/</span><span class="c-prop">$&#123;file.name&#125;`</span><span class="c-dim">;</span></code></pre>
+<span class="cc">// Or construct public CDN URL:</span>
+<span class="ck">const</span> url = <span class="cs">`https://cdn.kyro.dev/$&#123;orgSlug&#125;/$&#123;file.name&#125;`</span>;</code></pre>
             </div>
           </div>
         </div>
 
-        <div class="curl-example">
-          <h4>cURL equivalent</h4>
-          <pre><code><span class="c-comment"># Upload file</span>
-<span class="c-kw">curl</span> -X POST https://api.kyro.io/api/v1/files \
-  -H <span class="c-str">"X-Api-Key: kyr_abc123..."</span> \
-  -F <span class="c-str">"file=@document.pdf"</span></code></pre>
-        </div>
+        <h4 class="field-label">cURL equivalent</h4>
+        <pre><code><span class="cc"># Upload a file</span>
+curl -X POST https://api.kyro.io/api/v1/files \
+  -H <span class="cs">"X-Api-Key: kyr_abc123..."</span> \
+  -F <span class="cs">"file=@document.pdf"</span></code></pre>
       </section>
 
+      <!-- ERRORS -->
       <section id="errors" class="doc-section">
         <h2 class="section-title">Errors</h2>
-        <p class="section-desc">
-          Standard HTTP error codes returned by the API.
-        </p>
+        <p class="section-desc">Standard HTTP error codes returned by the API.</p>
 
         <table class="errors-table">
-          <thead>
-            <tr>
-              <th>Code</th>
-              <th>Message</th>
-            </tr>
-          </thead>
+          <thead><tr><th>Code</th><th>Description</th></tr></thead>
           <tbody>
             {#each errors as err}
               <tr>
-                <td><span class="error-code" class:error-4xx={err.code >= 400 && err.code < 500} class:error-5xx={err.code >= 500}>{err.code}</span></td>
+                <td>
+                  <span class="err-code" class:err-4xx={err.code < 500} class:err-5xx={err.code >= 500}>
+                    {err.code}
+                  </span>
+                </td>
                 <td>{err.msg}</td>
               </tr>
             {/each}
           </tbody>
         </table>
       </section>
+
     </main>
   </div>
 </div>
 
 <style>
-  .docs-page {
-    min-height: 100vh;
-    background: var(--color-bg);
+  /* ─── TOKENS ─── */
+  :root {
+    --bg:           #0a0a0a;
+    --bg2:          #111111;
+    --bg3:          #181818;
+    --bg4:          #222222;
+    --border:       rgba(255,255,255,0.07);
+    --border2:      rgba(255,255,255,0.13);
+    --text:         #f0ede8;
+    --text-dim:     #c8c4bc;
+    --text-muted:   #8a8680;
+    --text-ghost:   #4a4845;
+    --green:        #4ade80;
+    --green-dim:    rgba(74,222,128,0.10);
+    --blue:         #60a5fa;
+    --blue-dim:     rgba(96,165,250,0.10);
+    --red:          #f87171;
+    --red-dim:      rgba(248,113,113,0.10);
+    --amber:        #fbbf24;
+    --amber-dim:    rgba(251,191,36,0.10);
   }
 
-  .docs-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: var(--space-4) var(--space-8);
-    border-bottom: 1px solid var(--color-border);
-    background: var(--color-bg);
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  .page {
+    font-family: 'IBM Plex Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  /* ─── HEADER ─── */
+  .header {
     position: sticky;
     top: 0;
     z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 32px;
+    height: 52px;
+    background: rgba(10,10,10,0.94);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
   }
 
   .logo {
     display: flex;
     align-items: center;
-    gap: var(--space-2);
-    font-family: var(--font-mono);
-    font-size: var(--font-size-base);
-    font-weight: 700;
-    color: var(--color-text);
+    gap: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
     text-decoration: none;
+    letter-spacing: -0.02em;
   }
 
-  .docs-nav {
+  .logo-mark {
+    width: 22px;
+    height: 22px;
+    background: var(--text);
+    border-radius: 4px;
     display: flex;
     align-items: center;
-    gap: var(--space-6);
-    font-family: var(--font-mono);
-    font-size: var(--font-size-xs);
+    justify-content: center;
+    color: var(--bg);
   }
 
-  .docs-nav a {
-    color: var(--color-text-muted);
+  .header-nav {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+
+  .header-nav a {
+    font-size: 12px;
+    color: var(--text-muted);
     text-decoration: none;
-    transition: color 0.1s;
+    transition: color .15s;
   }
-
-  .docs-nav a:hover,
-  .docs-nav a.active {
-    color: var(--color-text);
-  }
+  .header-nav a:hover { color: var(--text); }
 
   .hamburger {
     display: none;
     background: none;
     border: none;
-    color: var(--color-text-muted);
+    color: var(--text-muted);
     cursor: pointer;
     padding: 4px;
-    border-radius: var(--radius-sm);
-    flex-shrink: 0;
-    align-items: center;
-    justify-content: center;
   }
 
-  .hamburger:hover {
-    color: var(--color-text-dim);
-    background: var(--color-bg-2);
-  }
-
-  @media (max-width: 900px) {
-    .hamburger {
-      display: flex;
-    }
-  }
-
-  .docs-layout {
+  /* ─── LAYOUT ─── */
+  .layout {
     display: flex;
-    max-width: 1400px;
+    max-width: 1300px;
     margin: 0 auto;
   }
 
-  .docs-sidebar {
-    width: 220px;
-    flex-shrink: 0;
-    padding: var(--space-4) var(--space-3);
-    border-right: 1px solid var(--color-border);
-    position: sticky;
-    top: 60px;
-    height: calc(100vh - 60px);
-    overflow-y: auto;
-    background: var(--color-bg);
+  /* ─── OVERLAY ─── */
+  .overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.65);
+    z-index: 199;
   }
+
+  /* ─── SIDEBAR ─── */
+  .sidebar {
+    width: 210px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 52px;
+    height: calc(100vh - 52px);
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+    padding: 20px 0;
+    background: var(--bg);
+  }
+
+  .sidebar::-webkit-scrollbar { width: 0; }
 
   .sidebar-header {
     display: none;
     align-items: center;
     justify-content: space-between;
-    padding: var(--space-3) var(--space-3);
-    border-bottom: 1px solid var(--color-border);
-    margin-bottom: var(--space-2);
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
   }
 
-  .sidebar-title {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-sm);
+  .sidebar-header span {
+    font-size: 13px;
     font-weight: 600;
-    color: var(--color-text);
-    text-transform: lowercase;
+    color: var(--text);
   }
 
   .sidebar-close {
-    display: none;
     background: none;
     border: none;
-    color: var(--color-text-muted);
-    font-size: var(--font-size-xs);
+    color: var(--text-muted);
     cursor: pointer;
-    padding: var(--space-1);
-    line-height: 1;
+    font-size: 13px;
+    padding: 2px;
   }
 
-  .sidebar-overlay {
-    display: none;
+  .sidebar-group-label {
+    display: block;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text-ghost);
+    padding: 0 16px;
+    margin-bottom: 8px;
   }
 
   .sidebar-nav {
     display: flex;
     flex-direction: column;
-    gap: 1px;
   }
 
   .sidebar-link {
-    display: flex;
-    align-items: center;
-    font-family: var(--font-mono);
-    font-size: var(--font-size-xs);
-    color: var(--color-text-dim);
+    display: block;
+    font-size: 12px;
+    color: var(--text-muted);
     text-decoration: none;
-    padding: 7px var(--space-3);
-    border-radius: var(--radius-md);
-    transition: all 0.1s ease;
-    position: relative;
+    padding: 6px 16px;
+    border-left: 2px solid transparent;
+    transition: all .12s;
   }
-
-  .sidebar-link:hover {
-    color: var(--color-text);
-    background: var(--color-bg-2);
-  }
-
+  .sidebar-link:hover { color: var(--text-dim); background: var(--bg2); }
   .sidebar-link.active {
-    color: var(--color-text);
-    background: var(--color-bg-3);
+    color: var(--text);
+    border-left-color: var(--text);
+    background: var(--bg2);
   }
 
-  .sidebar-link.active::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 2px;
-    height: 14px;
-    background: var(--color-text);
-    border-radius: 0 2px 2px 0;
-  }
-
-  .docs-content {
+  /* ─── CONTENT ─── */
+  .content {
     flex: 1;
-    padding: var(--space-8) var(--space-10);
+    padding: 48px 56px;
     min-width: 0;
+    max-width: 860px;
   }
 
   .doc-section {
-    margin-bottom: var(--space-12);
-    scroll-margin-top: 80px;
+    margin-bottom: 72px;
+    scroll-margin-top: 72px;
   }
 
   .section-title {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-2xl);
-    font-weight: 700;
-    color: var(--color-text);
-    letter-spacing: -0.02em;
-    margin: 0 0 var(--space-3) 0;
-    padding-bottom: var(--space-3);
-    border-bottom: 1px solid var(--color-border);
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.03em;
+    margin-bottom: 8px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
   }
 
   .section-desc {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
-    margin: 0 0 var(--space-6) 0;
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 28px;
+    line-height: 1.7;
+  }
+
+  .field-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--text-ghost);
+    margin: 20px 0 10px;
+  }
+
+  /* ─── CARDS ─── */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+  }
+
+  .card h3 {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card p {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 14px;
     line-height: 1.6;
   }
 
-  .auth-methods {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: var(--space-4);
+  .spec-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    color: var(--blue);
+    text-decoration: none;
+    transition: color .12s;
+  }
+  .spec-link:hover { color: var(--text); }
+
+  .tag-row { display: flex; flex-wrap: wrap; gap: 6px; }
+
+  .tag {
+    font-size: 11px;
+    background: var(--bg4);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    padding: 2px 8px;
+    border-radius: 3px;
   }
 
-  .auth-card {
-    background: var(--color-bg-2);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
-    padding: var(--space-5);
-  }
-
-  .auth-card h3 {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-sm);
-    font-weight: 600;
-    color: var(--color-text);
-    margin: 0 0 var(--space-3) 0;
-  }
-
-  .auth-card p {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-    margin: 0 0 var(--space-2) 0;
-  }
-
-  .auth-card .hint {
-    color: var(--color-text-ghost);
-    font-size: var(--font-size-2xs);
-    margin-top: var(--space-3);
-  }
-
+  /* ─── CHIPS ─── */
   .chip {
     display: inline-flex;
     align-items: center;
-    padding: 2px 6px;
-    border-radius: var(--radius-sm);
+    padding: 2px 7px;
+    border-radius: 4px;
     font-size: 10px;
-    font-weight: 700;
+    font-weight: 600;
+    letter-spacing: .05em;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+  }
+  .chip-green { background: var(--green-dim); color: var(--green); }
+  .chip-blue  { background: var(--blue-dim);  color: var(--blue); }
+
+  /* ─── CODE ─── */
+  pre, code { font-family: inherit; }
+
+  pre {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-size: 12px;
+    line-height: 1.65;
+    color: var(--text-dim);
+    margin: 0;
   }
 
-  .chip-get {
-    background: var(--color-success-dim);
-    color: var(--color-success);
+  code {
+    font-size: 12px;
+    background: var(--bg3);
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
   }
 
-  .chip-post {
-    background: rgba(59, 130, 246, 0.15);
-    color: #3b82f6;
+  pre code {
+    background: none;
+    padding: 0;
+    border: none;
+    font-size: inherit;
+    color: inherit;
   }
 
+  /* syntax */
+  .ck { color: var(--green); }
+  .cs { color: #d4a854; }
+  .cc { color: var(--text-ghost); font-style: italic; }
+
+  /* ─── TABLES ─── */
+  .data-table, .errors-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin-bottom: 20px;
+  }
+
+  .data-table th, .data-table td,
+  .errors-table th, .errors-table td {
+    text-align: left;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+  }
+
+  .data-table th, .errors-table th {
+    background: var(--bg2);
+    color: var(--text-dim);
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+
+  .data-table td, .errors-table td {
+    background: var(--bg);
+    color: var(--text-muted);
+  }
+
+  .td-key { color: var(--text-muted); width: 140px; }
+
+  /* ─── AUTH GRID ─── */
+  .auth-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 12px;
+  }
+
+  .auth-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+  }
+
+  .auth-card h3 {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .auth-card p {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+
+  .auth-card pre { margin-bottom: 0; }
+
+  .hint {
+    font-size: 11px;
+    color: var(--text-ghost);
+    margin-top: 10px;
+  }
+
+  /* ─── SCOPES ─── */
   .scopes-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: var(--space-3);
-    margin-bottom: var(--space-6);
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+    margin-bottom: 20px;
   }
 
   .scope-card {
-    background: var(--color-bg-2);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
-    padding: var(--space-4);
-  }
-
-  .scope-header {
-    margin-bottom: var(--space-2);
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
   }
 
   .scope-name {
-    background: var(--color-bg-3);
-    padding: var(--space-1) var(--space-2);
-    border-radius: var(--radius-sm);
-    font-size: var(--font-size-xs);
-    color: var(--color-success);
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--green);
+    background: var(--green-dim);
+    padding: 2px 8px;
+    border-radius: 3px;
+    margin-bottom: 8px;
   }
 
   .scope-desc {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-    margin: 0;
+    font-size: 12px;
+    color: var(--text-muted);
     line-height: 1.5;
   }
 
-  .scope-example {
-    background: var(--color-bg-2);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
-    padding: var(--space-4);
-  }
-
-  .scope-example h4 {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-xs);
-    font-weight: 600;
-    color: var(--color-text);
-    margin: 0 0 var(--space-3) 0;
-  }
-
-  .scope-example pre {
-    margin: 0;
-  }
-
-  .rate-info {
-    display: flex;
-    gap: var(--space-6);
-    margin-bottom: var(--space-6);
-  }
-
-  .rate-stat {
+  /* ─── RATE LIMIT ─── */
+  .rate-hero {
     display: flex;
     align-items: baseline;
-    gap: var(--space-2);
+    gap: 8px;
+    margin-bottom: 24px;
   }
 
-  .rate-value {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-3xl);
-    font-weight: 700;
-    color: var(--color-success);
-  }
-
-  .rate-label {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
-  }
-
-  .data-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-bottom: var(--space-6);
-    font-family: var(--font-mono);
-    font-size: var(--font-size-sm);
-  }
-
-  .data-table th,
-  .data-table td {
-    text-align: left;
-    padding: var(--space-3);
-    border: 1px solid var(--color-border);
-  }
-
-  .data-table th {
-    background: var(--color-bg-2);
-    color: var(--color-text);
+  .rate-num {
+    font-size: 40px;
     font-weight: 600;
+    color: var(--green);
+    letter-spacing: -0.04em;
+    line-height: 1;
   }
 
-  .data-table td {
-    background: var(--color-bg);
-    color: var(--color-text-muted);
+  .rate-unit {
+    font-size: 14px;
+    color: var(--text-muted);
   }
 
-  .data-table code {
-    background: var(--color-bg-2);
-    padding: 2px 6px;
-    border-radius: var(--radius-sm);
-    font-size: var(--font-size-xs);
-    color: var(--color-text);
-  }
-
-  .endpoint-group {
-    margin-bottom: var(--space-6);
-  }
-
-  .group-title {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-base);
-    font-weight: 600;
-    color: var(--color-text);
-    margin: 0 0 var(--space-3) 0;
-  }
-
+  /* ─── FILE TYPES ─── */
   .file-types {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-2);
+    gap: 6px;
+    margin-bottom: 20px;
   }
 
   .type-chip {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-2xs);
-    background: var(--color-bg-2);
-    color: var(--color-text-muted);
-    padding: var(--space-1) var(--space-2);
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--color-border);
+    font-size: 11px;
+    background: var(--bg3);
+    color: var(--text-muted);
+    padding: 3px 8px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
   }
 
+  /* ─── LIMITS ─── */
   .limits-list {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
-    margin: 0;
-    padding-left: var(--space-5);
-    line-height: 1.8;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
   }
 
+  .limits-list li {
+    font-size: 12px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .limits-list li::before {
+    content: '';
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--text-ghost);
+    flex-shrink: 0;
+  }
+
+  .limits-list strong { color: var(--text-dim); }
+
+  /* ─── ENDPOINTS ─── */
   .endpoint {
-    background: var(--color-bg-2);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
-    margin-bottom: var(--space-4);
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 10px;
     overflow: hidden;
   }
 
-  .endpoint-header {
+  .ep-head {
     display: flex;
     align-items: center;
-    gap: var(--space-3);
-    padding: var(--space-3) var(--space-4);
-    background: var(--color-bg);
-    border-bottom: 1px solid var(--color-border);
+    gap: 10px;
+    padding: 11px 16px;
+    background: var(--bg3);
+    border-bottom: 1px solid var(--border);
     flex-wrap: wrap;
   }
 
   .method {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-xs);
+    font-size: 10px;
     font-weight: 700;
-    padding: var(--space-1) var(--space-2);
-    border-radius: var(--radius-sm);
+    padding: 3px 8px;
+    border-radius: 3px;
+    letter-spacing: .05em;
     text-transform: uppercase;
-  }
-
-  .method-get {
-    background: var(--color-success-dim);
-    color: var(--color-success);
-  }
-
-  .method-post {
-    background: rgba(59, 130, 246, 0.15);
-    color: #3b82f6;
-  }
-
-  .method-delete {
-    background: var(--color-danger-dim);
-    color: var(--color-danger);
-  }
-
-  .path {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-sm);
-    color: var(--color-text);
-  }
-
-  .scope-badge {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-2xs);
-    background: var(--color-bg-3);
-    color: var(--color-text-muted);
-    padding: 2px 6px;
-    border-radius: var(--radius-sm);
-    margin-left: auto;
-  }
-
-  .auth-badge {
-    margin-left: 0;
-  }
-
-  .endpoint-desc {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
-    margin: 0;
-    padding: var(--space-3) var(--space-4);
-    border-bottom: 1px solid var(--color-border);
-  }
-
-  .endpoint-detail {
-    padding: var(--space-3) var(--space-4);
-    border-bottom: 1px solid var(--color-border);
-  }
-
-  .endpoint-detail:last-child {
-    border-bottom: none;
-  }
-
-  .detail-label {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-2xs);
-    color: var(--color-text-ghost);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    display: block;
-    margin-bottom: var(--space-2);
-  }
-
-  .params-list {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-    margin: 0;
-    padding-left: var(--space-4);
-    line-height: 1.8;
-  }
-
-  .endpoint pre {
-    margin: 0;
-    background: var(--color-bg);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    padding: var(--space-3);
-    overflow-x: auto;
-  }
-
-  .quickstart-steps {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-6);
-    margin-bottom: var(--space-6);
-  }
-
-  .step {
-    display: flex;
-    gap: var(--space-4);
-  }
-
-  .step-num {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-2xs);
-    font-weight: 700;
-    color: var(--color-success);
-    background: var(--color-bg-2);
-    width: 36px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--color-border);
     flex-shrink: 0;
   }
 
-  .step-content {
+  .method-get    { background: var(--green-dim); color: var(--green); }
+  .method-post   { background: var(--blue-dim);  color: var(--blue); }
+  .method-delete { background: var(--red-dim);   color: var(--red); }
+
+  .ep-path {
+    font-size: 13px;
+    color: var(--text);
     flex: 1;
-    min-width: 0;
   }
 
-  .step-content h4 {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-sm);
-    font-weight: 600;
-    color: var(--color-text);
-    margin: 0 0 var(--space-3) 0;
-  }
-
-  .step-content pre {
-    margin: 0;
-    background: var(--color-bg-2);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
-    padding: var(--space-4);
-    overflow-x: auto;
-  }
-
-  .curl-example {
-    background: var(--color-bg-2);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
-    padding: var(--space-4);
-  }
-
-  .curl-example h4 {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-sm);
-    font-weight: 600;
-    color: var(--color-text);
-    margin: 0 0 var(--space-3) 0;
-  }
-
-  .curl-example pre {
-    margin: 0;
-  }
-
-  .errors-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-family: var(--font-mono);
-    font-size: var(--font-size-sm);
-  }
-
-  .errors-table th,
-  .errors-table td {
-    text-align: left;
-    padding: var(--space-3);
-    border: 1px solid var(--color-border);
-  }
-
-  .errors-table th {
-    background: var(--color-bg-2);
-    color: var(--color-text);
-    font-weight: 600;
-  }
-
-  .errors-table td {
-    background: var(--color-bg);
-    color: var(--color-text-muted);
-  }
-
-  .error-code {
-    font-family: var(--font-mono);
-    font-weight: 700;
+  .scope-badge {
+    font-size: 10px;
+    color: var(--text-ghost);
+    background: var(--bg4);
+    border: 1px solid var(--border);
     padding: 2px 8px;
-    border-radius: var(--radius-sm);
+    border-radius: 3px;
+    margin-left: auto;
+    white-space: nowrap;
   }
 
-  .error-4xx {
-    background: var(--color-warning-dim);
-    color: var(--color-warning);
+  .auth-badge {
+    color: var(--amber);
+    background: var(--amber-dim);
+    border-color: rgba(251,191,36,0.15);
+    margin-left: 0;
   }
 
-  .error-5xx {
-    background: var(--color-danger-dim);
-    color: var(--color-danger);
+  .ep-body {}
+
+  .ep-row {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .ep-row:last-child { border-bottom: none; }
+
+  .ep-desc { font-size: 12px; color: var(--text-muted); }
+
+  .ep-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--text-ghost);
   }
 
-  pre {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-xs);
-    line-height: 1.6;
-    color: var(--color-text-dim);
-    white-space: pre-wrap;
-    word-break: break-all;
+  .ep-plain { font-size: 12px; color: var(--text-muted); }
+
+  .params-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
   }
 
-  code {
-    font-family: var(--font-mono);
+  .params-list li { font-size: 12px; color: var(--text-muted); }
+  .params-list code { color: var(--text-dim); }
+
+  /* ─── QUICKSTART ─── */
+  .steps {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    margin-bottom: 28px;
   }
 
-  .c-kw    { color: var(--color-success); }
-  .c-fn    { color: var(--color-text); }
-  .c-str   { color: #d4a854; }
-  .c-prop  { color: var(--color-text-dim); }
-  .c-dim   { color: var(--color-text-ghost); }
-  .c-brace { color: var(--color-text-muted); }
-  .c-comment { color: var(--color-text-ghost); font-style: italic; }
+  .step { display: flex; gap: 16px; }
 
+  .step-num {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--green);
+    background: var(--green-dim);
+    border: 1px solid rgba(74,222,128,0.18);
+    width: 34px;
+    height: 34px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .step-body { flex: 1; min-width: 0; }
+  .step-body h4 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 10px;
+  }
+
+  /* ─── ERROR CODES ─── */
+  .err-code {
+    font-weight: 700;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 3px;
+  }
+  .err-4xx { background: var(--amber-dim); color: var(--amber); }
+  .err-5xx { background: var(--red-dim);   color: var(--red); }
+
+  /* ─── RESPONSIVE ─── */
   @media (max-width: 900px) {
-    .docs-sidebar {
+    .hamburger { display: flex; }
+
+    .sidebar {
       position: fixed;
       top: 0;
       left: 0;
       height: 100vh;
       z-index: 200;
       transform: translateX(-100%);
-      transition: transform 0.2s ease;
-      width: 220px;
-      border-right: 1px solid var(--color-border);
-      background: var(--color-bg);
+      transition: transform .2s ease;
     }
 
-    .docs-sidebar.open {
-      transform: translateX(0);
-    }
+    .sidebar.open { transform: translateX(0); }
+    .sidebar-header { display: flex; }
 
-    .sidebar-header {
-      display: flex;
-    }
-
-    .sidebar-close {
-      display: flex;
-    }
-
-    .sidebar-overlay {
-      display: block;
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.6);
-      z-index: 199;
-    }
-
-    .docs-content {
-      padding: var(--space-6) var(--space-5);
-    }
-
-    .docs-header {
-      padding: var(--space-3) var(--space-5);
-    }
-
-    .auth-methods {
-      grid-template-columns: 1fr;
-    }
+    .content { padding: 28px 20px; }
+    .header  { padding: 0 16px; }
+    .auth-grid { grid-template-columns: 1fr; }
   }
 
   @media (max-width: 640px) {
-    .docs-content {
-      padding: var(--space-4);
-    }
-
-    .section-title {
-      font-size: var(--font-size-xl);
-    }
-
-    .endpoint-header {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: var(--space-2);
-    }
-
-    .scope-badge {
-      margin-left: 0;
-    }
+    .content { padding: 20px 16px; }
+    .section-title { font-size: 18px; }
+    .ep-head { flex-direction: column; align-items: flex-start; }
+    .scope-badge { margin-left: 0; }
+    .card-grid { grid-template-columns: 1fr; }
   }
 </style>
