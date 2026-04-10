@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import Logo from "$lib/components/Logo.svelte";
 
   type HealthStatus = "checking" | "connected" | "degraded" | "error";
 
@@ -62,7 +63,7 @@
 <div class="landing">
   <header class="header">
     <a href="/" class="logo">
-      <span class="logo-mark">K</span>
+      <Logo size={26} />
       <span class="logo-text">kyro</span>
     </a>
     <nav class="nav">

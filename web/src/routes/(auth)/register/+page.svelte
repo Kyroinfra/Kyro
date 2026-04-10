@@ -3,6 +3,7 @@
 	import Button from '$lib/components/ui/Button.svelte';
 	import Input from '$lib/components/ui/Input.svelte';
 	import Card from '$lib/components/ui/Card.svelte';
+	import Logo from '$lib/components/Logo.svelte';
 
 	let { form } = $props();
 
@@ -19,7 +20,7 @@
 <div class="auth-page">
 	<div class="auth-header">
 		<a href="/" class="logo">
-			<span class="logo-mark">K</span>
+			<Logo size={28} />
 			<span class="logo-text">kyro</span>
 		</a>
 		<div class="auth-prompt">

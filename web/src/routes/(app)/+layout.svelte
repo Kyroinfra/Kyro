@@ -3,6 +3,7 @@
 	import { page } from '$app/stores';
 	import { user } from '$lib/stores/auth';
 	import { Dashboard, Key, File, Usage, Settings } from '$lib/components/icons';
+	import Logo from '$lib/components/Logo.svelte';
 
 	interface Props {
 		data: { user: { id: string; orgId: string; role: string } };
@@ -73,7 +74,7 @@
 	<aside class="sidebar" class:open={sidebarOpen}>
 		<div class="sidebar-header">
 			<a href="/" class="logo">
-				<span class="logo-mark">K</span>
+				<Logo size={22} />
 				<span class="logo-text">kyro</span>
 			</a>
 			<button class="sidebar-close" onclick={() => (sidebarOpen = false)} aria-label="Close menu">✕</button>
