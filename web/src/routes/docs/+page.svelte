@@ -1,5 +1,28 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import Logo from "$lib/components/Logo.svelte";
+
+  let sidebarOpen = $state(false);
+  let activeSection = $state("authentication");
+
+  onMount(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            activeSection = entry.target.id;
+          }
+        });
+      },
+      { rootMargin: "-100px 0px -60% 0px" }
+    );
+
+    document.querySelectorAll(".doc-section").forEach((section) => {
+      observer.observe(section);
+    });
+
+    return () => observer.disconnect();
+  });
 
   const sections = [
     { id: "authentication", label: "Authentication" },
@@ -308,17 +331,31 @@
       <span>kyro</span>
     </a>
     <nav class="docs-nav">
-      <a href="/docs" class="active">docs</a>
+      <button class="hamburger" onclick={() => (sidebarOpen = true)} aria-label="Open menu">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <line x1="3" y1="12" x2="21" y2="12" />
+          <line x1="3" y1="18" x2="21" y2="18" />
+        </svg>
+      </button>
       <a href="/health">status</a>
       <a href="/login">sign in</a>
     </nav>
   </header>
 
   <div class="docs-layout">
-    <aside class="docs-sidebar">
+    {#if sidebarOpen}
+      <div class="sidebar-overlay" onclick={() => (sidebarOpen = false)}></div>
+    {/if}
+
+    <aside class="docs-sidebar" class:open={sidebarOpen}>
+      <div class="sidebar-header">
+        <span class="sidebar-title">docs</span>
+        <button class="sidebar-close" onclick={() => (sidebarOpen = false)} aria-label="Close menu">✕</button>
+      </div>
       <nav class="sidebar-nav">
         {#each sections as section}
-          <a href="#{section.id}" class="sidebar-link">{section.label}</a>
+          <a href="#{section.id}" class="sidebar-link" class:active={activeSection === section.id} onclick={() => (sidebarOpen = false)}>{section.label}</a>
         {/each}
       </nav>
     </aside>
@@ -726,6 +763,30 @@ formData<span class="c-dim">.</span><span class="c-fn">append</span><span class=
     color: var(--color-text);
   }
 
+  .hamburger {
+    display: none;
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: var(--radius-sm);
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .hamburger:hover {
+    color: var(--color-text-dim);
+    background: var(--color-bg-2);
+  }
+
+  @media (max-width: 900px) {
+    .hamburger {
+      display: flex;
+    }
+  }
+
   .docs-layout {
     display: flex;
     max-width: 1400px;
@@ -735,33 +796,86 @@ formData<span class="c-dim">.</span><span class="c-fn">append</span><span class=
   .docs-sidebar {
     width: 220px;
     flex-shrink: 0;
-    padding: var(--space-6) var(--space-4);
+    padding: var(--space-4) var(--space-3);
     border-right: 1px solid var(--color-border);
     position: sticky;
     top: 60px;
     height: calc(100vh - 60px);
     overflow-y: auto;
+    background: var(--color-bg);
+  }
+
+  .sidebar-header {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-3) var(--space-3);
+    border-bottom: 1px solid var(--color-border);
+    margin-bottom: var(--space-2);
+  }
+
+  .sidebar-title {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-text);
+    text-transform: lowercase;
+  }
+
+  .sidebar-close {
+    display: none;
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+    cursor: pointer;
+    padding: var(--space-1);
+    line-height: 1;
+  }
+
+  .sidebar-overlay {
+    display: none;
   }
 
   .sidebar-nav {
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
+    gap: 1px;
   }
 
   .sidebar-link {
+    display: flex;
+    align-items: center;
     font-family: var(--font-mono);
-    font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-dim);
     text-decoration: none;
-    padding: var(--space-2) var(--space-3);
+    padding: 7px var(--space-3);
     border-radius: var(--radius-md);
-    transition: all 0.15s;
+    transition: all 0.1s ease;
+    position: relative;
   }
 
   .sidebar-link:hover {
     color: var(--color-text);
     background: var(--color-bg-2);
+  }
+
+  .sidebar-link.active {
+    color: var(--color-text);
+    background: var(--color-bg-3);
+  }
+
+  .sidebar-link.active::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 2px;
+    height: 14px;
+    background: var(--color-text);
+    border-radius: 0 2px 2px 0;
   }
 
   .docs-content {
@@ -1240,7 +1354,36 @@ formData<span class="c-dim">.</span><span class="c-fn">append</span><span class=
 
   @media (max-width: 900px) {
     .docs-sidebar {
-      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      z-index: 200;
+      transform: translateX(-100%);
+      transition: transform 0.2s ease;
+      width: 220px;
+      border-right: 1px solid var(--color-border);
+      background: var(--color-bg);
+    }
+
+    .docs-sidebar.open {
+      transform: translateX(0);
+    }
+
+    .sidebar-header {
+      display: flex;
+    }
+
+    .sidebar-close {
+      display: flex;
+    }
+
+    .sidebar-overlay {
+      display: block;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: 199;
     }
 
     .docs-content {
