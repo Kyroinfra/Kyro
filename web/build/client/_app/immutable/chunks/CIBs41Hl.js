@@ -1,1 +1,0 @@
-import{d as l,w as a}from"./DsGEnUUF.js";const n=a(null);l(n,o=>o!==null);l(n,o=>(o==null?void 0:o.role)==="owner");l(n,o=>(o==null?void 0:o.role)==="admin"||(o==null?void 0:o.role)==="owner");export{n as u};
