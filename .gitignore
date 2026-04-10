@@ -5,6 +5,12 @@ node_modules/
 
 # Build output
 dist/
+build/
+.svelte-kit/
+web/node_modules
+web/.svelte-kit
+web/build
+web/dist
 
 # Environment variables
 .env
