@@ -4,6 +4,37 @@ import { authMiddleware } from '../middleware/auth';
 
 const router = Router();
 
+/**
+ * @swagger
+ * /usage:
+ *   get:
+ *     tags: [Usage]
+ *     summary: Get usage statistics
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: start_date
+ *         in: query
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start date (YYYY-MM-DD)
+ *       - name: end_date
+ *         in: query
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End date (YYYY-MM-DD)
+ *     responses:
+ *       200:
+ *         description: Usage statistics
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/UsageStats'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ */
 router.get('/', authMiddleware, async (req: Request, res: Response) => {
   try {
     const orgId = req.user?.orgId;
@@ -54,6 +85,31 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * @swagger
+ * /usage/daily:
+ *   get:
+ *     tags: [Usage]
+ *     summary: Get daily usage breakdown
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: start_date
+ *         in: query
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - name: end_date
+ *         in: query
+ *         schema:
+ *           type: string
+ *           format: date
+ *     responses:
+ *       200:
+ *         description: Daily usage data
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ */
 router.get('/daily', authMiddleware, async (req: Request, res: Response) => {
   try {
     const orgId = req.user?.orgId;

@@ -3,6 +3,7 @@
 	import { page } from '$app/stores';
 	import { user } from '$lib/stores/auth';
 	import { Dashboard, Key, File, Usage, Settings } from '$lib/components/icons';
+	import Logo from '$lib/components/Logo.svelte';
 
 	interface Props {
 		data: { user: { id: string; orgId: string; role: string } };
@@ -10,6 +11,7 @@
 	}
 
 	let { data, children }: Props = $props();
+	let sidebarOpen = $state(false);
 
 	$effect(() => {
 		user.set({
@@ -18,6 +20,12 @@
 			role: data.user.role as 'owner' | 'admin' | 'member',
 			orgId: data.user.orgId
 		});
+	});
+
+	// Close sidebar on route change
+	$effect(() => {
+		$page.url.pathname;
+		sidebarOpen = false;
 	});
 
 	const navSections = [
@@ -31,17 +39,15 @@
 		},
 		{
 			label: '// analytics',
-			items: [
-				{ href: '/dashboard/usage', label: 'usage', icon: Usage }
-			]
+			items: [{ href: '/dashboard/usage', label: 'usage', icon: Usage }]
 		},
 		{
 			label: '// config',
-			items: [
-				{ href: '/dashboard/settings', label: 'settings', icon: Settings }
-			]
+			items: [{ href: '/dashboard/settings', label: 'settings', icon: Settings }]
 		}
 	];
+
+	const allNavItems = navSections.flatMap(s => s.items);
 
 	function getInitials(email: string): string {
 		return email ? email.substring(0, 2).toUpperCase() : 'U';
@@ -60,12 +66,18 @@
 </script>
 
 <div class="app-layout">
-	<aside class="sidebar">
+	<!-- Overlay for tablet drawer -->
+	{#if sidebarOpen}
+		<div class="sidebar-overlay" onclick={() => (sidebarOpen = false)}></div>
+	{/if}
+
+	<aside class="sidebar" class:open={sidebarOpen}>
 		<div class="sidebar-header">
 			<a href="/" class="logo">
-				<span class="logo-mark">K</span>
+				<Logo size={22} />
 				<span class="logo-text">kyro</span>
 			</a>
+			<button class="sidebar-close" onclick={() => (sidebarOpen = false)} aria-label="Close menu">✕</button>
 		</div>
 
 		<nav class="sidebar-nav">
@@ -74,9 +86,7 @@
 				{#each section.items as item}
 					{@const isActive = $page.url.pathname === item.href || ($page.url.pathname.startsWith(item.href) && item.href !== '/dashboard')}
 					<a href={item.href} class="nav-item" class:active={isActive}>
-						<span class="nav-icon">
-							<item.icon size={14} />
-						</span>
+						<span class="nav-icon"><item.icon size={14} /></span>
 						<span class="nav-label">{item.label}</span>
 					</a>
 				{/each}
@@ -85,9 +95,7 @@
 
 		<div class="sidebar-footer">
 			<div class="user-chip">
-				<div class="user-avatar">
-					{getInitials($user?.email || '')}
-				</div>
+				<div class="user-avatar">{getInitials($user?.email || '')}</div>
 				<div class="user-details">
 					<span class="user-email">{$user?.email || 'user'}</span>
 					<span class="user-role">{$user?.role || 'member'}</span>
@@ -107,6 +115,13 @@
 	<div class="main-wrapper">
 		<header class="topbar">
 			<div class="topbar-left">
+				<button class="hamburger" onclick={() => (sidebarOpen = true)} aria-label="Open menu">
+					<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+						<line x1="3" y1="6" x2="21" y2="6" />
+						<line x1="3" y1="12" x2="21" y2="12" />
+						<line x1="3" y1="18" x2="21" y2="18" />
+					</svg>
+				</button>
 				<span class="prompt-char">$</span>
 				<span class="topbar-path">{getPagePath()}</span>
 				<span class="cursor"></span>
@@ -121,6 +136,17 @@
 			{@render children()}
 		</main>
 	</div>
+
+	<!-- Mobile bottom tab bar -->
+	<nav class="bottom-tabs">
+		{#each allNavItems as item}
+			{@const isActive = $page.url.pathname === item.href || ($page.url.pathname.startsWith(item.href) && item.href !== '/dashboard')}
+			<a href={item.href} class="tab-item" class:active={isActive}>
+				<span class="tab-icon"><item.icon size={18} /></span>
+				<span class="tab-label">{item.label}</span>
+			</a>
+		{/each}
+	</nav>
 </div>
 
 <style>
@@ -142,6 +168,24 @@
 	.sidebar-header {
 		padding: var(--space-4) var(--space-4);
 		border-bottom: 1px solid var(--color-border);
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+	}
+
+	.sidebar-close {
+		display: none;
+		background: none;
+		border: none;
+		color: var(--color-text-muted);
+		font-size: var(--font-size-xs);
+		cursor: pointer;
+		padding: var(--space-1);
+		line-height: 1;
+	}
+
+	.sidebar-overlay {
+		display: none;
 	}
 
 	.logo {
@@ -242,9 +286,7 @@
 		opacity: 0.8;
 	}
 
-	.nav-label {
-		flex: 1;
-	}
+	.nav-label { flex: 1; }
 
 	/* ── Footer ── */
 	.sidebar-footer {
@@ -350,17 +392,40 @@
 		align-items: center;
 		gap: var(--space-2);
 		font-size: var(--font-size-xs);
+		min-width: 0;
+	}
+
+	.hamburger {
+		display: none;
+		background: none;
+		border: none;
+		color: var(--color-text-muted);
+		cursor: pointer;
+		padding: 4px;
+		border-radius: var(--radius-sm);
+		flex-shrink: 0;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.hamburger:hover {
+		color: var(--color-text-dim);
+		background: var(--color-bg-2);
+	}
+
+	.topbar-path {
+		font-family: var(--font-mono);
+		color: var(--color-text-muted);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.prompt-char {
 		font-family: var(--font-mono);
 		color: var(--color-success);
 		font-weight: 700;
-	}
-
-	.topbar-path {
-		font-family: var(--font-mono);
-		color: var(--color-text-muted);
+		flex-shrink: 0;
 	}
 
 	.cursor {
@@ -372,6 +437,7 @@
 		animation: blink 1s step-end infinite;
 		vertical-align: middle;
 		border-radius: 1px;
+		flex-shrink: 0;
 	}
 
 	@keyframes blink {
@@ -383,6 +449,7 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-2);
+		flex-shrink: 0;
 	}
 
 	.status-indicator {
@@ -404,5 +471,111 @@
 		flex: 1;
 		padding: var(--space-5) var(--space-6);
 		overflow-y: auto;
+	}
+
+	/* ── Bottom tabs (mobile only) ── */
+	.bottom-tabs {
+		display: none;
+	}
+
+	/* ── Tablet: drawer sidebar ── */
+	@media (max-width: 900px) {
+		.sidebar {
+			position: fixed;
+			top: 0;
+			left: 0;
+			height: 100vh;
+			z-index: 200;
+			transform: translateX(-100%);
+			transition: transform 0.2s ease;
+			width: 220px;
+		}
+
+		.sidebar.open {
+			transform: translateX(0);
+		}
+
+		.sidebar-close {
+			display: flex;
+		}
+
+		.sidebar-overlay {
+			display: block;
+			position: fixed;
+			inset: 0;
+			background: rgba(0, 0, 0, 0.6);
+			z-index: 199;
+		}
+
+		.hamburger {
+			display: flex;
+		}
+
+		.main-content {
+			padding: var(--space-4) var(--space-4);
+		}
+	}
+
+	/* ── Mobile: bottom tab bar ── */
+	@media (max-width: 640px) {
+		.bottom-tabs {
+			display: flex;
+			position: fixed;
+			bottom: 0;
+			left: 0;
+			right: 0;
+			background: var(--color-bg);
+			border-top: 1px solid var(--color-border);
+			z-index: 100;
+			padding-bottom: env(safe-area-inset-bottom);
+		}
+
+		.tab-item {
+			flex: 1;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			gap: 3px;
+			padding: var(--space-2) var(--space-1);
+			color: var(--color-text-ghost);
+			text-decoration: none;
+			font-family: var(--font-mono);
+			font-size: 9px;
+			letter-spacing: 0.3px;
+			transition: color 0.1s ease;
+		}
+
+		.tab-item.active {
+			color: var(--color-text);
+		}
+
+		.tab-icon {
+			display: flex;
+			opacity: 0.4;
+		}
+
+		.tab-item.active .tab-icon {
+			opacity: 1;
+		}
+
+		.tab-label {
+			text-overflow: ellipsis;
+			overflow: hidden;
+			white-space: nowrap;
+			max-width: 100%;
+		}
+
+		.main-content {
+			padding: var(--space-3) var(--space-3);
+			padding-bottom: calc(60px + env(safe-area-inset-bottom));
+		}
+
+		.topbar-path {
+			max-width: 140px;
+		}
+
+		.status-text {
+			display: none;
+		}
 	}
 </style>

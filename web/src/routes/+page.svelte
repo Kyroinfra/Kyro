@@ -1,438 +1,803 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+  import { onMount } from "svelte";
+  import Logo from "$lib/components/Logo.svelte";
 
-	type HealthStatus = 'checking' | 'connected' | 'degraded' | 'error';
+  type HealthStatus = "checking" | "connected" | "degraded" | "error";
 
-	let status: HealthStatus = $state('checking');
-	let health: {
-		uptime?: number;
-		database?: string;
-		redis?: string;
-		timestamp?: string;
-	} = $state({});
+  let status: HealthStatus = $state("checking");
+  let health: {
+    uptime?: number;
+    database?: string;
+    redis?: string;
+    timestamp?: string;
+  } = $state({});
 
-	onMount(async () => {
-		try {
-			const res = await fetch('/health');
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			const data = await res.json();
-			health = data;
-			status = data.status === 'ok' ? 'connected' : 'degraded';
-		} catch {
-			status = 'error';
-		}
-	});
+  onMount(async () => {
+    try {
+      const res = await fetch("/health");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      health = data;
+      status = data.status === "ok" ? "connected" : "degraded";
+    } catch {
+      status = "error";
+    }
+  });
 
-	function formatUptime(seconds: number): string {
-		if (!seconds) return '—';
-		const d = Math.floor(seconds / 86400);
-		const h = Math.floor((seconds % 86400) / 3600);
-		const m = Math.floor((seconds % 3600) / 60);
-		if (d > 0) return `${d}d ${h}h`;
-		if (h > 0) return `${h}h ${m}m`;
-		return `${m}m`;
-	}
+  function formatUptime(seconds: number): string {
+    if (!seconds) return "—";
+    const d = Math.floor(seconds / 86400);
+    const h = Math.floor((seconds % 86400) / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    if (d > 0) return `${d}d ${h}h`;
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+  }
 
-	const statusConfig = {
-		checking: { label: 'connecting...', color: 'var(--color-warning)', dot: 'pulse' },
-		connected: { label: 'all systems operational', color: 'var(--color-success)', dot: 'online' },
-		degraded:  { label: 'degraded', color: 'var(--color-warning)', dot: 'warn' },
-		error:     { label: 'backend unreachable', color: 'var(--color-danger)', dot: 'error' },
-	};
+  const statusConfig = {
+    checking: { label: "connecting...", color: "var(--color-warning)", dot: "pulse" },
+    connected: { label: "all systems operational", color: "var(--color-success)", dot: "online" },
+    degraded: { label: "degraded", color: "var(--color-warning)", dot: "warn" },
+    error: { label: "backend unreachable", color: "var(--color-danger)", dot: "error" },
+  };
 
-	let cfg = $derived(statusConfig[status]);
+  let cfg = $derived(statusConfig[status]);
+
+  const steps = [
+    { n: "01", title: "Create an org", desc: "Sign up and create your organisation in seconds." },
+    { n: "02", title: "Generate a key", desc: "Issue API keys with the exact scopes you need." },
+    { n: "03", title: "Start building", desc: "Upload files, track usage, and scale with confidence." },
+  ];
+
+  const features = [
+    {
+      icon: "◇",
+      title: "API Key Management",
+      desc: "Create, scope, and revoke keys with fine-grained permission control. Every key is audited.",
+    },
+    {
+      icon: "↑",
+      title: "Usage Analytics",
+      desc: "Real-time dashboards with daily breakdowns and bandwidth tracking per key.",
+    },
+    {
+      icon: "▤",
+      title: "File Storage",
+      desc: "Upload, serve, and manage files with per-org storage quotas and CDN delivery.",
+    },
+    {
+      icon: "⊙",
+      title: "Rate Limiting",
+      desc: "Redis-backed rate limiting protects your infrastructure automatically.",
+    },
+  ];
 </script>
 
 <svelte:head>
-	<title>Kyro — API Management Platform</title>
+  <title>Kyro — API Management Platform</title>
 </svelte:head>
 
 <div class="landing">
-	<header class="header">
-		<a href="/" class="logo">
-			<span class="logo-mark">K</span>
-			<span class="logo-text">kyro</span>
-		</a>
-		<nav class="nav">
-			<a href="/health" class="nav-link">status</a>
-			<a href="/login" class="nav-link">sign in</a>
-			<a href="/register" class="nav-cta">get started</a>
-		</nav>
-	</header>
 
-	<div class="statusbar" style="--s: {cfg.color}">
-		<span class="dot dot-{cfg.dot}"></span>
-		<span class="status-text">{cfg.label}</span>
-		{#if status === 'connected' || status === 'degraded'}
-			<span class="sep">·</span>
-			<span>db <span class="chip chip-{health.database === 'connected' ? 'ok' : 'err'}">{health.database}</span></span>
-			<span class="sep">·</span>
-			<span>redis <span class="chip chip-{health.redis === 'connected' ? 'ok' : 'err'}">{health.redis}</span></span>
-			<span class="sep">·</span>
-			<span class="muted">up {formatUptime(health.uptime ?? 0)}</span>
-		{/if}
-	</div>
+  <!-- ── Header ── -->
+  <header class="header">
+    <a href="/" class="logo">
+      <Logo size={26} />
+      <span class="logo-text">kyro</span>
+    </a>
+    <nav class="nav">
+      <a href="/docs" class="nav-link">docs</a>
+      <a href="/health" class="nav-link">status</a>
+      <a href="/login" class="nav-link">sign in</a>
+    </nav>
+  </header>
 
-	<main class="hero">
-		<div class="hero-inner">
-			<div class="terminal-line">
-				<span class="term-prompt">$</span>
-				<span class="term-cmd">kyro --init production</span>
-				<span class="term-cursor"></span>
-			</div>
+  <!-- ── Status bar ── -->
+  <div class="statusbar" style="--s: {cfg.color}">
+    <span class="dot dot-{cfg.dot}"></span>
+    <span class="status-text">{cfg.label}</span>
+    {#if status === "connected" || status === "degraded"}
+      <span class="sep">·</span>
+      <span>db <span class="chip chip-{health.database === 'connected' ? 'ok' : 'err'}">{health.database}</span></span>
+      <span class="sep">·</span>
+      <span>redis <span class="chip chip-{health.redis === 'connected' ? 'ok' : 'err'}">{health.redis}</span></span>
+      <span class="sep">·</span>
+      <span class="muted">up {formatUptime(health.uptime ?? 0)}</span>
+    {/if}
+  </div>
 
-			<h1 class="hero-title">
-				Build with<br />
-				<span class="accent">confidence.</span>
-			</h1>
-			<p class="hero-sub">
-				API key management, real-time usage analytics, and file storage — 
-				in one unified platform built for engineering teams.
-			</p>
-			<div class="hero-cta">
-				<a href="/register" class="cta-primary">start building free</a>
-				<a href="/login" class="cta-ghost">sign in →</a>
-			</div>
-		</div>
+  <main>
 
-		<div class="features">
-			{#each [
-				{ icon: '◇', title: 'API Key Management', desc: 'Create, scope, and revoke keys with fine-grained permission control.' },
-				{ icon: '↑', title: 'Usage Analytics', desc: 'Real-time dashboards with daily breakdowns and bandwidth tracking.' },
-				{ icon: '▤', title: 'File Storage', desc: 'Upload, serve, and manage files with per-org storage quotas.' },
-				{ icon: '⊙', title: 'Rate Limiting', desc: 'Redis-backed rate limiting protects your infrastructure automatically.' }
-			] as feat}
-				<div class="feat-card">
-					<span class="feat-icon">{feat.icon}</span>
-					<h3>{feat.title}</h3>
-					<p>{feat.desc}</p>
-				</div>
-			{/each}
-		</div>
-	</main>
+    <!-- ── Hero ── -->
+    <section class="hero">
+      <div class="hero-inner">
+        <div class="terminal-line">
+          <span class="term-prompt">$</span>
+          <span class="term-cmd">kyro --init production</span>
+          <span class="term-cursor"></span>
+        </div>
 
-	<footer class="footer">
-		<span>© 2026 kyro</span>
-		<a href="/health">system status</a>
-	</footer>
+        <h1 class="hero-title">
+          The API platform<br />
+          teams <span class="accent">actually ship with.</span>
+        </h1>
+
+        <p class="hero-sub">
+          Key management, file storage, and real-time analytics — unified in a single API built for engineering teams that move fast.
+        </p>
+
+        <div class="hero-cta">
+          <a href="/register" class="cta-primary">start building free →</a>
+          <a href="/docs" class="cta-ghost">read the docs</a>
+        </div>
+
+        <div class="hero-proof">
+          <span class="proof-item">
+            <span class="proof-dot"></span>no credit card required
+          </span>
+          <span class="proof-sep">·</span>
+          <span class="proof-item">
+            <span class="proof-dot"></span>free tier included
+          </span>
+          <span class="proof-sep">·</span>
+          <span class="proof-item">
+            <span class="proof-dot"></span>10 min integration
+          </span>
+        </div>
+      </div>
+
+      <!-- Code snippet panel -->
+      <div class="hero-code">
+        <div class="code-header">
+          <div class="code-dots">
+            <span></span><span></span><span></span>
+          </div>
+          <span class="code-title">quickstart.ts</span>
+        </div>
+        <pre class="code-body"><span class="c-kw">import</span> <span class="c-brace">&#123;</span> KyroClient <span class="c-brace">&#125;</span> <span class="c-kw">from</span> <span class="c-str">"@kyro/sdk"</span><span class="c-dim">;</span>
+
+<span class="c-kw">const</span> client <span class="c-dim">=</span> <span class="c-kw">new</span> <span class="c-fn">KyroClient</span><span class="c-brace">(&#123;</span>
+  apiKey<span class="c-dim">:</span> process<span class="c-dim">.</span>env<span class="c-dim">.</span><span class="c-prop">KYRO_API_KEY</span><span class="c-dim">,</span>
+<span class="c-brace">&#125;)</span><span class="c-dim">;</span>
+
+<span class="c-comment">// Upload a file</span>
+<span class="c-kw">const</span> file <span class="c-dim">=</span> <span class="c-kw">await</span> client<span class="c-dim">.</span>files<span class="c-dim">.</span><span class="c-fn">upload</span><span class="c-brace">(&#123;</span>
+  name<span class="c-dim">:</span> <span class="c-str">"report.pdf"</span><span class="c-dim">,</span>
+  data<span class="c-dim">:</span> buffer<span class="c-dim">,</span>
+<span class="c-brace">&#125;)</span><span class="c-dim">;</span>
+
+<span class="c-comment">// Get a public URL</span>
+console<span class="c-dim">.</span><span class="c-fn">log</span><span class="c-brace">(</span>file<span class="c-dim">.</span><span class="c-prop">url</span><span class="c-brace">)</span><span class="c-dim">;</span>
+<span class="c-success">// → https://cdn.kyro.dev/org/abc/report.pdf</span></pre>
+      </div>
+    </section>
+
+    <!-- ── Features ── -->
+    <section class="features-section">
+      <div class="section-label">platform</div>
+      <h2 class="section-title">Everything in one place</h2>
+      <div class="features">
+        {#each features as feat}
+          <div class="feat-card">
+            <span class="feat-icon">{feat.icon}</span>
+            <h3>{feat.title}</h3>
+            <p>{feat.desc}</p>
+          </div>
+        {/each}
+      </div>
+    </section>
+
+    <!-- ── How it works ── -->
+    <section class="steps-section">
+      <div class="section-label">getting started</div>
+      <h2 class="section-title">Up and running in minutes</h2>
+      <div class="steps">
+        {#each steps as step, i}
+          <div class="step">
+            <div class="step-number">{step.n}</div>
+            <div class="step-content">
+              <h3>{step.title}</h3>
+              <p>{step.desc}</p>
+            </div>
+            {#if i < steps.length - 1}
+              <div class="step-connector"></div>
+            {/if}
+          </div>
+        {/each}
+      </div>
+    </section>
+
+    <!-- ── CTA strip ── -->
+    <section class="cta-section">
+      <div class="cta-inner">
+        <div class="terminal-line terminal-sm">
+          <span class="term-prompt">$</span>
+          <span class="term-cmd">npm install @kyro/sdk</span>
+          <span class="term-cursor"></span>
+        </div>
+        <h2 class="cta-title">Ready to ship?</h2>
+        <p class="cta-sub">Start with the free tier. Scale when you need to.</p>
+        <div class="cta-btns">
+          <a href="/register" class="cta-primary">create your account</a>
+          <a href="/docs" class="cta-ghost">explore the docs →</a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <span>© 2026 kyro</span>
+    <div class="footer-links">
+      <a href="/docs">docs</a>
+      <a href="/health">status</a>
+    </div>
+  </footer>
 </div>
 
 <style>
-	.landing {
-		min-height: 100vh;
-		display: flex;
-		flex-direction: column;
-		background: var(--color-bg);
-	}
+  .landing {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--color-bg);
+  }
 
-	/* ── Header ── */
-	.header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: var(--space-4) var(--space-8);
-		border-bottom: 1px solid var(--color-border);
-	}
+  /* ── Header ── */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-4) var(--space-8);
+    border-bottom: 1px solid var(--color-border);
+    position: sticky;
+    top: 0;
+    background: var(--color-bg);
+    z-index: 10;
+  }
 
-	.logo {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2);
-		font-family: var(--font-mono);
-		font-size: var(--font-size-base);
-		font-weight: 700;
-		color: var(--color-text);
-		text-decoration: none;
-		text-transform: lowercase;
-	}
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-base);
+    font-weight: 700;
+    color: var(--color-text);
+    text-decoration: none;
+  }
 
-	.logo-mark {
-		width: 26px;
-		height: 26px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background: var(--color-text);
-		color: var(--color-bg);
-		border-radius: var(--radius-sm);
-		font-weight: 700;
-		font-size: 12px;
-	}
+  .nav {
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+    font-family: var(--font-mono);
+  }
 
-	.nav {
-		display: flex;
-		align-items: center;
-		gap: var(--space-5);
-		font-family: var(--font-mono);
-	}
+  .nav-link {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+    text-decoration: none;
+    transition: color 0.1s;
+  }
 
-	.nav-link {
-		color: var(--color-text-muted);
-		font-size: var(--font-size-xs);
-		text-decoration: none;
-		transition: color 0.1s;
-	}
+  .nav-link:hover {
+    color: var(--color-text);
+  }
 
-	.nav-link:hover {
-		color: var(--color-text-dim);
-	}
+  /* ── Status bar ── */
+  .statusbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 6px var(--space-8);
+    background: var(--color-bg-2);
+    border-bottom: 1px solid var(--color-border);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-2xs);
+    color: var(--color-text-muted);
+  }
 
-	.nav-cta {
-		height: 30px;
-		padding: 0 var(--space-4);
-		background: var(--color-text);
-		color: var(--color-bg);
-		border-radius: var(--radius-md);
-		font-family: var(--font-mono);
-		font-size: var(--font-size-xs);
-		font-weight: 600;
-		text-decoration: none;
-		display: flex;
-		align-items: center;
-		transition: opacity 0.1s;
-	}
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
 
-	.nav-cta:hover {
-		opacity: 0.85;
-	}
+  .dot-online { background: var(--color-success); box-shadow: 0 0 5px var(--color-success); }
+  .dot-warn   { background: var(--color-warning); }
+  .dot-error  { background: var(--color-danger); }
+  .dot-pulse  {
+    background: var(--color-warning);
+    animation: dpulse 1.2s ease-in-out infinite;
+  }
 
-	/* ── Status bar ── */
-	.statusbar {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2);
-		padding: 6px var(--space-8);
-		background: var(--color-bg-2);
-		border-bottom: 1px solid var(--color-border);
-		font-family: var(--font-mono);
-		font-size: var(--font-size-2xs);
-		color: var(--color-text-muted);
-	}
+  @keyframes dpulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.2; }
+  }
 
-	.dot {
-		width: 6px;
-		height: 6px;
-		border-radius: 50%;
-		flex-shrink: 0;
-	}
+  .status-text { color: var(--s); font-weight: 500; }
+  .sep         { color: var(--color-border-hover); }
+  .muted       { color: var(--color-text-ghost); }
 
-	.dot-online { background: var(--color-success); box-shadow: 0 0 5px var(--color-success); }
-	.dot-warn   { background: var(--color-warning); }
-	.dot-error  { background: var(--color-danger); }
-	.dot-pulse  {
-		background: var(--color-warning);
-		animation: dpulse 1.2s ease-in-out infinite;
-	}
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 5px;
+    height: 14px;
+    border-radius: var(--radius-sm);
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
 
-	@keyframes dpulse {
-		0%, 100% { opacity: 1; }
-		50% { opacity: 0.2; }
-	}
+  .chip-ok  { background: var(--color-success-dim); color: var(--color-success); }
+  .chip-err { background: var(--color-danger-dim); color: var(--color-danger); }
 
-	.status-text { color: var(--s); font-weight: 500; }
-	.sep { color: var(--color-border-hover); }
-	.muted { color: var(--color-text-ghost); }
+  /* ── Hero ── */
+  .hero {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-12);
+    align-items: center;
+    padding: var(--space-16) var(--space-8);
+    max-width: 1100px;
+    margin: 0 auto;
+    width: 100%;
+  }
 
-	.chip {
-		display: inline-flex;
-		align-items: center;
-		padding: 0 5px;
-		height: 14px;
-		border-radius: var(--radius-sm);
-		font-size: 9px;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.5px;
-	}
+  .hero-inner {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+  }
 
-	.chip-ok  { background: var(--color-success-dim); color: var(--color-success); }
-	.chip-err { background: var(--color-danger-dim); color: var(--color-danger); }
+  .terminal-line {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    background: var(--color-bg-2);
+    border: 1px solid var(--color-border-2);
+    border-radius: var(--radius-md);
+    padding: var(--space-2) var(--space-4);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-xs);
+    width: fit-content;
+  }
 
-	/* ── Hero ── */
-	.hero {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		padding: var(--space-12) var(--space-8);
-		gap: var(--space-12);
-	}
+  .terminal-sm {
+    font-size: var(--font-size-2xs);
+  }
 
-	.hero-inner {
-		max-width: 640px;
-		text-align: center;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: var(--space-5);
-	}
+  .term-prompt { color: var(--color-success); font-weight: 700; }
+  .term-cmd    { color: var(--color-text-dim); }
 
-	.terminal-line {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2);
-		background: var(--color-bg-2);
-		border: 1px solid var(--color-border-2);
-		border-radius: var(--radius-md);
-		padding: var(--space-2) var(--space-4);
-		font-family: var(--font-mono);
-		font-size: var(--font-size-xs);
-	}
+  .term-cursor {
+    display: inline-block;
+    width: 7px;
+    height: 12px;
+    background: var(--color-success);
+    opacity: 0.6;
+    animation: blink 1s step-end infinite;
+    border-radius: 1px;
+  }
 
-	.term-prompt {
-		color: var(--color-success);
-		font-weight: 700;
-	}
+  @keyframes blink {
+    0%, 100% { opacity: 0.6; }
+    50%      { opacity: 0; }
+  }
 
-	.term-cmd {
-		color: var(--color-text-dim);
-	}
+  .hero-title {
+    font-family: var(--font-mono);
+    font-size: clamp(32px, 4.5vw, 52px);
+    font-weight: 700;
+    line-height: 1.12;
+    color: var(--color-text);
+    letter-spacing: -0.02em;
+    margin: 0;
+  }
 
-	.term-cursor {
-		display: inline-block;
-		width: 7px;
-		height: 12px;
-		background: var(--color-success);
-		opacity: 0.6;
-		animation: blink 1s step-end infinite;
-		border-radius: 1px;
-	}
+  .accent { color: var(--color-success); }
 
-	@keyframes blink {
-		0%, 100% { opacity: 0.6; }
-		50% { opacity: 0; }
-	}
+  .hero-sub {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    line-height: 1.75;
+    max-width: 480px;
+    margin: 0;
+  }
 
-	.hero-title {
-		font-family: var(--font-mono);
-		font-size: clamp(38px, 6vw, 58px);
-		font-weight: 700;
-		line-height: 1.1;
-		color: var(--color-text);
-		letter-spacing: -0.02em;
-	}
+  .hero-cta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+  }
 
-	.accent {
-		color: var(--color-success);
-	}
+  .cta-primary {
+    height: 42px;
+    padding: 0 var(--space-6);
+    background: var(--color-text);
+    color: var(--color-bg);
+    border-radius: var(--radius-md);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    transition: opacity 0.1s;
+    white-space: nowrap;
+  }
 
-	.hero-sub {
-		font-family: var(--font-mono);
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
-		line-height: 1.7;
-		max-width: 500px;
-	}
+  .cta-primary:hover { opacity: 0.85; }
 
-	.hero-cta {
-		display: flex;
-		align-items: center;
-		gap: var(--space-4);
-		flex-wrap: wrap;
-		justify-content: center;
-	}
+  .cta-ghost {
+    height: 42px;
+    padding: 0 var(--space-4);
+    color: var(--color-text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    border: 1px solid var(--color-border-2);
+    border-radius: var(--radius-md);
+    transition: all 0.1s;
+    white-space: nowrap;
+  }
 
-	.cta-primary {
-		height: 42px;
-		padding: 0 var(--space-6);
-		background: var(--color-text);
-		color: var(--color-bg);
-		border-radius: var(--radius-md);
-		font-family: var(--font-mono);
-		font-size: var(--font-size-sm);
-		font-weight: 600;
-		text-decoration: none;
-		display: flex;
-		align-items: center;
-		transition: opacity 0.1s;
-	}
+  .cta-ghost:hover {
+    color: var(--color-text);
+    border-color: var(--color-border-hover);
+  }
 
-	.cta-primary:hover {
-		opacity: 0.85;
-	}
+  .hero-proof {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-2xs);
+    color: var(--color-text-ghost);
+    flex-wrap: wrap;
+  }
 
-	.cta-ghost {
-		height: 42px;
-		padding: 0 var(--space-4);
-		color: var(--color-text-muted);
-		font-family: var(--font-mono);
-		font-size: var(--font-size-sm);
-		text-decoration: none;
-		display: flex;
-		align-items: center;
-		border: 1px solid var(--color-border-2);
-		border-radius: var(--radius-md);
-		transition: all 0.1s;
-	}
+  .proof-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
 
-	.cta-ghost:hover {
-		color: var(--color-text-dim);
-		border-color: var(--color-border-hover);
-	}
+  .proof-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--color-success);
+    opacity: 0.6;
+  }
 
-	/* ── Feature cards ── */
-	.features {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-		gap: var(--space-3);
-		width: 100%;
-		max-width: 880px;
-	}
+  .proof-sep { color: var(--color-border-hover); }
 
-	.feat-card {
-		padding: var(--space-5);
-		background: var(--color-bg-2);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-lg);
-		transition: border-color 0.1s ease;
-	}
+  /* ── Code panel ── */
+  .hero-code {
+    background: var(--color-bg-2);
+    border: 1px solid var(--color-border-2);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    font-family: var(--font-mono);
+  }
 
-	.feat-card:hover {
-		border-color: var(--color-border-2);
-	}
+  .code-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-bg);
+  }
 
-	.feat-icon {
-		display: block;
-		font-size: 18px;
-		color: var(--color-text-muted);
-		margin-bottom: var(--space-3);
-		font-family: var(--font-mono);
-	}
+  .code-dots {
+    display: flex;
+    gap: 5px;
+  }
 
-	.feat-card h3 {
-		font-family: var(--font-mono);
-		font-size: var(--font-size-sm);
-		font-weight: 600;
-		color: var(--color-text);
-		margin-bottom: var(--space-2);
-	}
+  .code-dots span {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--color-border-2);
+  }
 
-	.feat-card p {
-		font-family: var(--font-mono);
-		font-size: var(--font-size-xs);
-		color: var(--color-text-muted);
-		line-height: 1.6;
-	}
+  .code-title {
+    font-size: var(--font-size-2xs);
+    color: var(--color-text-ghost);
+  }
 
-	/* ── Footer ── */
-	.footer {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: var(--space-4) var(--space-8);
-		border-top: 1px solid var(--color-border);
-		font-family: var(--font-mono);
-		font-size: var(--font-size-2xs);
-		color: var(--color-text-ghost);
-	}
+  .code-body {
+    margin: 0;
+    padding: var(--space-5) var(--space-5);
+    font-size: var(--font-size-xs);
+    line-height: 1.75;
+    overflow-x: auto;
+    color: var(--color-text-dim);
+    white-space: pre;
+  }
 
-	.footer a {
-		color: var(--color-text-ghost);
-		text-decoration: none;
-		transition: color 0.1s;
-	}
+  .c-kw      { color: var(--color-success); }
+  .c-fn      { color: var(--color-text); }
+  .c-str     { color: var(--color-warning, #d4a854); }
+  .c-prop    { color: var(--color-text-dim); }
+  .c-dim     { color: var(--color-text-ghost); }
+  .c-brace   { color: var(--color-text-muted); }
+  .c-comment { color: var(--color-text-ghost); font-style: italic; }
+  .c-success { color: var(--color-success); opacity: 0.7; }
 
-	.footer a:hover {
-		color: var(--color-text-muted);
-	}
+  /* ── Shared section layout ── */
+  .features-section,
+  .steps-section {
+    padding: var(--space-16) var(--space-8);
+    max-width: 1100px;
+    margin: 0 auto;
+    width: 100%;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .section-label {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-2xs);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--color-success);
+    margin-bottom: var(--space-3);
+    font-weight: 600;
+  }
+
+  .section-title {
+    font-family: var(--font-mono);
+    font-size: clamp(22px, 3vw, 32px);
+    font-weight: 700;
+    color: var(--color-text);
+    letter-spacing: -0.02em;
+    margin: 0 0 var(--space-8) 0;
+  }
+
+  /* ── Features ── */
+  .features {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-3);
+  }
+
+  .feat-card {
+    padding: var(--space-5);
+    background: var(--color-bg-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    transition: border-color 0.15s ease;
+  }
+
+  .feat-card:hover {
+    border-color: var(--color-border-hover);
+  }
+
+  .feat-icon {
+    display: block;
+    font-size: 18px;
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-3);
+    font-family: var(--font-mono);
+  }
+
+  .feat-card h3 {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-text);
+    margin: 0 0 var(--space-2) 0;
+  }
+
+  .feat-card p {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    line-height: 1.65;
+    margin: 0;
+  }
+
+  /* ── Steps ── */
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    position: relative;
+  }
+
+  .step {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-6);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-bg-2);
+    position: relative;
+  }
+
+  .step + .step {
+    margin-left: var(--space-3);
+  }
+
+  .step-number {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-2xs);
+    font-weight: 700;
+    color: var(--color-success);
+    letter-spacing: 0.05em;
+  }
+
+  .step-content h3 {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-text);
+    margin: 0 0 var(--space-2) 0;
+  }
+
+  .step-content p {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    line-height: 1.65;
+    margin: 0;
+  }
+
+  /* ── CTA section ── */
+  .cta-section {
+    border-top: 1px solid var(--color-border);
+    padding: var(--space-16) var(--space-8);
+  }
+
+  .cta-inner {
+    max-width: 560px;
+    margin: 0 auto;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-4);
+  }
+
+  .cta-title {
+    font-family: var(--font-mono);
+    font-size: clamp(26px, 3.5vw, 40px);
+    font-weight: 700;
+    color: var(--color-text);
+    letter-spacing: -0.02em;
+    margin: 0;
+  }
+
+  .cta-sub {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    margin: 0;
+  }
+
+  .cta-btns {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  /* ── Footer ── */
+  .footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-4) var(--space-8);
+    border-top: 1px solid var(--color-border);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-2xs);
+    color: var(--color-text-ghost);
+  }
+
+  .footer-links {
+    display: flex;
+    gap: var(--space-4);
+  }
+
+  .footer a {
+    color: var(--color-text-ghost);
+    text-decoration: none;
+    transition: color 0.1s;
+  }
+
+  .footer a:hover { color: var(--color-text-muted); }
+
+  /* ── Responsive ── */
+  @media (max-width: 900px) {
+    .header { padding: var(--space-3) var(--space-5); }
+
+    .hero {
+      grid-template-columns: 1fr;
+      padding: var(--space-10) var(--space-5);
+      gap: var(--space-8);
+    }
+
+    .hero-code { display: none; }
+
+    .features {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    .steps {
+      grid-template-columns: 1fr;
+      gap: var(--space-3);
+    }
+
+    .step + .step {
+      margin-left: 0;
+    }
+
+    .features-section,
+    .steps-section {
+      padding: var(--space-10) var(--space-5);
+    }
+
+    .cta-section { padding: var(--space-10) var(--space-5); }
+  }
+
+  @media (max-width: 640px) {
+    .header { padding: var(--space-3) var(--space-4); }
+
+    .statusbar {
+      padding: 6px var(--space-4);
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    .hero {
+      padding: var(--space-8) var(--space-4);
+      gap: var(--space-6);
+    }
+
+    .hero-cta {
+      flex-direction: column;
+      width: 100%;
+    }
+
+    .cta-primary,
+    .cta-ghost {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .features { grid-template-columns: 1fr; }
+
+    .hero-proof {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--space-2);
+    }
+
+    .proof-sep { display: none; }
+
+    .features-section,
+    .steps-section {
+      padding: var(--space-8) var(--space-4);
+    }
+
+    .cta-section { padding: var(--space-8) var(--space-4); }
+
+    .footer {
+      padding: var(--space-4);
+      font-size: 10px;
+    }
+  }
 </style>

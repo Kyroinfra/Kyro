@@ -12,6 +12,61 @@ const createKeySchema = z.object({
   scopes: z.array(z.enum(['read', 'write', 'admin'])).default(['read']),
 });
 
+/**
+ * @swagger
+ * /keys:
+ *   get:
+ *     tags: [API Keys]
+ *     summary: List API keys
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of API keys
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/ApiKey'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *   post:
+ *     tags: [API Keys]
+ *     summary: Create API key
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 255
+ *                 description: Key name
+ *               scopes:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   enum: [read, write, admin]
+ *                 default: [read]
+ *                 description: Key permissions
+ *     responses:
+ *       201:
+ *         description: API key created
+ *       400:
+ *         $ref: '#/components/responses/BadRequest'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ */
 router.post('/', authMiddleware, requireRole('owner', 'admin'), async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
@@ -86,6 +141,31 @@ router.get('/', authMiddleware, requireRole('owner', 'admin', 'member'), async (
   }
 });
 
+/**
+ * @swagger
+ * /keys/{id}:
+ *   delete:
+ *     tags: [API Keys]
+ *     summary: Revoke API key
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Key revoked
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ */
 router.delete('/:id', authMiddleware, requireRole('owner', 'admin'), async (req: Request, res: Response) => {
   try {
     const orgId = req.user?.orgId;
