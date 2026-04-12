@@ -17,7 +17,7 @@ services:
 
   web:
     build:
-      context: ./web
+      context: ./packages/web
       args:
         PUBLIC_API_URL: http://localhost/api/v1
     restart: unless-stopped
@@ -37,7 +37,7 @@ services:
 
   api:
     build:
-      context: ./api
+      context: ./packages/api
     restart: unless-stopped
     environment:
       - PORT=3000

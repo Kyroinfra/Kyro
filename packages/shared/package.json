@@ -1,0 +1,9 @@
+{
+  "name": "@kyro/shared",
+  "version": "0.0.1",
+  "private": true,
+  "exports": {
+    "./openapi": "./openapi/openapi-generated.yaml",
+    "./openapi-json": "./openapi/openapi-generated.json"
+  }
+}

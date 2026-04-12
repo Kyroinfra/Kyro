@@ -116,7 +116,7 @@ const options: swaggerJsdoc.Options = {
       }
     }
   },
-  apis: ['./src/routes/*.ts']
+  apis: ['../src/routes/*.ts']
 };
 
 const specs = swaggerJsdoc(options) as {
@@ -128,7 +128,7 @@ const specs = swaggerJsdoc(options) as {
   components?: Record<string, unknown>;
 };
 
-const outputDir = path.join(__dirname, '../../');
+const outputDir = path.join(__dirname, '../../../shared/openapi/');
 const jsonPath = path.join(outputDir, 'openapi-generated.json');
 const yamlPath = path.join(outputDir, 'openapi-generated.yaml');
 
