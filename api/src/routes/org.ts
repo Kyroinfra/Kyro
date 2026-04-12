@@ -6,6 +6,24 @@ import { inviteSchema, InviteInput } from '../validations/auth';
 
 const router = Router();
 
+/**
+ * @swagger
+ * /org:
+ *   get:
+ *     tags: [Organisation]
+ *     summary: Get current organisation
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Organisation details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Organisation'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ */
 router.get('/', authMiddleware, async (req: Request, res: Response) => {
   try {
     const orgs = await query<{
@@ -37,6 +55,64 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * @swagger
+ * /org/members:
+ *   get:
+ *     tags: [Organisation]
+ *     summary: List organisation members
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of members
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Member'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *   post:
+ *     tags: [Organisation]
+ *     summary: Invite new member
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               password:
+ *                 type: string
+ *                 format: password
+ *               role:
+ *                 type: string
+ *                 enum: [owner, admin, member]
+ *                 default: member
+ *     responses:
+ *       201:
+ *         description: Member invited
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Member'
+ *       400:
+ *         $ref: '#/components/responses/BadRequest'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ */
 router.get('/members', authMiddleware, async (req: Request, res: Response) => {
   try {
     const users = await query<{
@@ -96,6 +172,31 @@ router.post('/members', authMiddleware, requireRole('owner'), async (req: Reques
   }
 });
 
+/**
+ * @swagger
+ * /org/members/{id}:
+ *   delete:
+ *     tags: [Organisation]
+ *     summary: Remove member
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       204:
+ *         description: Member removed
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ */
 router.delete('/members/:id', authMiddleware, requireRole('owner', 'admin'), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;

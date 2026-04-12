@@ -112,9 +112,9 @@
 
 # 9. SDK ECOSYSTEM (LANGUAGE-AGNOSTIC STRATEGY)
 ## 9.1 API CONTRACT FIRST
-- [ ] Maintain OpenAPI 3.1 as canonical contract
-- [ ] Ensure spec completeness for all endpoints
-- [ ] Auto-sync API changes → OpenAPI
+- [x] Maintain OpenAPI 3.1 as canonical contract
+- [x] Ensure spec completeness for all endpoints
+- [x] Auto-sync API changes → OpenAPI
 
 ---
 
