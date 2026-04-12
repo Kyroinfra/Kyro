@@ -14,6 +14,9 @@ const router = Router();
  *     summary: Get current organisation
  *     security:
  *       - bearerAuth: []
+ *     x-scope: null
+ *     x-body-description: null
+ *     x-response-example: '{"id":"550e8400-e29b-41d4-a716-446655440000","name":"Acme Inc","slug":"acme-inc","plan":"free","createdAt":"2026-04-10T12:00:00Z"}'
  *     responses:
  *       200:
  *         description: Organisation details
@@ -63,6 +66,9 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
  *     summary: List organisation members
  *     security:
  *       - bearerAuth: []
+ *     x-scope: null
+ *     x-body-description: null
+ *     x-response-example: '[{"id":"550e8400-e29b-41d4-a716-446655440000","email":"admin@acme.com","role":"owner","createdAt":"2026-04-10T12:00:00Z"}]'
  *     responses:
  *       200:
  *         description: List of members
@@ -99,6 +105,9 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
  *                 type: string
  *                 enum: [owner, admin, member]
  *                 default: member
+ *     x-scope: null
+ *     x-body-description: '{ "email": "user@acme.com", "password": "secure123", "role": "member" }'
+ *     x-response-example: '{"id":"550e8400-e29b-41d4-a716-446655440000","email":"user@acme.com","role":"member"}'
  *     responses:
  *       201:
  *         description: Member invited
@@ -187,6 +196,9 @@ router.post('/members', authMiddleware, requireRole('owner'), async (req: Reques
  *         schema:
  *           type: string
  *           format: uuid
+ *     x-scope: null
+ *     x-body-description: null
+ *     x-response-example: '204 No Content'
  *     responses:
  *       204:
  *         description: Member removed

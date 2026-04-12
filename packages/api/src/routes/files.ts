@@ -27,6 +27,9 @@ const router = Router();
  *         in: query
  *         schema:
  *           type: string
+ *     x-scope: read
+ *     x-body-description: null
+ *     x-response-example: '[{"id":"550e8400-e29b-41d4-a716-446655440000","name":"document.pdf","mimeType":"application/pdf","sizeBytes":1024000,"createdAt":"2026-04-10T12:00:00Z"}]'
  *     responses:
  *       200:
  *         description: List of files
@@ -52,6 +55,9 @@ const router = Router();
  *                 type: string
  *                 format: binary
  *                 description: File to upload
+ *     x-scope: write
+ *     x-body-description: file — File (multipart/form-data)
+ *     x-response-example: '{"id":"550e8400-e29b-41d4-a716-446655440000","name":"document.pdf","mimeType":"application/pdf","sizeBytes":1024000,"createdAt":"2026-04-10T12:00:00Z"}'
  *     responses:
  *       201:
  *         description: File uploaded
@@ -142,6 +148,9 @@ router.post('/', requireScope('write'), upload.single('file'), async (req: ApiKe
  *         schema:
  *           type: string
  *           format: uuid
+ *     x-scope: read
+ *     x-body-description: null
+ *     x-response-example: 'Binary file data with appropriate Content-Type header.'
  *     responses:
  *       200:
  *         description: File content
@@ -168,6 +177,9 @@ router.post('/', requireScope('write'), upload.single('file'), async (req: ApiKe
  *         schema:
  *           type: string
  *         description: File UUID
+ *     x-scope: write
+ *     x-body-description: null
+ *     x-response-example: '{"message":"File deleted","id":"550e8400-e29b-41d4-a716-446655440000"}'
  *     responses:
  *       200:
  *         description: File deleted

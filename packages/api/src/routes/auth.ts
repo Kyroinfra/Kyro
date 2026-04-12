@@ -34,6 +34,9 @@ async function findUniqueSlug(slug: string): Promise<string> {
  *   post:
  *     tags: [Authentication]
  *     summary: Register new user and organisation
+ *     x-scope: null
+ *     x-body-description: '{ "orgName": "Acme Inc", "email": "admin@acme.com", "password": "secure123" }'
+ *     x-response-example: '{"token":"eyJhbGciOiJIUzI1NiIs...","user":{"id":"550e8400-e29b-41d4-a716-446655440000","email":"admin@acme.com","role":"owner","orgId":"550e8400-e29b-41d4-a716-446655440000"}}'
  *     requestBody:
  *       required: true
  *       content:
@@ -150,6 +153,9 @@ router.post('/register', async (req: Request, res: Response) => {
  *   post:
  *     tags: [Authentication]
  *     summary: Login user
+ *     x-scope: null
+ *     x-body-description: '{ "email": "admin@acme.com", "password": "secure123" }'
+ *     x-response-example: '{"token":"eyJhbGciOiJIUzI1NiIs...","user":{"id":"550e8400-e29b-41d4-a716-446655440000","email":"admin@acme.com","role":"owner","orgId":"550e8400-e29b-41d4-a716-446655440000"}}'
  *     requestBody:
  *       required: true
  *       content:
@@ -240,6 +246,9 @@ router.post('/login', async (req: Request, res: Response) => {
  *     summary: Get current user
  *     security:
  *       - bearerAuth: []
+ *     x-scope: null
+ *     x-body-description: null
+ *     x-response-example: '{"id":"550e8400-e29b-41d4-a716-446655440000","email":"admin@acme.com","role":"owner","orgId":"550e8400-e29b-41d4-a716-446655440000"}'
  *     responses:
  *       200:
  *         description: Current user details
