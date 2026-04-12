@@ -1,13 +1,13 @@
 import Redis from 'ioredis';
 import config from '../config';
 
-let redis: Redis | null = null;
+let redis: Redis | null | undefined = undefined;
 let redisAvailable = false;
 
-export function getRedis(): Redis {
+export function getRedis(): Redis | null {
   if (!redis) {
     if (!config.redisUrl) {
-      throw new Error('REDIS_URL environment variable is required');
+      return null;
     }
 
     redis = new Redis(config.redisUrl, {  // ← use URL directly
@@ -54,8 +54,10 @@ export async function closeRedis(): Promise<void> {
 
 export async function healthCheck(): Promise<boolean> {
   try {
+    const r = getRedis();
+    if (!r) return false;
     const result = await Promise.race([
-      getRedis().ping(),
+      r.ping(),
       new Promise<string>((_, reject) =>
         setTimeout(() => reject(new Error('Redis health check timeout')), 3000)
       ),

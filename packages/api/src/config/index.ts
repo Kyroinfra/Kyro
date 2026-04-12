@@ -32,7 +32,7 @@ const config: Config = {
   nodeEnv: getRequired('NODE_ENV'),
   databaseUrl: getRequired('DATABASE_URL'),
   jwtSecret: getRequired('JWT_SECRET'),
-  redisUrl: getRequired('REDIS_URL'),  // fail fast if missing
+  redisUrl: process.env.REDIS_URL || '',  // optional for dev without redis
 };
 
 export default config;

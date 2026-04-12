@@ -1,5 +1,5 @@
 import swaggerJsdoc from 'swagger-jsdoc';
-import { OpenAPIV3_1 } from 'openapi-types';
+// import { OpenAPIV3_1 } from 'openapi-types';
 
 const options: swaggerJsdoc.Options = {
   definition: {
@@ -240,22 +240,22 @@ For file operations:
 
 export const specs = swaggerJsdoc(options);
 
-export function generateSpec(): OpenAPIV3_1.Document {
+export function generateSpec() {
   return specs;
 }
 
 if (require.main === module) {
   const fs = require('fs');
   const path = require('path');
-  
+
   const outputPath = path.join(__dirname, '../../openapi.yaml');
-  
+
   let yamlOutput = '';
-  
+
   function convertToYaml(obj: any, indent: number = 0): string {
     const spaces = '  '.repeat(indent);
     let result = '';
-    
+
     if (Array.isArray(obj)) {
       for (const item of obj) {
         if (typeof item === 'object' && item !== null) {
@@ -287,7 +287,7 @@ if (require.main === module) {
     }
     return result;
   }
-  
+
   console.log('Generating OpenAPI spec...');
   console.log(JSON.stringify(specs, null, 2));
 }

@@ -2,8 +2,8 @@
   "name": "kyro",
   "private": true,
   "scripts": {
-    "generate:openapi": "pnpm --filter @kyro/api generate:openapi",
-    "dev:api": "pnpm --filter @kyro/api dev",
-    "dev:web": "pnpm --filter @kyro/web dev"
+    "generate:openapi": "pnpm --filter kyro-api generate:openapi",
+    "dev:api": "pnpm --filter kyro-api dev",
+    "dev:web": "pnpm --filter kyro-web dev"
   }
 }
