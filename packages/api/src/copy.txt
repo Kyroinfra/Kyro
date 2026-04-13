@@ -1,0 +1,2514 @@
+# Prompt:
+this is my current codebase for my api
+
+# File collection from: /home/nyxox/Documents/Projects/Kyro/packages/api/src
+# Generated: 2026-04-13 13:16:27
+------------------------------------------------------------
+
+## config/index.ts
+
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+interface Config {
+  port: number;
+  nodeEnv: string;
+  databaseUrl: string;
+  jwtSecret: string;
+  redisUrl: string;  // make it required, not optional
+}
+
+function getRequired(key: string): string {
+  const value = process.env[key];
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${key}`);
+  }
+  return value;
+}
+
+function getRequiredAsInt(key: string): number {
+  const value = getRequired(key);
+  const parsed = parseInt(value, 10);
+  if (isNaN(parsed)) {
+    throw new Error(`Invalid integer value for ${key}: ${value}`);
+  }
+  return parsed;
+}
+
+const config: Config = {
+  port: getRequiredAsInt('PORT'),
+  nodeEnv: getRequired('NODE_ENV'),
+  databaseUrl: getRequired('DATABASE_URL'),
+  jwtSecret: getRequired('JWT_SECRET'),
+  redisUrl: process.env.REDIS_URL || '',  // optional for dev without redis
+};
+
+export default config;
+------------------------------------------------------------
+
+## db/index.ts
+
+import { Pool } from 'pg';
+import { drizzle, NodePgDatabase } from 'drizzle-orm/node-postgres';
+import config from '../config';
+import * as schema from './schema';
+
+const pool = new Pool({
+  connectionString: config.databaseUrl,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
+
+pool.on('error', (err) => {
+  console.error('Unexpected error on idle client', err);
+});
+
+export const db: NodePgDatabase<typeof schema> = drizzle(pool);
+
+export async function query<T = any>(text: string, params?: any[]): Promise<T[]> {
+  const result = await pool.query(text, params);
+  return result.rows as T[];
+}
+
+export async function queryOne<T = any>(text: string, params?: any[]): Promise<T | null> {
+  const rows = await query<T>(text, params);
+  return rows[0] || null;
+}
+
+export async function getClient() {
+  return pool.connect();
+}
+
+export async function healthCheck(): Promise<boolean> {
+  try {
+    await pool.query('SELECT 1');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export default pool;
+------------------------------------------------------------
+
+## db/migrate.ts
+
+import { drizzle } from 'drizzle-orm/node-postgres';
+import { migrate } from 'drizzle-orm/node-postgres/migrator';
+import { Pool } from 'pg';
+import config from '../config';
+
+export async function runMigrations() {
+  const pool = new Pool({
+    connectionString: config.databaseUrl,
+    max: 1,
+  });
+
+  const db = drizzle(pool);
+
+  console.log('Running migrations...');
+  
+  await migrate(db, { migrationsFolder: './drizzle' });
+  
+  console.log('Migrations completed successfully');
+  
+  await pool.end();
+}
+------------------------------------------------------------
+
+## db/redis.ts
+
+import Redis from 'ioredis';
+import config from '../config';
+
+let redis: Redis | null | undefined = undefined;
+let redisAvailable = false;
+
+export function getRedis(): Redis | null {
+  if (!redis) {
+    if (!config.redisUrl) {
+      return null;
+    }
+
+    redis = new Redis(config.redisUrl, {  // ← use URL directly
+      maxRetriesPerRequest: 3,
+      connectTimeout: 5000,
+      commandTimeout: 3000,
+      retryStrategy(times: number) {
+        if (times > 3) return null;
+        return Math.min(times * 500, 2000);
+      },
+    });
+
+    redis.on('error', (err: Error) => {
+      redisAvailable = false;
+      console.error('Redis connection error:', err.message); // will now show real error
+    });
+    redis.on('connect', () => {
+      redisAvailable = true;
+      console.log('Redis connected');
+    });
+    redis.on('ready', () => {
+      redisAvailable = true;
+    });
+    redis.on('close', () => {
+      redisAvailable = false;
+    });
+  }
+  return redis;
+}
+
+// rest of file unchanged
+
+export function isRedisAvailable(): boolean {
+  return redisAvailable && redis?.status === 'ready';
+}
+
+export async function closeRedis(): Promise<void> {
+  if (redis) {
+    await redis.quit();
+    redis = null;
+    redisAvailable = false;
+  }
+}
+
+export async function healthCheck(): Promise<boolean> {
+  try {
+    const r = getRedis();
+    if (!r) return false;
+    const result = await Promise.race([
+      r.ping(),
+      new Promise<string>((_, reject) =>
+        setTimeout(() => reject(new Error('Redis health check timeout')), 3000)
+      ),
+    ]);
+    return result === 'PONG';
+  } catch {
+    return false;
+  }
+}
+------------------------------------------------------------
+
+## db/schema.ts
+
+import { pgTable, uuid, varchar, text, timestamp, bigint, date, index, uniqueIndex, serial, integer } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+
+export const migrations = pgTable('_migrations', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(),
+  runAt: timestamp('run_at').defaultNow(),
+});
+
+export const organisations = pgTable('organisations', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(),
+  slug: varchar('slug', { length: 100 }).notNull().unique(),
+  plan: varchar('plan', { length: 50 }).default('free'),
+  storageLimit: bigint('storage_limit', { mode: 'number' }).default(1073741824),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const users = pgTable('users', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').notNull().references(() => organisations.id, { onDelete: 'cascade' }),
+  email: varchar('email', { length: 255 }).notNull().unique(),
+  passwordHash: text('password_hash').notNull(),
+  role: varchar('role', { length: 50 }).default('member'),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+  orgIdIdx: index('idx_users_org_id').on(table.orgId),
+  emailIdx: index('idx_users_email').on(table.email),
+}));
+
+export const apiKeys = pgTable('api_keys', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').notNull().references(() => organisations.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id),
+  name: varchar('name', { length: 255 }).notNull(),
+  keyHash: text('key_hash').notNull().unique(),
+  keyPrefix: varchar('key_prefix', { length: 20 }).notNull(),
+  scopes: text('scopes').array().default(sql`ARRAY['read']::text[]`),
+  lastUsedAt: timestamp('last_used_at'),
+  revokedAt: timestamp('revoked_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+  keyHashIdx: index('idx_api_keys_hash').on(table.keyHash),
+}));
+
+export const files = pgTable('files', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').notNull().references(() => organisations.id, { onDelete: 'cascade' }),
+  uploadedBy: uuid('uploaded_by').notNull().references(() => users.id),
+  name: varchar('name', { length: 500 }).notNull(),
+  storageKey: text('storage_key').notNull(),
+  mimeType: varchar('mime_type', { length: 255 }),
+  sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull(),
+  deletedAt: timestamp('deleted_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+  orgIdIdx: index('idx_files_org_id').on(table.orgId).where(sql`${table.deletedAt} IS NULL`),
+}));
+
+export const usageLogs = pgTable('usage_logs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').notNull().references(() => organisations.id),
+  apiKeyId: uuid('api_key_id').references(() => apiKeys.id),
+  endpoint: varchar('endpoint', { length: 500 }),
+  method: varchar('method', { length: 10 }),
+  statusCode: integer('status_code'),
+  responseMs: integer('response_ms'),
+  bytesIn: bigint('bytes_in', { mode: 'number' }).default(0),
+  bytesOut: bigint('bytes_out', { mode: 'number' }).default(0),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+  orgIdIdx: index('idx_usage_logs_org_id').on(table.orgId),
+  createdAtIdx: index('idx_usage_logs_created').on(table.createdAt),
+}));
+
+export const usageDaily = pgTable('usage_daily', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').notNull().references(() => organisations.id),
+  date: date('date').notNull(),
+  totalRequests: bigint('total_requests', { mode: 'number' }).default(0),
+  totalBytesIn: bigint('total_bytes_in', { mode: 'number' }).default(0),
+  totalBytesOut: bigint('total_bytes_out', { mode: 'number' }).default(0),
+  storageBytes: bigint('storage_bytes', { mode: 'number' }).default(0),
+}, (table) => ({
+  orgDateIdx: uniqueIndex('idx_usage_daily_org_date').on(table.orgId, table.date),
+}));
+------------------------------------------------------------
+
+## index.ts
+
+import express from 'express';
+import cors from 'cors';
+import config from './config';
+import { requestLogger } from './middleware/requestLogger';
+import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import healthRouter from './routes/health';
+import authRouter from './routes/auth';
+import orgRouter from './routes/org';
+import keysRouter from './routes/keys';
+import filesRouter from './routes/files';
+import usageRouter from './routes/usage';
+import { usageLoggerMiddleware } from './middleware/usageLogger';
+import { rateLimitMiddleware } from './middleware/rateLimit';
+import { runMigrations } from './db/migrate';
+
+const app = express();
+
+// Trust NGINX proxy only 
+app.set('trust proxy', 1);
+
+app.use(cors());
+app.use(express.json());
+app.use(requestLogger);
+app.use('/health', healthRouter);
+app.use('/api/v1/auth', authRouter);
+app.use('/api/v1/org', orgRouter);
+app.use('/api/v1/keys', keysRouter);
+app.use('/api/v1/files', rateLimitMiddleware, usageLoggerMiddleware, filesRouter);
+app.use('/api/v1/usage', usageRouter);
+app.use(notFoundHandler);
+app.use(errorHandler);
+
+async function start() {
+  try {
+    await runMigrations();
+    console.log('Database migrations completed');
+  } catch (error) {
+    console.error('Failed to run migrations:', error);
+    process.exit(1);
+  }
+
+  const server = app.listen(config.port, () => {
+    console.log(`[${config.nodeEnv}] Server running on port ${config.port}`);
+  });
+
+  process.on('SIGTERM', () => {
+    console.log('SIGTERM received, shutting down gracefully');
+    server.close(() => {
+      console.log('Server closed');
+      process.exit(0);
+    });
+  });
+}
+
+start();
+export default app;
+------------------------------------------------------------
+
+## lib/apiKey.ts
+
+import crypto from 'crypto';
+
+export interface ApiKeyResult {
+  raw: string;
+  hash: string;
+  prefix: string;
+}
+
+export function generateApiKey(): ApiKeyResult {
+  const raw = `kyro_live_${crypto.randomBytes(32).toString('hex')}`;
+  const hash = crypto.createHash('sha256').update(raw).digest('hex');
+  const prefix = raw.substring(0, 16);
+  return { raw, hash, prefix };
+}
+
+export function hashApiKey(rawKey: string): string {
+  return crypto.createHash('sha256').update(rawKey).digest('hex');
+}
+
+export function getKeyPrefix(rawKey: string): string {
+  return rawKey.substring(0, 16);
+}
+------------------------------------------------------------
+
+## lib/auth.ts
+
+import jwt from 'jsonwebtoken';
+import config from '../config';
+
+export interface JWTPayload {
+  userId: string;
+  orgId: string;
+  role: 'owner' | 'admin' | 'member';
+}
+
+export function signJWT(payload: JWTPayload): string {
+  return jwt.sign(payload, config.jwtSecret, {
+    expiresIn: '7d',
+  });
+}
+
+export function verifyJWT(token: string): JWTPayload {
+  return jwt.verify(token, config.jwtSecret) as JWTPayload;
+}
+------------------------------------------------------------
+
+## lib/openapi.ts
+
+import swaggerJsdoc from 'swagger-jsdoc';
+// import { OpenAPIV3_1 } from 'openapi-types';
+
+const options: swaggerJsdoc.Options = {
+  definition: {
+    openapi: '3.1.0',
+    info: {
+      title: 'Kyro API',
+      version: '1.0.0',
+      description: `Language-agnostic API platform for file storage and management.
+
+## Authentication
+Kyro supports two authentication methods:
+
+### Bearer Token (JWT)
+For dashboard/API management operations:
+\`Authorization: Bearer <jwt_token>\`
+
+### API Key
+For file operations:
+\`X-API-Key: kyro_live_<key>\`
+
+## Base URL
+- Production: \`https://api.kyro.io/api/v1\`
+- Development: \`http://localhost:3000/api/v1\`
+
+## Response Format
+
+### Success Response
+\`\`\`json
+{ "data": { ... } }
+\`\`\`
+
+### Error Response
+\`\`\`json
+{ "error": { "message": "...", "code": "...", "details": [...] } }
+\`\`\`
+
+## Rate Limiting
+- 100 requests per minute per API key
+- Returns \`429 Too Many Requests\` when exceeded`,
+      contact: {
+        name: 'Kyro Support',
+        url: 'https://kyro.io'
+      },
+      license: {
+        name: 'Proprietary'
+      }
+    },
+    servers: [
+      {
+        url: 'http://localhost:3000/api/v1',
+        description: 'Development'
+      },
+      {
+        url: 'https://api.kyro.io/api/v1',
+        description: 'Production'
+      }
+    ],
+    tags: [
+      { name: 'Authentication', description: 'User registration and login' },
+      { name: 'Organisation', description: 'Workspace management' },
+      { name: 'API Keys', description: 'API key lifecycle management' },
+      { name: 'Files', description: 'File upload, download, and management' },
+      { name: 'Usage', description: 'Usage analytics and reporting' },
+      { name: 'Health', description: 'Health check endpoints' }
+    ],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          description: 'JWT token obtained from `/auth/login` or `/auth/register`. Include in Authorization header: `Bearer <token>`'
+        },
+        apiKey: {
+          type: 'apiKey',
+          in: 'header',
+          name: 'X-API-Key',
+          description: 'API key with `kyro_live_` prefix. Obtained from `/keys` endpoint. Required for file operations.'
+        }
+      },
+      schemas: {
+        Error: {
+          type: 'object',
+          properties: {
+            error: {
+              type: 'object',
+              properties: {
+                message: { type: 'string', description: 'Human-readable error message' },
+                code: { type: 'string', description: 'Machine-readable error code' },
+                details: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      message: { type: 'string' },
+                      path: { type: 'string' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        User: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            email: { type: 'string', format: 'email' },
+            role: { type: 'string', enum: ['owner', 'admin', 'member'] },
+            orgId: { type: 'string', format: 'uuid' }
+          }
+        },
+        Organisation: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            name: { type: 'string' },
+            slug: { type: 'string' },
+            plan: { type: 'string', enum: ['free', 'pro', 'enterprise'], default: 'free' },
+            createdAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        ApiKey: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            name: { type: 'string' },
+            key_prefix: { type: 'string', description: 'First 16 characters of the key' },
+            scopes: { type: 'array', items: { type: 'string', enum: ['read', 'write', 'admin'] } },
+            last_used_at: { type: 'string', format: 'date-time', nullable: true },
+            revoked_at: { type: 'string', format: 'date-time', nullable: true },
+            created_at: { type: 'string', format: 'date-time' }
+          }
+        },
+        File: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            name: { type: 'string', description: 'Original filename' },
+            mimeType: { type: 'string', description: 'MIME type' },
+            sizeBytes: { type: 'integer', description: 'File size in bytes' },
+            createdAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        UsageStats: {
+          type: 'object',
+          properties: {
+            total_requests: { type: 'integer', description: 'Total API requests' },
+            total_bytes_in: { type: 'integer', description: 'Total bytes received' },
+            total_bytes_out: { type: 'integer', description: 'Total bytes sent' },
+            total_storage: { type: 'integer', description: 'Total storage used in bytes' },
+            active_api_keys: { type: 'integer', description: 'Number of active API keys' }
+          }
+        },
+        Member: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            email: { type: 'string', format: 'email' },
+            role: { type: 'string', enum: ['owner', 'admin', 'member'] },
+            createdAt: { type: 'string', format: 'date-time' }
+          }
+        }
+      },
+      responses: {
+        BadRequest: {
+          description: 'Invalid request body',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/Error' }
+            }
+          }
+        },
+        Unauthorized: {
+          description: 'Authentication required',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/Error' }
+            }
+          }
+        },
+        Forbidden: {
+          description: 'Insufficient permissions',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/Error' }
+            }
+          }
+        },
+        NotFound: {
+          description: 'Resource not found',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/Error' }
+            }
+          }
+        },
+        Conflict: {
+          description: 'Resource already exists',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/Error' }
+            }
+          }
+        },
+        PayloadTooLarge: {
+          description: 'File too large',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/Error' }
+            }
+          }
+        },
+        TooManyRequests: {
+          description: 'Rate limit exceeded',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  error: {
+                    type: 'object',
+                    properties: {
+                      message: { type: 'string' },
+                      retryAfter: { type: 'number' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  apis: ['./src/routes/*.ts']
+};
+
+export const specs = swaggerJsdoc(options);
+
+export function generateSpec() {
+  return specs;
+}
+
+if (require.main === module) {
+  const fs = require('fs');
+  const path = require('path');
+
+  const outputPath = path.join(__dirname, '../../openapi.yaml');
+
+  let yamlOutput = '';
+
+  function convertToYaml(obj: any, indent: number = 0): string {
+    const spaces = '  '.repeat(indent);
+    let result = '';
+
+    if (Array.isArray(obj)) {
+      for (const item of obj) {
+        if (typeof item === 'object' && item !== null) {
+          result += convertToYaml(item, indent);
+        } else {
+          result += `${spaces}- ${item}\n`;
+        }
+      }
+    } else if (typeof obj === 'object' && obj !== null) {
+      for (const [key, value] of Object.entries(obj)) {
+        if (value === null || value === undefined) {
+          continue;
+        }
+        if (typeof value === 'object' && !Array.isArray(value)) {
+          result += `${spaces}${key}:\n${convertToYaml(value, indent + 1)}`;
+        } else if (Array.isArray(value)) {
+          result += `${spaces}${key}:\n`;
+          for (const item of value) {
+            if (typeof item === 'object') {
+              result += `${spaces}  - ${JSON.stringify(item).replace(/["{}]/g, '').replace(/,/g, '\n    ').replace(/:/g, ': ')}\n`;
+            } else {
+              result += `${spaces}  - ${value}\n`;
+            }
+          }
+        } else {
+          result += `${spaces}${key}: ${JSON.stringify(value)}\n`;
+        }
+      }
+    }
+    return result;
+  }
+
+  console.log('Generating OpenAPI spec...');
+  console.log(JSON.stringify(specs, null, 2));
+}
+------------------------------------------------------------
+
+## lib/password.ts
+
+import bcrypt from 'bcryptjs';
+
+const BCRYPT_ROUNDS = 12;
+
+export async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, BCRYPT_ROUNDS);
+}
+
+export async function verifyPassword(password: string, hash: string): Promise<boolean> {
+  return bcrypt.compare(password, hash);
+}
+------------------------------------------------------------
+
+## lib/storage.ts
+
+import fs from 'fs';
+import path from 'path';
+import { randomUUID } from 'crypto';
+
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(process.cwd(), 'uploads');
+
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
+
+export function getUploadDir(): string {
+  return UPLOAD_DIR;
+}
+
+export function ensureOrgDirectory(orgId: string): string {
+  const orgDir = path.join(UPLOAD_DIR, orgId);
+  if (!fs.existsSync(orgDir)) {
+    fs.mkdirSync(orgDir, { recursive: true });
+  }
+  return orgDir;
+}
+
+export interface UploadedFile {
+  originalname: string;
+  buffer: Buffer;
+  mimetype?: string;
+  size: number;
+}
+
+export async function saveFile(orgId: string, file: UploadedFile): Promise<{ storageKey: string; fileId: string }> {
+  const fileId = randomUUID();
+  const ext = path.extname(file.originalname);
+  const storageKey = path.join(orgId, fileId + ext);
+  const fullPath = path.join(UPLOAD_DIR, storageKey);
+
+  ensureOrgDirectory(orgId);
+
+  await fs.promises.writeFile(fullPath, file.buffer);
+
+  return { storageKey, fileId };
+}
+
+export async function deleteFile(storageKey: string): Promise<void> {
+  const fullPath = path.join(UPLOAD_DIR, storageKey);
+  if (fs.existsSync(fullPath)) {
+    await fs.promises.unlink(fullPath);
+  }
+}
+
+export function getFilePath(storageKey: string): string {
+  return path.join(UPLOAD_DIR, storageKey);
+}
+
+export async function getFileStream(storageKey: string): Promise<NodeJS.ReadableStream> {
+  const fullPath = path.join(UPLOAD_DIR, storageKey);
+  return fs.createReadStream(fullPath);
+}
+------------------------------------------------------------
+
+## middleware/apiKeyAuth.ts
+
+import { Request, Response, NextFunction } from 'express';
+import { query } from '../db';
+import { hashApiKey } from '../lib/apiKey';
+
+export interface ApiKeyRequest extends Request {
+  orgId?: string;
+  apiKeyId?: string;
+  apiKeyScopes?: string[];
+}
+
+export async function apiKeyAuthMiddleware(
+  req: ApiKeyRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  const rawKey = req.headers['x-api-key'] as string;
+
+  if (!rawKey) {
+    res.status(401).json({ error: 'API key required' });
+    return;
+  }
+
+  const hash = hashApiKey(rawKey);
+
+  try {
+    const result = await query<{
+      id: string;
+      org_id: string;
+      scopes: string[];
+    }>(
+      `SELECT id, org_id, scopes FROM api_keys 
+       WHERE key_hash = $1 AND revoked_at IS NULL`,
+      [hash]
+    );
+
+    if (result.length === 0) {
+      res.status(401).json({ error: 'Invalid API key' });
+      return;
+    }
+
+    const apiKey = result[0];
+    req.orgId = apiKey.org_id;
+    req.apiKeyId = apiKey.id;
+    req.apiKeyScopes = apiKey.scopes || ['read'];
+
+    await query(
+      'UPDATE api_keys SET last_used_at = NOW() WHERE id = $1',
+      [apiKey.id]
+    );
+
+    next();
+  } catch (error) {
+    console.error('API key validation error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+export function requireScope(scope: string) {
+  return (req: ApiKeyRequest, res: Response, next: NextFunction): void => {
+    if (!req.apiKeyScopes?.includes(scope) && !req.apiKeyScopes?.includes('admin')) {
+      res.status(403).json({ error: `Required scope: ${scope}` });
+      return;
+    }
+    next();
+  };
+}
+------------------------------------------------------------
+
+## middleware/auth.ts
+
+import { Request, Response, NextFunction } from 'express';
+import { verifyJWT, JWTPayload } from '../lib/auth';
+
+declare global {
+  namespace Express {
+    interface Request {
+      user?: JWTPayload;
+    }
+  }
+}
+
+export function authMiddleware(req: Request, res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  const token = authHeader.substring(7);
+
+  try {
+    const payload = verifyJWT(token);
+    req.user = payload;
+    next();
+  } catch (error) {
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+}
+
+export function requireRole(...roles: string[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+
+    next();
+  };
+}
+------------------------------------------------------------
+
+## middleware/errorHandler.ts
+
+import { Request, Response, NextFunction } from 'express';
+import config from '../config';
+
+export interface AppError extends Error {
+  statusCode?: number;
+  isOperational?: boolean;
+}
+
+export function errorHandler(
+  err: AppError,
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  const statusCode = err.statusCode || 500;
+  const message = err.message || 'Internal Server Error';
+
+  if (config.nodeEnv === 'development') {
+    console.error('Error:', {
+      message: err.message,
+      stack: err.stack,
+      statusCode,
+    });
+  } else {
+    console.error('Error:', { statusCode, message });
+  }
+
+  res.status(statusCode).json({
+    error: {
+      message,
+      ...(config.nodeEnv === 'development' && { stack: err.stack }),
+    },
+  });
+}
+
+export function notFoundHandler(req: Request, res: Response) {
+  res.status(404).json({
+    error: {
+      message: `Cannot ${req.method} ${req.path}`,
+      statusCode: 404,
+    },
+  });
+}
+
+export function createError(message: string, statusCode: number): AppError {
+  const error: AppError = new Error(message);
+  error.statusCode = statusCode;
+  error.isOperational = true;
+  return error;
+}
+------------------------------------------------------------
+
+## middleware/rateLimit.ts
+
+import { RateLimiterRedis, RateLimiterMemory, RateLimiterRes } from 'rate-limiter-flexible';
+import { getRedis, isRedisAvailable } from '../db/redis';
+import { Request, Response, NextFunction } from 'express';
+
+let rateLimiter: RateLimiterRedis | RateLimiterMemory | null = null;
+let useMemoryFallback = false;
+
+export function getRateLimiter(): RateLimiterRedis | RateLimiterMemory {
+  const redisAvailable = isRedisAvailable();
+
+  if (useMemoryFallback) {
+    if (!rateLimiter || rateLimiter instanceof RateLimiterRedis) {
+      rateLimiter = new RateLimiterMemory({
+        keyPrefix: 'rl:',
+        points: 100,
+        duration: 60,
+      });
+    }
+    return rateLimiter;
+  }
+
+  if (!redisAvailable) {
+    console.warn('Redis unavailable, using memory rate limiter');
+    useMemoryFallback = true;
+    rateLimiter = new RateLimiterMemory({
+      keyPrefix: 'rl:',
+      points: 100,
+      duration: 60,
+    });
+    return rateLimiter;
+  }
+
+  if (!rateLimiter) {
+    try {
+      const redis = getRedis();
+      rateLimiter = new RateLimiterRedis({
+        storeClient: redis,
+        keyPrefix: 'rl:',
+        points: 100,
+        duration: 60,
+        blockDuration: 0,
+      });
+    } catch (error) {
+      console.warn('Failed to create Redis rate limiter, using memory fallback');
+      useMemoryFallback = true;
+      rateLimiter = new RateLimiterMemory({
+        keyPrefix: 'rl:',
+        points: 100,
+        duration: 60,
+      });
+    }
+  }
+  return rateLimiter;
+}
+
+export function rateLimitMiddleware(req: Request, res: Response, next: NextFunction): void {
+  const key = (req as any).apiKeyId || req.ip || 'unknown';
+  const limiter = getRateLimiter();
+
+  limiter.consume(key)
+    .then(() => {
+      next();
+    })
+    .catch((rejRes: RateLimiterRes) => {
+      res.status(429).json({
+        error: 'Too many requests',
+        retryAfter: rejRes.msBeforeNext / 1000,
+      });
+    });
+}
+------------------------------------------------------------
+
+## middleware/requestLogger.ts
+
+import morgan from 'morgan';
+import config from '../config';
+
+const morganFormat = config.nodeEnv === 'production' ? 'combined' : 'dev';
+
+export const requestLogger = morgan(morganFormat);
+------------------------------------------------------------
+
+## middleware/upload.ts
+
+import multer from 'multer';
+import path from 'path';
+import { randomUUID } from 'crypto';
+import { Request } from 'express';
+
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(process.cwd(), 'uploads');
+
+const storage = multer.memoryStorage();
+
+const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  const allowedMimes = [
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'application/pdf',
+    'text/plain',
+    'text/csv',
+    'application/json',
+    'application/zip',
+    'application/x-zip-compressed',
+    'application/octet-stream',
+    'audio/mpeg',
+    'audio/wav',
+    'video/mp4',
+    'video/webp',
+  ];
+
+  if (allowedMimes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type'));
+  }
+};
+
+export const upload = multer({
+  storage,
+  limits: {
+    fileSize: 100 * 1024 * 1024,
+  },
+  fileFilter,
+});
+
+export function generateFileId(): string {
+  return randomUUID();
+}
+
+export { UPLOAD_DIR };
+------------------------------------------------------------
+
+## middleware/usageLogger.ts
+
+import { Request, Response, NextFunction } from 'express';
+import { query } from '../db';
+import { ApiKeyRequest } from '../middleware/apiKeyAuth';
+
+export function usageLoggerMiddleware(req: Request, res: Response, next: NextFunction): void {
+  const startTime = Date.now();
+  const originalSend = res.send;
+
+  res.send = function (body?: any): Response {
+    const responseTime = Date.now() - startTime;
+    const orgId = (req as ApiKeyRequest).orgId;
+    const apiKeyId = (req as ApiKeyRequest).apiKeyId;
+
+    setImmediate(async () => {
+      try {
+        const bytesIn = parseInt(req.headers['content-length'] as string || '0', 10);
+        const bytesOut = res.getHeader('Content-Length') ? parseInt(res.getHeader('Content-Length') as string, 10) : 0;
+
+        await query(
+          `INSERT INTO usage_logs (org_id, api_key_id, endpoint, method, status_code, response_ms, bytes_in, bytes_out)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [orgId, apiKeyId, req.originalUrl || req.url, req.method, res.statusCode, responseTime, bytesIn, bytesOut]
+        );
+      } catch (error) {
+        console.error('Failed to log usage:', error);
+      }
+    });
+
+    return originalSend.call(this, body);
+  };
+
+  next();
+}
+------------------------------------------------------------
+
+## routes/auth.ts
+
+import { Router, Request, Response } from 'express';
+import { query, getClient } from '../db';
+import { hashPassword, verifyPassword } from '../lib/password';
+import { signJWT } from '../lib/auth';
+import { authMiddleware } from '../middleware/auth';
+import { registerSchema, loginSchema, RegisterInput, LoginInput } from '../validations/auth';
+
+const router = Router();
+
+function generateSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .substring(0, 100);
+}
+
+async function findUniqueSlug(slug: string): Promise<string> {
+  const existing = await query<{ id: string }>(
+    'SELECT id FROM organisations WHERE slug = $1',
+    [slug]
+  );
+
+  if (existing.length === 0) {
+    return slug;
+  }
+
+  return `${slug}-${Date.now()}`;
+}
+
+/**
+ * @swagger
+ * /auth/register:
+ *   post:
+ *     tags: [Authentication]
+ *     summary: Register new user and organisation
+ *     x-scope: null
+ *     x-body-description: '{ "orgName": "Acme Inc", "email": "admin@acme.com", "password": "secure123" }'
+ *     x-response-example: '{"token":"eyJhbGciOiJIUzI1NiIs...","user":{"id":"550e8400-e29b-41d4-a716-446655440000","email":"admin@acme.com","role":"owner","orgId":"550e8400-e29b-41d4-a716-446655440000"}}'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *               - orgName
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: User email address
+ *               password:
+ *                 type: string
+ *                 format: password
+ *                 minLength: 8
+ *                 description: User password (min 8 characters)
+ *               orgName:
+ *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 255
+ *                 description: Organisation name
+ *     responses:
+ *       201:
+ *         description: User registered successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 token:
+ *                   type: string
+ *                   description: JWT authentication token
+ *                 user:
+ *                   $ref: '#/components/schemas/User'
+ *       400:
+ *         $ref: '#/components/responses/BadRequest'
+ *       409:
+ *         $ref: '#/components/responses/Conflict'
+ */
+router.post('/register', async (req: Request, res: Response) => {
+  try {
+    const input = registerSchema.parse(req.body) as RegisterInput;
+
+    const existingUser = await query<{ id: string }>(
+      'SELECT id FROM users WHERE email = $1',
+      [input.email]
+    );
+
+    if (existingUser.length > 0) {
+      return res.status(400).json({ error: 'Email already registered' });
+    }
+
+    let slug = generateSlug(input.orgName);
+    slug = await findUniqueSlug(slug);
+
+    const passwordHash = await hashPassword(input.password);
+
+    const client = await getClient();
+
+    try {
+      await client.query('BEGIN');
+
+      const orgResult = await client.query(
+        `INSERT INTO organisations (name, slug) VALUES ($1, $2) RETURNING id`,
+        [input.orgName, slug]
+      );
+      const orgId = orgResult.rows[0].id;
+
+      const userResult = await client.query(
+        `INSERT INTO users (org_id, email, password_hash, role) VALUES ($1, $2, $3, 'owner') RETURNING id, email, role`,
+        [orgId, input.email, passwordHash]
+      );
+
+      await client.query('COMMIT');
+
+      const user = userResult.rows[0];
+      const token = signJWT({
+        userId: user.id,
+        orgId: orgId,
+        role: user.role,
+      });
+
+      res.status(201).json({
+        token,
+        user: {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          orgId: orgId,
+        },
+      });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: 'Invalid input', details: error.errors });
+    }
+    console.error('Registration error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * @swagger
+ * /auth/login:
+ *   post:
+ *     tags: [Authentication]
+ *     summary: Login user
+ *     x-scope: null
+ *     x-body-description: '{ "email": "admin@acme.com", "password": "secure123" }'
+ *     x-response-example: '{"token":"eyJhbGciOiJIUzI1NiIs...","user":{"id":"550e8400-e29b-41d4-a716-446655440000","email":"admin@acme.com","role":"owner","orgId":"550e8400-e29b-41d4-a716-446655440000"}}'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               password:
+ *                 type: string
+ *                 format: password
+ *     responses:
+ *       200:
+ *         description: Login successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 token:
+ *                   type: string
+ *                 user:
+ *                   $ref: '#/components/schemas/User'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ */
+router.post('/login', async (req: Request, res: Response) => {
+  try {
+    const input = loginSchema.parse(req.body) as LoginInput;
+
+    const users = await query<{
+      id: string;
+      org_id: string;
+      email: string;
+      password_hash: string;
+      role: string;
+    }>(
+      `SELECT u.id, u.org_id, u.email, u.password_hash, u.role 
+       FROM users u WHERE u.email = $1`,
+      [input.email]
+    );
+
+    if (users.length === 0) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const user = users[0];
+    const valid = await verifyPassword(input.password, user.password_hash);
+
+    if (!valid) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const token = signJWT({
+      userId: user.id,
+      orgId: user.org_id,
+      role: user.role as 'owner' | 'admin' | 'member',
+    });
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        orgId: user.org_id,
+      },
+    });
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: 'Invalid input', details: error.errors });
+    }
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * @swagger
+ * /auth/me:
+ *   get:
+ *     tags: [Authentication]
+ *     summary: Get current user
+ *     security:
+ *       - bearerAuth: []
+ *     x-scope: null
+ *     x-body-description: null
+ *     x-response-example: '{"id":"550e8400-e29b-41d4-a716-446655440000","email":"admin@acme.com","role":"owner","orgId":"550e8400-e29b-41d4-a716-446655440000"}'
+ *     responses:
+ *       200:
+ *         description: Current user details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/User'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ */
+router.get('/me', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const users = await query<{
+      id: string;
+      email: string;
+      role: string;
+      org_id: string;
+    }>(
+      `SELECT id, email, role, org_id FROM users WHERE id = $1`,
+      [req.user!.userId]
+    );
+
+    if (users.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = users[0];
+    res.json({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      orgId: user.org_id,
+    });
+  } catch (error) {
+    console.error('Get me error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+export default router;
+------------------------------------------------------------
+
+## routes/files.ts
+
+import { Router, Response, Request } from 'express';
+import { db } from '../db';
+import { apiKeys, organisations, files } from '../db/schema';
+import { eq, and, isNull, sql } from 'drizzle-orm';
+import { apiKeyAuthMiddleware, ApiKeyRequest, requireScope } from '../middleware/apiKeyAuth';
+import { upload } from '../middleware/upload';
+import { saveFile, deleteFile, getFilePath } from '../lib/storage';
+
+const router = Router();
+
+/**
+ * @swagger
+ * /files:
+ *   get:
+ *     tags: [Files]
+ *     summary: List files
+ *     security:
+ *       - apiKey: []
+ *     parameters:
+ *       - name: limit
+ *         in: query
+ *         schema:
+ *           type: integer
+ *           default: 100
+ *           maximum: 100
+ *       - name: cursor
+ *         in: query
+ *         schema:
+ *           type: string
+ *     x-scope: read
+ *     x-body-description: null
+ *     x-response-example: '[{"id":"550e8400-e29b-41d4-a716-446655440000","name":"document.pdf","mimeType":"application/pdf","sizeBytes":1024000,"createdAt":"2026-04-10T12:00:00Z"}]'
+ *     responses:
+ *       200:
+ *         description: List of files
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ *   post:
+ *     tags: [Files]
+ *     summary: Upload file
+ *     security:
+ *       - apiKey: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: File to upload
+ *     x-scope: write
+ *     x-body-description: file — File (multipart/form-data)
+ *     x-response-example: '{"id":"550e8400-e29b-41d4-a716-446655440000","name":"document.pdf","mimeType":"application/pdf","sizeBytes":1024000,"createdAt":"2026-04-10T12:00:00Z"}'
+ *     responses:
+ *       201:
+ *         description: File uploaded
+ *       400:
+ *         $ref: '#/components/responses/BadRequest'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ *       413:
+ *         $ref: '#/components/responses/PayloadTooLarge'
+ */
+router.use(apiKeyAuthMiddleware);
+
+router.post('/', requireScope('write'), upload.single('file'), async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const orgId = req.orgId!;
+    const apiKeyId = req.apiKeyId!;
+
+    if (!req.file) {
+      res.status(400).json({ error: 'No file uploaded' });
+      return;
+    }
+
+    const keyResult = await db.select({ userId: apiKeys.userId })
+      .from(apiKeys)
+      .where(eq(apiKeys.id, apiKeyId));
+    const userId = keyResult[0]?.userId;
+
+    const orgResult = await db.select({ storageLimit: organisations.storageLimit })
+      .from(organisations)
+      .where(eq(organisations.id, orgId));
+    const storageLimit = orgResult[0]?.storageLimit || 1073741824;
+
+    const usageResult = await db.select({
+      used: sql`COALESCE(SUM(${files.sizeBytes}), 0)`.mapWith(Number)
+    })
+      .from(files)
+      .where(and(eq(files.orgId, orgId), isNull(files.deletedAt)));
+    const usedStorage = usageResult[0]?.used || 0;
+
+    if (usedStorage + req.file.size > storageLimit) {
+      res.status(403).json({ error: 'Storage quota exceeded' });
+      return;
+    }
+
+    const { storageKey } = await saveFile(orgId, {
+      originalname: req.file.originalname,
+      buffer: req.file.buffer,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+    });
+
+    const result = await db.insert(files).values({
+      orgId,
+      uploadedBy: userId!,
+      name: req.file.originalname,
+      storageKey,
+      mimeType: req.file.mimetype,
+      sizeBytes: req.file.size,
+    }).returning({
+      id: files.id,
+      name: files.name,
+      mimeType: files.mimeType,
+      sizeBytes: files.sizeBytes,
+      createdAt: files.createdAt,
+    });
+
+    res.status(201).json(result[0]);
+  } catch (error) {
+    console.error('Error uploading file:', error);
+    res.status(500).json({ error: 'Failed to upload file' });
+  }
+});
+
+/**
+ * @swagger
+ * /files/{id}:
+ *   get:
+ *     tags: [Files]
+ *     summary: Download file
+ *     security:
+ *       - apiKey: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     x-scope: read
+ *     x-body-description: null
+ *     x-response-example: 'Binary file data with appropriate Content-Type header.'
+ *     responses:
+ *       200:
+ *         description: File content
+ *         content:
+ *           application/octet-stream:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ *   delete:
+ *     tags: [Files]
+ *     summary: Delete file
+ *     security:
+ *       - apiKey: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: File UUID
+ *     x-scope: write
+ *     x-body-description: null
+ *     x-response-example: '{"message":"File deleted","id":"550e8400-e29b-41d4-a716-446655440000"}'
+ *     responses:
+ *       200:
+ *         description: File deleted
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ */
+router.get('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const orgId = req.orgId!;
+
+    const result = await db.select({
+      id: files.id,
+      name: files.name,
+      mimeType: files.mimeType,
+      sizeBytes: files.sizeBytes,
+      createdAt: files.createdAt,
+    })
+      .from(files)
+      .where(and(eq(files.orgId, orgId), isNull(files.deletedAt)))
+      .orderBy(sql`${files.createdAt} DESC`);
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error listing files:', error);
+    res.status(500).json({ error: 'Failed to list files' });
+  }
+});
+
+router.get('/:id', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const orgId = req.orgId!;
+    const { id } = req.params;
+
+    const fileResult = await db.select({
+      id: files.id,
+      name: files.name,
+      storageKey: files.storageKey,
+      mimeType: files.mimeType,
+      sizeBytes: files.sizeBytes,
+    })
+      .from(files)
+      .where(and(eq(files.id, id as string), eq(files.orgId, orgId), isNull(files.deletedAt)));
+
+    if (fileResult.length === 0) {
+      res.status(404).json({ error: 'File not found' });
+      return;
+    }
+
+    const file = fileResult[0];
+    const filePath = getFilePath(file.storageKey);
+
+    res.setHeader('Content-Type', file.mimeType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
+    res.setHeader('Content-Length', file.sizeBytes);
+
+    const stream = require('fs').createReadStream(filePath);
+    stream.pipe(res);
+  } catch (error) {
+    console.error('Error downloading file:', error);
+    res.status(500).json({ error: 'Failed to download file' });
+  }
+});
+
+router.delete('/:id', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const orgId = req.orgId!;
+    const { id } = req.params;
+
+    const fileResult = await db.select({ storageKey: files.storageKey })
+      .from(files)
+      .where(and(eq(files.id, id as string), eq(files.orgId, orgId), isNull(files.deletedAt)));
+
+    if (fileResult.length === 0) {
+      res.status(404).json({ error: 'File not found' });
+      return;
+    }
+
+    await db.update(files)
+      .set({ deletedAt: new Date() })
+      .where(eq(files.id, id as string));
+
+    await deleteFile(fileResult[0].storageKey);
+
+    res.json({ message: 'File deleted', id });
+  } catch (error) {
+    console.error('Error deleting file:', error);
+    res.status(500).json({ error: 'Failed to delete file' });
+  }
+});
+
+export default router;
+------------------------------------------------------------
+
+## routes/health.ts
+
+import { Router, Request, Response } from 'express';
+import config from '../config';
+import { healthCheck as dbHealthCheck } from '../db';
+import { healthCheck as redisHealthCheck } from '../db/redis';
+
+const router = Router();
+
+const startTime = Date.now();
+
+router.get('/', async (req: Request, res: Response) => {
+  const dbHealthy = await dbHealthCheck();
+  const redisConfigured = !!config.redisUrl;
+  const redisHealthy = redisConfigured ? await redisHealthCheck() : true;
+
+  const allHealthy = dbHealthy && (redisConfigured ? redisHealthy : true);
+  const status = allHealthy ? 'ok' : 'degraded';
+  const statusCode = allHealthy ? 200 : 503;
+
+  res.status(statusCode).json({
+    status,
+    uptime: Math.floor((Date.now() - startTime) / 1000),
+    test: "Kyro",
+    timestamp: new Date().toISOString(),
+    database: dbHealthy ? 'connected' : 'disconnected',
+    redis: redisConfigured ? (redisHealthy ? 'connected' : 'disconnected') : 'optional',
+  });
+});
+
+export default router;
+------------------------------------------------------------
+
+## routes/keys.ts
+
+import { Router, Response, Request } from 'express';
+import { query } from '../db';
+import { generateApiKey } from '../lib/apiKey';
+import { authMiddleware } from '../middleware/auth';
+import { requireRole } from '../middleware/auth';
+import { z } from 'zod';
+
+const router = Router();
+
+const createKeySchema = z.object({
+  name: z.string().min(1).max(255),
+  scopes: z.array(z.enum(['read', 'write', 'admin'])).default(['read']),
+});
+
+/**
+ * @swagger
+ * /keys:
+ *   get:
+ *     tags: [API Keys]
+ *     summary: List API keys
+ *     security:
+ *       - bearerAuth: []
+ *     x-scope: null
+ *     x-body-description: null
+ *     x-response-example: '[{"id":"550e8400-e29b-41d4-a716-446655440000","name":"Production Key","key_prefix":"kyr_abc123","scopes":["read","write"],"last_used_at":"2026-04-10T12:00:00Z","revoked_at":null,"created_at":"2026-04-10T12:00:00Z"}]'
+ *     responses:
+ *       200:
+ *         description: List of API keys
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/ApiKey'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *   post:
+ *     tags: [API Keys]
+ *     summary: Create API key
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 minLength: 1
+ *                 maxLength: 255
+ *                 description: Key name
+ *               scopes:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   enum: [read, write, admin]
+ *                 default: [read]
+ *                 description: Key permissions
+ *     x-scope: null
+ *     x-body-description: '{ "name": "Production Key", "scopes": ["read", "write"] }'
+ *     x-response-example: '{"id":"550e8400-e29b-41d4-a716-446655440000","name":"Production Key","key_prefix":"kyr_abc123","scopes":["read","write"],"key":"kyr_abc123xyz...","created_at":"2026-04-10T12:00:00Z"}'
+ *     responses:
+ *       201:
+ *         description: API key created
+ *       400:
+ *         $ref: '#/components/responses/BadRequest'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ */
+router.post('/', authMiddleware, requireRole('owner', 'admin'), async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    const orgId = req.user?.orgId;
+
+    if (!userId || !orgId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const parseResult = createKeySchema.safeParse(req.body);
+    if (!parseResult.success) {
+      res.status(400).json({ error: 'Invalid input', details: parseResult.error.errors });
+      return;
+    }
+
+    const { name, scopes } = parseResult.data;
+    const { raw, hash, prefix } = generateApiKey();
+
+    const result = await query<{
+      id: string;
+      name: string;
+      key_prefix: string;
+      scopes: string[];
+      created_at: Date;
+    }>(
+      `INSERT INTO api_keys (org_id, user_id, name, key_hash, key_prefix, scopes)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, name, key_prefix, scopes, created_at`,
+      [orgId, userId, name, hash, prefix, scopes]
+    );
+
+    res.status(201).json({
+      ...result[0],
+      key: raw,
+    });
+  } catch (error) {
+    console.error('Error creating API key:', error);
+    res.status(500).json({ error: 'Failed to create API key' });
+  }
+});
+
+router.get('/', authMiddleware, requireRole('owner', 'admin', 'member'), async (req: Request, res: Response) => {
+  try {
+    const orgId = req.user?.orgId;
+
+    if (!orgId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const result = await query<{
+      id: string;
+      name: string;
+      key_prefix: string;
+      scopes: string[];
+      last_used_at: Date | null;
+      revoked_at: Date | null;
+      created_at: Date;
+    }>(
+      `SELECT id, name, key_prefix, scopes, last_used_at, revoked_at, created_at
+       FROM api_keys
+       WHERE org_id = $1
+       ORDER BY created_at DESC`,
+      [orgId]
+    );
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error listing API keys:', error);
+    res.status(500).json({ error: 'Failed to list API keys' });
+  }
+});
+
+/**
+ * @swagger
+ * /keys/{id}:
+ *   delete:
+ *     tags: [API Keys]
+ *     summary: Revoke API key
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     x-scope: null
+ *     x-body-description: null
+ *     x-response-example: '{"message":"API key revoked","id":"550e8400-e29b-41d4-a716-446655440000"}'
+ *     responses:
+ *       200:
+ *         description: Key revoked
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ */
+router.delete('/:id', authMiddleware, requireRole('owner', 'admin'), async (req: Request, res: Response) => {
+  try {
+    const orgId = req.user?.orgId;
+    const { id } = req.params;
+
+    if (!orgId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const result = await query<{ id: string }>(
+      `UPDATE api_keys SET revoked_at = NOW()
+       WHERE id = $1 AND org_id = $2 AND revoked_at IS NULL
+       RETURNING id`,
+      [id, orgId]
+    );
+
+    if (result.length === 0) {
+      res.status(404).json({ error: 'API key not found or already revoked' });
+      return;
+    }
+
+    res.json({ message: 'API key revoked', id });
+  } catch (error) {
+    console.error('Error revoking API key:', error);
+    res.status(500).json({ error: 'Failed to revoke API key' });
+  }
+});
+
+export default router;
+------------------------------------------------------------
+
+## routes/org.ts
+
+import { Router, Request, Response } from 'express';
+import { query, getClient } from '../db';
+import { hashPassword } from '../lib/password';
+import { authMiddleware, requireRole } from '../middleware/auth';
+import { inviteSchema, InviteInput } from '../validations/auth';
+
+const router = Router();
+
+/**
+ * @swagger
+ * /org:
+ *   get:
+ *     tags: [Organisation]
+ *     summary: Get current organisation
+ *     security:
+ *       - bearerAuth: []
+ *     x-scope: null
+ *     x-body-description: null
+ *     x-response-example: '{"id":"550e8400-e29b-41d4-a716-446655440000","name":"Acme Inc","slug":"acme-inc","plan":"free","createdAt":"2026-04-10T12:00:00Z"}'
+ *     responses:
+ *       200:
+ *         description: Organisation details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Organisation'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ */
+router.get('/', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const orgs = await query<{
+      id: string;
+      name: string;
+      slug: string;
+      plan: string;
+      created_at: string;
+    }>(
+      `SELECT id, name, slug, plan, created_at FROM organisations WHERE id = $1`,
+      [req.user!.orgId]
+    );
+
+    if (orgs.length === 0) {
+      return res.status(404).json({ error: 'Organisation not found' });
+    }
+
+    const org = orgs[0];
+    res.json({
+      id: org.id,
+      name: org.name,
+      slug: org.slug,
+      plan: org.plan,
+      createdAt: org.created_at,
+    });
+  } catch (error) {
+    console.error('Get org error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * @swagger
+ * /org/members:
+ *   get:
+ *     tags: [Organisation]
+ *     summary: List organisation members
+ *     security:
+ *       - bearerAuth: []
+ *     x-scope: null
+ *     x-body-description: null
+ *     x-response-example: '[{"id":"550e8400-e29b-41d4-a716-446655440000","email":"admin@acme.com","role":"owner","createdAt":"2026-04-10T12:00:00Z"}]'
+ *     responses:
+ *       200:
+ *         description: List of members
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Member'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *   post:
+ *     tags: [Organisation]
+ *     summary: Invite new member
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               password:
+ *                 type: string
+ *                 format: password
+ *               role:
+ *                 type: string
+ *                 enum: [owner, admin, member]
+ *                 default: member
+ *     x-scope: null
+ *     x-body-description: '{ "email": "user@acme.com", "password": "secure123", "role": "member" }'
+ *     x-response-example: '{"id":"550e8400-e29b-41d4-a716-446655440000","email":"user@acme.com","role":"member"}'
+ *     responses:
+ *       201:
+ *         description: Member invited
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Member'
+ *       400:
+ *         $ref: '#/components/responses/BadRequest'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ */
+router.get('/members', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const users = await query<{
+      id: string;
+      email: string;
+      role: string;
+      created_at: string;
+    }>(
+      `SELECT id, email, role, created_at FROM users WHERE org_id = $1 ORDER BY created_at`,
+      [req.user!.orgId]
+    );
+
+    res.json(users.map((user) => ({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      createdAt: user.created_at,
+    })));
+  } catch (error) {
+    console.error('Get members error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/members', authMiddleware, requireRole('owner'), async (req: Request, res: Response) => {
+  try {
+    const input = inviteSchema.parse(req.body) as InviteInput;
+
+    const existing = await query<{ id: string }>(
+      'SELECT id FROM users WHERE email = $1',
+      [input.email]
+    );
+
+    if (existing.length > 0) {
+      return res.status(400).json({ error: 'Email already in use' });
+    }
+
+    const passwordHash = await hashPassword(input.password);
+
+    const result = await query<{ id: string; email: string; role: string }>(
+      `INSERT INTO users (org_id, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, email, role`,
+      [req.user!.orgId, input.email, passwordHash, input.role]
+    );
+
+    const user = result[0];
+    res.status(201).json({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+    });
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: 'Invalid input', details: error.errors });
+    }
+    console.error('Invite member error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * @swagger
+ * /org/members/{id}:
+ *   delete:
+ *     tags: [Organisation]
+ *     summary: Remove member
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     x-scope: null
+ *     x-body-description: null
+ *     x-response-example: '204 No Content'
+ *     responses:
+ *       204:
+ *         description: Member removed
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ */
+router.delete('/members/:id', authMiddleware, requireRole('owner', 'admin'), async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const members = await query<{ id: string; role: string }>(
+      'SELECT id, role FROM users WHERE id = $1 AND org_id = $2',
+      [id, req.user!.orgId]
+    );
+
+    if (members.length === 0) {
+      return res.status(404).json({ error: 'Member not found' });
+    }
+
+    const member = members[0];
+
+    if (member.role === 'owner') {
+      return res.status(403).json({ error: 'Cannot remove owner' });
+    }
+
+    if (req.user!.role === 'admin' && member.role === 'admin') {
+      return res.status(403).json({ error: 'Cannot remove admin' });
+    }
+
+    await query('DELETE FROM users WHERE id = $1', [id]);
+
+    res.status(204).send();
+  } catch (error) {
+    console.error('Remove member error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+export default router;
+------------------------------------------------------------
+
+## routes/usage.ts
+
+import { Router, Response, Request } from 'express';
+import { query } from '../db';
+import { authMiddleware } from '../middleware/auth';
+
+const router = Router();
+
+/**
+ * @swagger
+ * /usage:
+ *   get:
+ *     tags: [Usage]
+ *     summary: Get usage statistics
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: start_date
+ *         in: query
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start date (YYYY-MM-DD)
+ *       - name: end_date
+ *         in: query
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End date (YYYY-MM-DD)
+ *     x-scope: null
+ *     x-body-description: null
+ *     x-response-example: '{"total_requests":1250,"total_bytes_in":52428800,"total_bytes_out":104857600,"total_storage":1073741824,"active_api_keys":3}'
+ *     responses:
+ *       200:
+ *         description: Usage statistics
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/UsageStats'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ */
+router.get('/', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const orgId = req.user?.orgId;
+
+    if (!orgId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const usageResult = await query<{
+      total_requests: string;
+      total_bytes_in: string;
+      total_bytes_out: string;
+    }>(
+      `SELECT 
+        COUNT(*) as total_requests,
+        COALESCE(SUM(bytes_in), 0) as total_bytes_in,
+        COALESCE(SUM(bytes_out), 0) as total_bytes_out
+       FROM usage_logs
+       WHERE org_id = $1`,
+      [orgId]
+    );
+
+    const storageResult = await query<{ total_storage: string }>(
+      `SELECT COALESCE(SUM(size_bytes), 0) as total_storage
+       FROM files
+       WHERE org_id = $1 AND deleted_at IS NULL`,
+      [orgId]
+    );
+
+    const apiKeysResult = await query<{ active_keys: string }>(
+      `SELECT COUNT(*) as active_keys
+       FROM api_keys
+       WHERE org_id = $1 AND revoked_at IS NULL`,
+      [orgId]
+    );
+
+    res.json({
+      total_requests: parseInt(usageResult[0]?.total_requests || '0', 10),
+      total_bytes_in: parseInt(usageResult[0]?.total_bytes_in || '0', 10),
+      total_bytes_out: parseInt(usageResult[0]?.total_bytes_out || '0', 10),
+      total_storage: parseInt(storageResult[0]?.total_storage || '0', 10),
+      active_api_keys: parseInt(apiKeysResult[0]?.active_keys || '0', 10),
+    });
+  } catch (error) {
+    console.error('Error getting usage:', error);
+    res.status(500).json({ error: 'Failed to get usage' });
+  }
+});
+
+/**
+ * @swagger
+ * /usage/daily:
+ *   get:
+ *     tags: [Usage]
+ *     summary: Get daily usage breakdown
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: start_date
+ *         in: query
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - name: end_date
+ *         in: query
+ *         schema:
+ *           type: string
+ *           format: date
+ *     x-scope: null
+ *     x-body-description: null
+ *     x-response-example: '[{"date":"2026-04-10","requests":150,"bytes_in":5242880,"bytes_out":10485760}]'
+ *     responses:
+ *       200:
+ *         description: Daily usage data
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ */
+router.get('/daily', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const orgId = req.user?.orgId;
+    const { start_date, end_date } = req.query;
+
+    if (!orgId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    let dateFilter = '';
+    const params: any[] = [orgId];
+
+    if (start_date && end_date) {
+      dateFilter = 'AND created_at >= $2 AND created_at <= $3';
+      params.push(start_date, end_date);
+    } else {
+      const defaultStart = new Date();
+      defaultStart.setDate(defaultStart.getDate() - 30);
+      dateFilter = 'AND created_at >= $2';
+      params.push(defaultStart);
+    }
+
+    const result = await query(
+      `SELECT 
+        DATE(created_at) as date,
+        COUNT(*) as requests,
+        COALESCE(SUM(bytes_in), 0) as bytes_in,
+        COALESCE(SUM(bytes_out), 0) as bytes_out
+       FROM usage_logs
+       WHERE org_id = $1 ${dateFilter}
+       GROUP BY DATE(created_at)
+       ORDER BY date DESC`,
+      params
+    );
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error getting daily usage:', error);
+    res.status(500).json({ error: 'Failed to get daily usage' });
+  }
+});
+
+export default router;
+------------------------------------------------------------
+
+## scripts/generate-openapi.ts
+
+import swaggerJsdoc from 'swagger-jsdoc';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as yaml from 'yaml';
+
+const options: swaggerJsdoc.Options = {
+  definition: {
+    openapi: '3.1.0',
+    info: {
+      title: 'Kyro API',
+      version: '1.0.0',
+      description: 'Language-agnostic API platform for file storage and management.',
+      contact: { name: 'Kyro Support', url: 'https://kyro.io' },
+      license: { name: 'Proprietary' }
+    },
+    servers: [
+      { url: 'http://localhost:3000/api/v1', description: 'Development' },
+      { url: 'https://api.kyro.io/api/v1', description: 'Production' }
+    ],
+    tags: [
+      { name: 'Authentication', description: 'User registration and login' },
+      { name: 'Organisation', description: 'Workspace management' },
+      { name: 'API Keys', description: 'API key lifecycle management' },
+      { name: 'Files', description: 'File upload, download, and management' },
+      { name: 'Usage', description: 'Usage analytics and reporting' },
+      { name: 'Health', description: 'Health check endpoints' }
+    ],
+    components: {
+      securitySchemes: {
+        bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+        apiKey: { type: 'apiKey', in: 'header', name: 'X-API-Key' }
+      },
+      schemas: {
+        Error: {
+          type: 'object',
+          properties: {
+            error: {
+              type: 'object',
+              properties: {
+                message: { type: 'string' },
+                code: { type: 'string' },
+                details: { type: 'array', items: { type: 'object' } }
+              }
+            }
+          }
+        },
+        User: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            email: { type: 'string', format: 'email' },
+            role: { type: 'string', enum: ['owner', 'admin', 'member'] },
+            orgId: { type: 'string', format: 'uuid' }
+          }
+        },
+        Organisation: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            name: { type: 'string' },
+            slug: { type: 'string' },
+            plan: { type: 'string', enum: ['free', 'pro', 'enterprise'] },
+            createdAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        ApiKey: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            name: { type: 'string' },
+            key_prefix: { type: 'string' },
+            scopes: { type: 'array', items: { type: 'string' } },
+            last_used_at: { type: 'string', format: 'date-time', nullable: true },
+            revoked_at: { type: 'string', format: 'date-time', nullable: true },
+            created_at: { type: 'string', format: 'date-time' }
+          }
+        },
+        File: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            name: { type: 'string' },
+            mimeType: { type: 'string' },
+            sizeBytes: { type: 'integer' },
+            createdAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        UsageStats: {
+          type: 'object',
+          properties: {
+            total_requests: { type: 'integer' },
+            total_bytes_in: { type: 'integer' },
+            total_bytes_out: { type: 'integer' },
+            total_storage: { type: 'integer' },
+            active_api_keys: { type: 'integer' }
+          }
+        },
+        Member: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            email: { type: 'string', format: 'email' },
+            role: { type: 'string', enum: ['owner', 'admin', 'member'] },
+            createdAt: { type: 'string', format: 'date-time' }
+          }
+        }
+      },
+      responses: {
+        BadRequest: { description: 'Invalid request body', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        Unauthorized: { description: 'Authentication required', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        Forbidden: { description: 'Insufficient permissions', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        NotFound: { description: 'Resource not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        Conflict: { description: 'Resource already exists', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        PayloadTooLarge: { description: 'File too large', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        TooManyRequests: { description: 'Rate limit exceeded', content: { 'application/json': { schema: { type: 'object', properties: { error: { type: 'object', properties: { message: { type: 'string' }, retryAfter: { type: 'number' } } } } } } } }
+      }
+    }
+  },
+  apis: ['./src/routes/*.ts']
+};
+
+const specs = swaggerJsdoc(options) as {
+  paths?: Record<string, unknown>;
+  openapi: string;
+  info: { title: string; version: string; description?: string };
+  servers?: Array<{ url: string; description?: string }>;
+  tags?: Array<{ name: string; description?: string }>;
+  components?: Record<string, unknown>;
+};
+
+const outputDir = path.join(__dirname, '../../../shared/openapi/');
+const jsonPath = path.join(outputDir, 'openapi-generated.json');
+const yamlPath = path.join(outputDir, 'openapi-generated.yaml');
+
+fs.writeFileSync(jsonPath, JSON.stringify(specs, null, 2));
+fs.writeFileSync(yamlPath, yaml.stringify(specs));
+
+const pathsCount = Object.keys(specs.paths || {}).length;
+
+console.log(`✅ OpenAPI spec generated:`);
+console.log(`   - JSON: ${jsonPath}`);
+console.log(`   - YAML: ${yamlPath}`);
+console.log(`   - Paths: ${pathsCount}`);
+------------------------------------------------------------
+
+## validations/auth.ts
+
+import { z } from 'zod';
+
+export const registerSchema = z.object({
+  orgName: z.string().min(1).max(255),
+  email: z.string().email(),
+  password: z.string().min(8).max(100),
+});
+
+export const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string(),
+});
+
+export const inviteSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8).max(100),
+  role: z.enum(['admin', 'member']).default('member'),
+});
+
+export type RegisterInput = z.infer<typeof registerSchema>;
+export type LoginInput = z.infer<typeof loginSchema>;
+export type InviteInput = z.infer<typeof inviteSchema>;
+------------------------------------------------------------
+
