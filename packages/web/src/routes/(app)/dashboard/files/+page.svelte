@@ -190,8 +190,6 @@
 
   function downloadFile(file: FileItem) {
     if (!apiKey) return;
-    // Uses the SvelteKit proxy route at /api/files/[id] which forwards
-    // the key as X-API-Key header to avoid exposing it in browser history.
     window.open(getDownloadUrl(file.id, apiKey), "_blank");
   }
 </script>
