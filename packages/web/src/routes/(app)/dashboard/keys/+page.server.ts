@@ -1,6 +1,6 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
-import { getKeys, createKey, deleteKey, type ApiKey, type CreateKeyResponse } from '$lib/api/keys';
+import { getKeys, createKey, deleteKey } from '$lib/api/keys';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	const token = locals.user?.token;
@@ -9,7 +9,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 	}
 
 	try {
-		const keys = await getKeys(token);
+		// getKeys returns ApiKey[] directly (first page).
+		// For the dashboard we load up to 100 keys; if you need full pagination
+		// across hundreds of keys, swap this for getAllKeys().
+		const keys = await getKeys(token, 100, 0);
 		return {
 			keys: keys.map((k) => ({
 				id: k.id,

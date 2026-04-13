@@ -9,18 +9,13 @@
     uploadFile,
     deleteFile,
     getFiles,
+    getDownloadUrl,
     type FileItem,
   } from "$lib/api/files";
 
   interface Props {
     data: {
-      files: Array<{
-        id: string;
-        name: string;
-        mimeType: string;
-        sizeBytes: number;
-        createdAt: string;
-      }>;
+      files: FileItem[];
       hasApiKey: boolean;
       apiKeyPrefix: string | null;
     };
@@ -28,9 +23,14 @@
 
   let { data }: Props = $props();
 
-  let files = $state(data.files);
+  let files = $state<FileItem[]>(data.files);
   let hasApiKey = $state(data.hasApiKey);
   let apiKeyPrefix = $state(data.apiKeyPrefix);
+
+  // Pagination state
+  let nextCursor = $state<string | null>(null);
+  let hasMore = $state(false);
+  let loadingMore = $state(false);
 
   let apiKey = $state("");
   let apiKeyVerified = $state(false);
@@ -49,7 +49,6 @@
   );
 
   $effect(() => {
-    files = data.files;
     hasApiKey = data.hasApiKey;
     apiKeyPrefix = data.apiKeyPrefix;
   });
@@ -64,12 +63,15 @@
     apiKeyError = null;
 
     try {
-      await getFiles(apiKey);
+      const result = await getFiles(apiKey, 100);
       apiKeyVerified = true;
       apiKeyError = null;
+      files = result.files;
+      nextCursor = result.nextCursor;
+      hasMore = result.hasMore;
     } catch (error: any) {
       apiKeyError =
-        error.message || "Invalid API key. Make sure it has write scope.";
+        error.message || "Invalid API key. Make sure it has read scope.";
       apiKeyVerified = false;
     } finally {
       verifyingApiKey = false;
@@ -80,6 +82,24 @@
     apiKeyVerified = false;
     apiKey = "";
     apiKeyError = null;
+    files = [];
+    nextCursor = null;
+    hasMore = false;
+  }
+
+  async function loadMore() {
+    if (!nextCursor || loadingMore) return;
+    loadingMore = true;
+    try {
+      const result = await getFiles(apiKey, 100, nextCursor);
+      files = [...files, ...result.files];
+      nextCursor = result.nextCursor;
+      hasMore = result.hasMore;
+    } catch (error: any) {
+      console.error("Failed to load more files:", error);
+    } finally {
+      loadingMore = false;
+    }
   }
 
   async function handleFileSelect(e: Event) {
@@ -170,8 +190,9 @@
 
   function downloadFile(file: FileItem) {
     if (!apiKey) return;
-    const url = `/api/files/${file.id}?key=${encodeURIComponent(apiKey)}`;
-    window.open(url, "_blank");
+    // Uses the SvelteKit proxy route at /api/files/[id] which forwards
+    // the key as X-API-Key header to avoid exposing it in browser history.
+    window.open(getDownloadUrl(file.id, apiKey), "_blank");
   }
 </script>
 
@@ -193,8 +214,7 @@
         <span class="empty-icon">🔑</span>
         <h3>API Key Required</h3>
         <p>
-          You need at least one API key with write scope to upload and manage
-          files.
+          You need at least one API key with read/write scope to manage files.
         </p>
         <a href="/dashboard/keys">
           <Button>Create API Key</Button>
@@ -212,14 +232,14 @@
         {#if !apiKeyVerified}
           <div class="api-key-input-section">
             <p class="api-key-desc">
-              Enter an API key with write scope to manage files
+              Enter your full API key to manage files
             </p>
             <div class="api-key-row">
               <input
                 type="password"
                 class="api-key-input"
                 bind:value={apiKey}
-                placeholder="kyr_xxx..."
+                placeholder="kyro_live_..."
                 onkeydown={(e) => e.key === "Enter" && verifyApiKey()}
               />
               <Button onclick={verifyApiKey} loading={verifyingApiKey}>
@@ -331,6 +351,18 @@
               </div>
             </Card>
           {/each}
+
+          {#if hasMore}
+            <div class="load-more">
+              <Button
+                variant="secondary"
+                loading={loadingMore}
+                onclick={loadMore}
+              >
+                {loadingMore ? "Loading..." : "Load more files"}
+              </Button>
+            </div>
+          {/if}
         </div>
       {/if}
     {/if}
@@ -582,6 +614,13 @@
     gap: var(--space-2);
     flex-shrink: 0;
   }
+
+  .load-more {
+    display: flex;
+    justify-content: center;
+    padding: var(--space-4) 0;
+  }
+
   @media (max-width: 640px) {
     .files-page {
       max-width: 100%;

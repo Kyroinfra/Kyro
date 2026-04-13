@@ -21,6 +21,21 @@ export interface InviteMemberInput {
 	role: 'admin' | 'member';
 }
 
+export interface PaginatedMembers {
+	data: Array<{
+		id: string;
+		email: string;
+		role: string;
+		createdAt: string;
+	}>;
+	pagination: {
+		total: number;
+		limit: number;
+		offset: number;
+		hasMore: boolean;
+	};
+}
+
 export async function getOrg(token: string): Promise<Org> {
 	const data = await request<{
 		id: string;
@@ -39,20 +54,41 @@ export async function getOrg(token: string): Promise<Org> {
 	};
 }
 
-export async function getMembers(token: string): Promise<Member[]> {
-	const data = await request<Array<{
-		id: string;
-		email: string;
-		role: string;
-		createdAt: string;
-	}>>('/api/v1/org/members', { method: 'GET', token });
+export async function getMembers(token: string, limit = 50, offset = 0): Promise<Member[]> {
+	const res = await request<PaginatedMembers>(
+		`/api/v1/org/members?limit=${limit}&offset=${offset}`,
+		{ method: 'GET', token }
+	);
 
-	return data.map(m => ({
+	return res.data.map(m => ({
 		id: m.id,
 		email: m.email,
 		role: m.role as 'owner' | 'admin' | 'member',
 		createdAt: m.createdAt
 	}));
+}
+
+export async function getAllMembers(token: string): Promise<Member[]> {
+	const all: Member[] = [];
+	let offset = 0;
+	const limit = 100;
+
+	while (true) {
+		const res = await request<PaginatedMembers>(
+			`/api/v1/org/members?limit=${limit}&offset=${offset}`,
+			{ method: 'GET', token }
+		);
+		all.push(...res.data.map(m => ({
+			id: m.id,
+			email: m.email,
+			role: m.role as 'owner' | 'admin' | 'member',
+			createdAt: m.createdAt
+		})));
+		if (!res.pagination.hasMore) break;
+		offset += limit;
+	}
+
+	return all;
 }
 
 export async function inviteMember(token: string, input: InviteMemberInput): Promise<Member> {

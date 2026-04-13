@@ -16,22 +16,44 @@ export interface UploadResponse {
 	createdAt: string;
 }
 
-export async function getFiles(apiKey: string): Promise<FileItem[]> {
-	const files = await request<Array<{
-		id: string;
-		name: string;
-		mime_type: string;
-		size_bytes: number;
-		created_at: string;
-	}>>('/api/v1/files', { method: 'GET', apiKey });
+export interface PaginatedFiles {
+	data: FileItem[];
+	pagination: {
+		limit: number;
+		hasMore: boolean;
+		nextCursor: string | null;
+	};
+}
 
-	return files.map(f => ({
-		id: f.id,
-		name: f.name,
-		mimeType: f.mime_type,
-		sizeBytes: f.size_bytes,
-		createdAt: f.created_at
-	}));
+export async function getFiles(
+	apiKey: string,
+	limit = 100,
+	cursor?: string
+): Promise<{ files: FileItem[]; nextCursor: string | null; hasMore: boolean }> {
+	let url = `/api/v1/files?limit=${limit}`;
+	if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`;
+
+	const res = await request<PaginatedFiles>(url, { method: 'GET', apiKey });
+
+	return {
+		files: res.data,
+		nextCursor: res.pagination.nextCursor,
+		hasMore: res.pagination.hasMore
+	};
+}
+
+export async function getAllFiles(apiKey: string): Promise<FileItem[]> {
+	const all: FileItem[] = [];
+	let cursor: string | undefined;
+
+	while (true) {
+		const { files, nextCursor, hasMore } = await getFiles(apiKey, 100, cursor);
+		all.push(...files);
+		if (!hasMore || !nextCursor) break;
+		cursor = nextCursor;
+	}
+
+	return all;
 }
 
 export async function deleteFile(apiKey: string, id: string): Promise<{ message: string; id: string }> {
@@ -79,13 +101,16 @@ export async function uploadFile(
 
 		xhr.open('POST', '/api/v1/files');
 		xhr.setRequestHeader('X-API-Key', apiKey);
-		
+
 		const fd = new FormData();
 		fd.append('file', file);
 		xhr.send(fd);
 	});
 }
 
+// Returns a SvelteKit proxy URL — the key goes in the query string
+// and the server-side handler forwards it as the X-API-Key header.
+// Path: /api/files/[id]?key=<apiKey>  (note: NOT /api/v1/files)
 export function getDownloadUrl(id: string, apiKey: string): string {
-	return `/api/v1/files/${id}?key=${apiKey}`;
+	return `/api/files/${id}?key=${encodeURIComponent(apiKey)}`;
 }

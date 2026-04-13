@@ -1,6 +1,6 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
-import { getOrg, getMembers, inviteMember, removeMember, type Org, type Member } from '$lib/api/org';
+import { getOrg, getMembers, inviteMember, removeMember } from '$lib/api/org';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	const token = locals.user?.token;
@@ -9,7 +9,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 	}
 
 	try {
-		const [org, members] = await Promise.all([getOrg(token), getMembers(token)]);
+		// getMembers returns Member[] directly (first page, up to 50).
+		// For orgs with >50 members swap for getAllMembers().
+		const [org, members] = await Promise.all([getOrg(token), getMembers(token, 100, 0)]);
 
 		return {
 			org: {
