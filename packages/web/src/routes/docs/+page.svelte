@@ -58,8 +58,14 @@
     id: string;
   }
 
-
-  const TAG_ORDER = ["Authentication", "API Keys", "Files", "Organisation", "Usage", "Health"];
+  const TAG_ORDER = [
+    "Authentication",
+    "API Keys",
+    "Files",
+    "Organisation",
+    "Usage",
+    "Health",
+  ];
 
   const TAG_IDS: Record<string, string> = {
     Authentication: "auth",
@@ -72,15 +78,24 @@
 
   const endpointsByTag: Record<string, Endpoint[]> = {};
 
-  for (const [path, pathItem] of Object.entries((openapiSpec as any).paths || {})) {
-    for (const [method, operation] of Object.entries(pathItem as Record<string, unknown>)) {
+  for (const [path, pathItem] of Object.entries(
+    (openapiSpec as any).paths || {},
+  )) {
+    for (const [method, operation] of Object.entries(
+      pathItem as Record<string, unknown>,
+    )) {
       if (["parameters", "summary", "description"].includes(method)) continue;
       const op = operation as Operation;
       const tag = op.tags?.[0] || "Other";
       const tagId = TAG_IDS[tag] || tag.toLowerCase();
       if (!endpointsByTag[tagId]) endpointsByTag[tagId] = [];
       const id = `${tagId}-${method}-${path.replace(/\//g, "-").replace(/[{}]/g, "")}`;
-      endpointsByTag[tagId].push({ method: method.toUpperCase(), path, op, id });
+      endpointsByTag[tagId].push({
+        method: method.toUpperCase(),
+        path,
+        op,
+        id,
+      });
     }
   }
 
@@ -90,7 +105,6 @@
     endpoints: endpointsByTag[TAG_IDS[t] || t.toLowerCase()] || [],
   })).filter((t) => t.endpoints.length > 0);
 
-
   const staticSections = [
     { id: "overview", label: "Overview" },
     { id: "authentication", label: "Authentication" },
@@ -99,7 +113,6 @@
     { id: "errors", label: "Error Codes" },
     { id: "quickstart", label: "Quickstart" },
   ];
-
 
   function getAuthType(op: Operation): "bearer" | "apiKey" | "none" {
     if (!op.security || op.security.length === 0) return "none";
@@ -132,28 +145,35 @@
     if (content["multipart/form-data"]) {
       const schema = content["multipart/form-data"].schema;
       const required = schema?.required || [];
-      const fields = Object.entries(schema?.properties || {}).map(([name, prop]) => ({
-        name,
-        type: (prop as SchemaProperty).format === "binary" ? "File (binary)" : (prop as SchemaProperty).type || "string",
-        required: required.includes(name),
-        description: (prop as SchemaProperty).description || "",
-        enum: (prop as SchemaProperty).enum,
-        default: (prop as SchemaProperty).default,
-      }));
+      const fields = Object.entries(schema?.properties || {}).map(
+        ([name, prop]) => ({
+          name,
+          type:
+            (prop as SchemaProperty).format === "binary"
+              ? "File (binary)"
+              : (prop as SchemaProperty).type || "string",
+          required: required.includes(name),
+          description: (prop as SchemaProperty).description || "",
+          enum: (prop as SchemaProperty).enum,
+          default: (prop as SchemaProperty).default,
+        }),
+      );
       return { fields, isFormData: true, contentType: "multipart/form-data" };
     }
 
     if (content["application/json"]) {
       const schema = content["application/json"].schema;
       const required = schema?.required || [];
-      const fields = Object.entries(schema?.properties || {}).map(([name, prop]) => ({
-        name,
-        type: formatType(prop as SchemaProperty),
-        required: required.includes(name),
-        description: (prop as SchemaProperty).description || "",
-        enum: (prop as SchemaProperty).enum,
-        default: (prop as SchemaProperty).default,
-      }));
+      const fields = Object.entries(schema?.properties || {}).map(
+        ([name, prop]) => ({
+          name,
+          type: formatType(prop as SchemaProperty),
+          required: required.includes(name),
+          description: (prop as SchemaProperty).description || "",
+          enum: (prop as SchemaProperty).enum,
+          default: (prop as SchemaProperty).default,
+        }),
+      );
       return { fields, isFormData: false, contentType: "application/json" };
     }
 
@@ -161,7 +181,8 @@
   }
 
   function formatType(prop: SchemaProperty): string {
-    if (prop.type === "array" && prop.items) return `${formatType(prop.items)}[]`;
+    if (prop.type === "array" && prop.items)
+      return `${formatType(prop.items)}[]`;
     if (prop.format) return `${prop.type} (${prop.format})`;
     return prop.type || "any";
   }
@@ -187,9 +208,18 @@
       lines.push(`  -H "Content-Type: application/json" \\`);
       const bodyObj: Record<string, unknown> = {};
       for (const f of body.fields) {
-        if (f.required) bodyObj[f.name] = f.default ?? (f.type.includes("string") ? `"${f.name}_value"` : f.type.includes("array") ? [] : "value");
+        if (f.required)
+          bodyObj[f.name] =
+            f.default ??
+            (f.type.includes("string")
+              ? `"${f.name}_value"`
+              : f.type.includes("array")
+                ? []
+                : "value");
       }
-      lines.push(`  -d '${JSON.stringify(bodyObj, null, 2).replace(/\n/g, "\n  ")}'`);
+      lines.push(
+        `  -d '${JSON.stringify(bodyObj, null, 2).replace(/\n/g, "\n  ")}'`,
+      );
     }
 
     const last = lines[lines.length - 1];
@@ -217,7 +247,13 @@
     } else if (body) {
       const bodyObj: Record<string, unknown> = {};
       for (const f of body.fields) {
-        bodyObj[f.name] = f.default ?? (f.type.includes("string") ? `${f.name}_value` : f.type.includes("array") ? [] : "value");
+        bodyObj[f.name] =
+          f.default ??
+          (f.type.includes("string")
+            ? `${f.name}_value`
+            : f.type.includes("array")
+              ? []
+              : "value");
       }
       bodyStr = `\n  const payload = ${JSON.stringify(bodyObj, null, 2).replace(/\n/g, "\n  ")};\n`;
     }
@@ -258,7 +294,6 @@ const data = await response.json();`;
     return desc || code;
   }
 
-
   let copiedId = $state<string | null>(null);
 
   function copy(text: string, id: string) {
@@ -266,7 +301,6 @@ const data = await response.json();`;
     copiedId = id;
     setTimeout(() => (copiedId = null), 2000);
   }
-
 
   let activeTab = $state<Record<string, "curl" | "fetch">>({});
 
@@ -278,7 +312,6 @@ const data = await response.json();`;
     activeTab = { ...activeTab, [id]: tab };
   }
 
-
   let sidebarOpen = $state(false);
   let activeSection = $state("overview");
 
@@ -288,32 +321,75 @@ const data = await response.json();`;
         for (const entry of entries) {
           if (entry.isIntersecting) {
             activeSection = entry.target.id;
+            // Scroll the active sidebar link into view
+            const link = document.querySelector(
+              `.sidebar a[href="#${entry.target.id}"]`,
+            );
+            link?.scrollIntoView({ block: "nearest", behavior: "smooth" });
             break;
           }
         }
       },
-      { rootMargin: "-80px 0px -55% 0px", threshold: 0 }
+      { rootMargin: "-80px 0px -55% 0px", threshold: 0 },
     );
-    document.querySelectorAll(".doc-section, .endpoint-section").forEach((s) => observer.observe(s));
+    const contentEl = document.querySelector(".content") as HTMLElement;
+    document
+      .querySelectorAll(".doc-section, .endpoint-section")
+      .forEach((s) => observer.observe(s));
     return () => observer.disconnect();
   });
 
-
   const errorCodes = [
-    { code: "400", label: "Bad Request", desc: "Invalid input or missing required fields" },
-    { code: "401", label: "Unauthorized", desc: "Missing or invalid API key / JWT token" },
-    { code: "403", label: "Forbidden", desc: "Insufficient scope or role permissions" },
+    {
+      code: "400",
+      label: "Bad Request",
+      desc: "Invalid input or missing required fields",
+    },
+    {
+      code: "401",
+      label: "Unauthorized",
+      desc: "Missing or invalid API key / JWT token",
+    },
+    {
+      code: "403",
+      label: "Forbidden",
+      desc: "Insufficient scope or role permissions",
+    },
     { code: "404", label: "Not Found", desc: "Resource does not exist" },
     { code: "409", label: "Conflict", desc: "Resource already exists" },
-    { code: "413", label: "Payload Too Large", desc: "File exceeds the 100MB size limit" },
-    { code: "429", label: "Too Many Requests", desc: "Rate limit exceeded — check Retry-After header" },
-    { code: "500", label: "Internal Server Error", desc: "Unexpected server-side error" },
+    {
+      code: "413",
+      label: "Payload Too Large",
+      desc: "File exceeds the 100MB size limit",
+    },
+    {
+      code: "429",
+      label: "Too Many Requests",
+      desc: "Rate limit exceeded — check Retry-After header",
+    },
+    {
+      code: "500",
+      label: "Internal Server Error",
+      desc: "Unexpected server-side error",
+    },
   ];
 
   const scopes = [
-    { name: "read", color: "green", desc: "List and download files, read usage statistics" },
-    { name: "write", color: "blue", desc: "Upload and delete files, create API keys" },
-    { name: "admin", color: "amber", desc: "Full access including organisation management" },
+    {
+      name: "read",
+      color: "green",
+      desc: "List and download files, read usage statistics",
+    },
+    {
+      name: "write",
+      color: "blue",
+      desc: "Upload and delete files, create API keys",
+    },
+    {
+      name: "admin",
+      color: "amber",
+      desc: "Full access including organisation management",
+    },
   ];
 </script>
 
@@ -322,15 +398,25 @@ const data = await response.json();`;
 </svelte:head>
 
 <div class="page">
-
   <!-- ── Top bar ── -->
   <header class="topbar">
     <div class="topbar-left">
-      <button class="hamburger" onclick={() => (sidebarOpen = true)} aria-label="Open menu">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <line x1="3" y1="6" x2="21" y2="6"/>
-          <line x1="3" y1="12" x2="21" y2="12"/>
-          <line x1="3" y1="18" x2="21" y2="18"/>
+      <button
+        class="hamburger"
+        onclick={() => (sidebarOpen = true)}
+        aria-label="Open menu"
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+        >
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <line x1="3" y1="12" x2="21" y2="12" />
+          <line x1="3" y1="18" x2="21" y2="18" />
         </svg>
       </button>
       <a href="/" class="logo">
@@ -347,7 +433,6 @@ const data = await response.json();`;
   </header>
 
   <div class="layout">
-
     <!-- ── Overlay ── -->
     {#if sidebarOpen}
       <div class="overlay" onclick={() => (sidebarOpen = false)}></div>
@@ -358,7 +443,9 @@ const data = await response.json();`;
       <div class="sidebar-inner">
         <div class="sidebar-close-row">
           <span class="sidebar-heading">docs</span>
-          <button class="sidebar-close" onclick={() => (sidebarOpen = false)}>✕</button>
+          <button class="sidebar-close" onclick={() => (sidebarOpen = false)}
+            >✕</button
+          >
         </div>
 
         <div class="sidebar-group">
@@ -368,8 +455,8 @@ const data = await response.json();`;
               href="#{s.id}"
               class="sidebar-link"
               class:active={activeSection === s.id}
-              onclick={() => (sidebarOpen = false)}
-            >{s.label}</a>
+              onclick={() => (sidebarOpen = false)}>{s.label}</a
+            >
           {/each}
         </div>
 
@@ -383,8 +470,12 @@ const data = await response.json();`;
                 class:active={activeSection === ep.id}
                 onclick={() => (sidebarOpen = false)}
               >
-                <span class="sidebar-method method-{ep.method.toLowerCase()}">{ep.method}</span>
-                <span class="sidebar-path">{ep.path.replace("/api/v1", "")}</span>
+                <span class="sidebar-method method-{ep.method.toLowerCase()}"
+                  >{ep.method}</span
+                >
+                <span class="sidebar-path"
+                  >{ep.path.replace("/api/v1", "")}</span
+                >
               </a>
             {/each}
           </div>
@@ -394,7 +485,6 @@ const data = await response.json();`;
 
     <!-- ── Main content ── -->
     <main class="content">
-
       <!-- OVERVIEW -->
       <section id="overview" class="doc-section">
         <div class="section-eyebrow">v{(openapiSpec as any).info.version}</div>
@@ -404,15 +494,23 @@ const data = await response.json();`;
         <div class="info-grid">
           <div class="info-card">
             <span class="info-label">Base URL</span>
-            <code class="info-value">{(openapiSpec as any).servers?.[1]?.url ?? "https://api.kyro.io/api/v1"}</code>
+            <code class="info-value"
+              >{(openapiSpec as any).servers?.[1]?.url ??
+                "https://api.kyro.io/api/v1"}</code
+            >
           </div>
           <div class="info-card">
             <span class="info-label">Dev URL</span>
-            <code class="info-value">{(openapiSpec as any).servers?.[0]?.url ?? "http://localhost:3000/api/v1"}</code>
+            <code class="info-value"
+              >{(openapiSpec as any).servers?.[0]?.url ??
+                "http://localhost:3000/api/v1"}</code
+            >
           </div>
           <div class="info-card">
             <span class="info-label">Spec format</span>
-            <code class="info-value">OpenAPI {(openapiSpec as any).openapi}</code>
+            <code class="info-value"
+              >OpenAPI {(openapiSpec as any).openapi}</code
+            >
           </div>
           <div class="info-card">
             <span class="info-label">Auth methods</span>
@@ -422,7 +520,17 @@ const data = await response.json();`;
 
         <div class="spec-download">
           <a href="/openapi.yaml" target="_blank" class="spec-link">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              ><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline
+                points="7 10 12 15 17 10"
+              /><line x1="12" y1="15" x2="12" y2="3" /></svg
+            >
             Download OpenAPI YAML
           </a>
         </div>
@@ -431,7 +539,13 @@ const data = await response.json();`;
       <!-- AUTHENTICATION -->
       <section id="authentication" class="doc-section">
         <h2 class="section-title">Authentication</h2>
-        <p class="section-desc">Two authentication methods are supported. Use <strong>Bearer JWT</strong> for user-level actions (managing keys, org settings) and <strong>X-Api-Key</strong> for programmatic API access (file operations).</p>
+        <p class="section-desc">
+          Two authentication methods are supported. Use <strong
+            >Bearer JWT</strong
+          >
+          for user-level actions (managing keys, org settings) and
+          <strong>X-Api-Key</strong> for programmatic API access (file operations).
+        </p>
 
         <div class="auth-cards">
           <div class="auth-card">
@@ -439,15 +553,26 @@ const data = await response.json();`;
               <span class="badge badge-green">Bearer JWT</span>
               <span class="auth-card-title">User actions</span>
             </div>
-            <p class="auth-card-desc">Obtained from <code>/auth/login</code> or <code>/auth/register</code>. Valid for 7 days.</p>
+            <p class="auth-card-desc">
+              Obtained from <code>/auth/login</code> or
+              <code>/auth/register</code>. Valid for 7 days.
+            </p>
             <div class="code-block">
               <div class="code-toolbar">
                 <span class="code-lang">http</span>
-                <button class="copy-btn" onclick={() => copy("Authorization: Bearer eyJhbGci...", "auth-bearer")}>
+                <button
+                  class="copy-btn"
+                  onclick={() =>
+                    copy("Authorization: Bearer eyJhbGci...", "auth-bearer")}
+                >
                   {copiedId === "auth-bearer" ? "✓ copied" : "copy"}
                 </button>
               </div>
-              <pre><code><span class="ck">Authorization</span>: <span class="cs">Bearer eyJhbGci...</span></code></pre>
+              <pre><code
+                  ><span class="ck">Authorization</span>: <span class="cs"
+                    >Bearer eyJhbGci...</span
+                  ></code
+                ></pre>
             </div>
           </div>
 
@@ -456,15 +581,26 @@ const data = await response.json();`;
               <span class="badge badge-blue">X-Api-Key</span>
               <span class="auth-card-title">API access</span>
             </div>
-            <p class="auth-card-desc">Created via the dashboard or <code>/keys</code> endpoint. Scoped to specific operations.</p>
+            <p class="auth-card-desc">
+              Created via the dashboard or <code>/keys</code> endpoint. Scoped to
+              specific operations.
+            </p>
             <div class="code-block">
               <div class="code-toolbar">
                 <span class="code-lang">http</span>
-                <button class="copy-btn" onclick={() => copy("X-Api-Key: kyr_abc123xyz...", "auth-apikey")}>
+                <button
+                  class="copy-btn"
+                  onclick={() =>
+                    copy("X-Api-Key: kyr_abc123xyz...", "auth-apikey")}
+                >
                   {copiedId === "auth-apikey" ? "✓ copied" : "copy"}
                 </button>
               </div>
-              <pre><code><span class="ck">X-Api-Key</span>: <span class="cs">kyr_abc123xyz...</span></code></pre>
+              <pre><code
+                  ><span class="ck">X-Api-Key</span>: <span class="cs"
+                    >kyr_abc123xyz...</span
+                  ></code
+                ></pre>
             </div>
           </div>
         </div>
@@ -473,7 +609,10 @@ const data = await response.json();`;
       <!-- SCOPES -->
       <section id="scopes" class="doc-section">
         <h2 class="section-title">Scopes</h2>
-        <p class="section-desc">API keys are scoped. Request only the permissions your integration needs.</p>
+        <p class="section-desc">
+          API keys are scoped. Request only the permissions your integration
+          needs.
+        </p>
 
         <table class="ref-table">
           <thead>
@@ -485,7 +624,11 @@ const data = await response.json();`;
           <tbody>
             {#each scopes as scope}
               <tr>
-                <td><span class="scope-tag scope-{scope.color}">{scope.name}</span></td>
+                <td
+                  ><span class="scope-tag scope-{scope.color}"
+                    >{scope.name}</span
+                  ></td
+                >
                 <td>{scope.desc}</td>
               </tr>
             {/each}
@@ -496,7 +639,10 @@ const data = await response.json();`;
       <!-- RATE LIMITING -->
       <section id="rate-limiting" class="doc-section">
         <h2 class="section-title">Rate Limiting</h2>
-        <p class="section-desc">All endpoints are rate-limited per API key. Exceeding the limit returns <code>429 Too Many Requests</code>.</p>
+        <p class="section-desc">
+          All endpoints are rate-limited per API key. Exceeding the limit
+          returns <code>429 Too Many Requests</code>.
+        </p>
 
         <div class="rate-card">
           <div class="rate-number">100</div>
@@ -508,10 +654,26 @@ const data = await response.json();`;
             <tr><th>Header</th><th>Description</th></tr>
           </thead>
           <tbody>
-            <tr><td><code>X-RateLimit-Limit</code></td><td>Max requests per window</td></tr>
-            <tr><td><code>X-RateLimit-Remaining</code></td><td>Requests remaining in current window</td></tr>
-            <tr><td><code>X-RateLimit-Reset</code></td><td>Unix timestamp when limit resets</td></tr>
-            <tr><td><code>Retry-After</code></td><td>Seconds to wait before retrying (on 429)</td></tr>
+            <tr
+              ><td><code>X-RateLimit-Limit</code></td><td
+                >Max requests per window</td
+              ></tr
+            >
+            <tr
+              ><td><code>X-RateLimit-Remaining</code></td><td
+                >Requests remaining in current window</td
+              ></tr
+            >
+            <tr
+              ><td><code>X-RateLimit-Reset</code></td><td
+                >Unix timestamp when limit resets</td
+              ></tr
+            >
+            <tr
+              ><td><code>Retry-After</code></td><td
+                >Seconds to wait before retrying (on 429)</td
+              ></tr
+            >
           </tbody>
         </table>
       </section>
@@ -519,17 +681,22 @@ const data = await response.json();`;
       <!-- ERROR CODES -->
       <section id="errors" class="doc-section">
         <h2 class="section-title">Error Codes</h2>
-        <p class="section-desc">All errors return a consistent JSON body. Check <code>error.code</code> for machine-readable classification.</p>
+        <p class="section-desc">
+          All errors return a consistent JSON body. Check <code>error.code</code
+          > for machine-readable classification.
+        </p>
 
         <div class="code-block" style="margin-bottom: 20px">
           <div class="code-toolbar"><span class="code-lang">json</span></div>
-          <pre><code>{`{
+          <pre><code
+              >{`{
   "error": {
     "message": "API key does not have write scope",
     "code": "forbidden",
     "details": []
   }
-}`}</code></pre>
+}`}</code
+            ></pre>
         </div>
 
         <table class="ref-table">
@@ -539,7 +706,11 @@ const data = await response.json();`;
           <tbody>
             {#each errorCodes as err}
               <tr>
-                <td><span class="status-badge {getStatusBadgeClass(err.code)}">{err.code}</span></td>
+                <td
+                  ><span class="status-badge {getStatusBadgeClass(err.code)}"
+                    >{err.code}</span
+                  ></td
+                >
                 <td><strong>{err.label}</strong></td>
                 <td>{err.desc}</td>
               </tr>
@@ -551,7 +722,9 @@ const data = await response.json();`;
       <!-- QUICKSTART -->
       <section id="quickstart" class="doc-section">
         <h2 class="section-title">Quickstart</h2>
-        <p class="section-desc">Register, create a key, and upload a file in under 2 minutes.</p>
+        <p class="section-desc">
+          Register, create a key, and upload a file in under 2 minutes.
+        </p>
 
         <div class="steps">
           <div class="step">
@@ -561,13 +734,24 @@ const data = await response.json();`;
               <div class="code-block">
                 <div class="code-toolbar">
                   <span class="code-lang">curl</span>
-                  <button class="copy-btn" onclick={() => copy(`curl -X POST https://api.kyro.io/api/v1/auth/register \\\n  -H "Content-Type: application/json" \\\n  -d '{"orgName":"my-org","email":"you@domain.com","password":"secure123"}'`, "qs-1")}>
+                  <button
+                    class="copy-btn"
+                    onclick={() =>
+                      copy(
+                        `curl -X POST https://api.kyro.io/api/v1/auth/register \\\n  -H "Content-Type: application/json" \\\n  -d '{"orgName":"my-org","email":"you@domain.com","password":"secure123"}'`,
+                        "qs-1",
+                      )}
+                  >
                     {copiedId === "qs-1" ? "✓" : "copy"}
                   </button>
                 </div>
-                <pre><code>curl -X POST https://api.kyro.io/api/v1/auth/register \
+                <pre><code
+                    >curl -X POST https://api.kyro.io/api/v1/auth/register \
   -H <span class="cs">"Content-Type: application/json"</span> \
-  -d <span class="cs">'&#123;"orgName":"my-org","email":"you@domain.com","password":"secure123"&#125;'</span></code></pre>
+  -d <span class="cs"
+                      >'&#123;"orgName":"my-org","email":"you@domain.com","password":"secure123"&#125;'</span
+                    ></code
+                  ></pre>
               </div>
             </div>
           </div>
@@ -579,14 +763,25 @@ const data = await response.json();`;
               <div class="code-block">
                 <div class="code-toolbar">
                   <span class="code-lang">curl</span>
-                  <button class="copy-btn" onclick={() => copy(`curl -X POST https://api.kyro.io/api/v1/keys \\\n  -H "Authorization: Bearer $JWT" \\\n  -H "Content-Type: application/json" \\\n  -d '{"name":"prod","scopes":["read","write"]}'`, "qs-2")}>
+                  <button
+                    class="copy-btn"
+                    onclick={() =>
+                      copy(
+                        `curl -X POST https://api.kyro.io/api/v1/keys \\\n  -H "Authorization: Bearer $JWT" \\\n  -H "Content-Type: application/json" \\\n  -d '{"name":"prod","scopes":["read","write"]}'`,
+                        "qs-2",
+                      )}
+                  >
                     {copiedId === "qs-2" ? "✓" : "copy"}
                   </button>
                 </div>
-                <pre><code>curl -X POST https://api.kyro.io/api/v1/keys \
+                <pre><code
+                    >curl -X POST https://api.kyro.io/api/v1/keys \
   -H <span class="cs">"Authorization: Bearer $JWT"</span> \
   -H <span class="cs">"Content-Type: application/json"</span> \
-  -d <span class="cs">'&#123;"name":"prod","scopes":["read","write"]&#125;'</span></code></pre>
+  -d <span class="cs"
+                      >'&#123;"name":"prod","scopes":["read","write"]&#125;'</span
+                    ></code
+                  ></pre>
               </div>
             </div>
           </div>
@@ -598,13 +793,22 @@ const data = await response.json();`;
               <div class="code-block">
                 <div class="code-toolbar">
                   <span class="code-lang">curl</span>
-                  <button class="copy-btn" onclick={() => copy(`curl -X POST https://api.kyro.io/api/v1/files \\\n  -H "X-Api-Key: $API_KEY" \\\n  -F "file=@./document.pdf"`, "qs-3")}>
+                  <button
+                    class="copy-btn"
+                    onclick={() =>
+                      copy(
+                        `curl -X POST https://api.kyro.io/api/v1/files \\\n  -H "X-Api-Key: $API_KEY" \\\n  -F "file=@./document.pdf"`,
+                        "qs-3",
+                      )}
+                  >
                     {copiedId === "qs-3" ? "✓" : "copy"}
                   </button>
                 </div>
-                <pre><code>curl -X POST https://api.kyro.io/api/v1/files \
+                <pre><code
+                    >curl -X POST https://api.kyro.io/api/v1/files \
   -H <span class="cs">"X-Api-Key: $API_KEY"</span> \
-  -F <span class="cs">"file=@./document.pdf"</span></code></pre>
+  -F <span class="cs">"file=@./document.pdf"</span></code
+                  ></pre>
               </div>
             </div>
           </div>
@@ -616,10 +820,17 @@ const data = await response.json();`;
         <section id={tag.id} class="doc-section tag-section">
           <div class="tag-header">
             <h2 class="section-title">{tag.label}</h2>
-            <span class="endpoint-count">{tag.endpoints.length} endpoint{tag.endpoints.length !== 1 ? "s" : ""}</span>
+            <span class="endpoint-count"
+              >{tag.endpoints.length} endpoint{tag.endpoints.length !== 1
+                ? "s"
+                : ""}</span
+            >
           </div>
           <p class="section-desc">
-            {(openapiSpec as any).tags?.find((t: { name: string; description?: string }) => t.name === tag.label)?.description ?? ""}
+            {(openapiSpec as any).tags?.find(
+              (t: { name: string; description?: string }) =>
+                t.name === tag.label,
+            )?.description ?? ""}
           </p>
         </section>
 
@@ -627,10 +838,14 @@ const data = await response.json();`;
           {@const authType = getAuthType(ep.op)}
           {@const scope = getScopeRequired(ep.op)}
           {@const bodySchema = parseRequestBody(ep.op)}
-          {@const pathParams = ep.op.parameters?.filter(p => p.in === "path") ?? []}
-          {@const queryParams = ep.op.parameters?.filter(p => p.in === "query") ?? []}
+          {@const pathParams =
+            ep.op.parameters?.filter((p) => p.in === "path") ?? []}
+          {@const queryParams =
+            ep.op.parameters?.filter((p) => p.in === "query") ?? []}
           {@const responses = Object.entries(ep.op.responses || {})}
-          {@const responseExample = formatResponseExample(ep.op["x-response-example"])}
+          {@const responseExample = formatResponseExample(
+            ep.op["x-response-example"],
+          )}
           {@const curlSnippet = generateCurl(ep)}
           {@const fetchSnippet = generateFetch(ep)}
           {@const tabKey = getTab(ep.id)}
@@ -639,7 +854,9 @@ const data = await response.json();`;
             <!-- Endpoint header -->
             <div class="ep-header">
               <div class="ep-title-row">
-                <span class="method-badge method-{ep.method.toLowerCase()}">{ep.method}</span>
+                <span class="method-badge method-{ep.method.toLowerCase()}"
+                  >{ep.method}</span
+                >
                 <code class="ep-path">{ep.path.replace("/api/v1", "")}</code>
                 <span class="ep-summary">{ep.op.summary ?? ""}</span>
               </div>
@@ -658,21 +875,31 @@ const data = await response.json();`;
             </div>
 
             <div class="ep-body">
-
               <!-- Left column: schema info -->
               <div class="ep-left">
-
                 <!-- Path parameters -->
                 {#if pathParams.length > 0}
                   <div class="ep-block">
                     <h4 class="block-title">Path Parameters</h4>
                     <table class="param-table">
-                      <thead><tr><th>Name</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                      <thead
+                        ><tr
+                          ><th>Name</th><th>Type</th><th>Required</th><th
+                            >Description</th
+                          ></tr
+                        ></thead
+                      >
                       <tbody>
                         {#each pathParams as p}
                           <tr>
                             <td><code>{p.name}</code></td>
-                            <td><span class="type-tag">{p.schema?.format ?? p.schema?.type ?? "string"}</span></td>
+                            <td
+                              ><span class="type-tag"
+                                >{p.schema?.format ??
+                                  p.schema?.type ??
+                                  "string"}</span
+                              ></td
+                            >
                             <td>{p.required ? "✓" : "—"}</td>
                             <td>{p.description ?? ""}</td>
                           </tr>
@@ -687,12 +914,24 @@ const data = await response.json();`;
                   <div class="ep-block">
                     <h4 class="block-title">Query Parameters</h4>
                     <table class="param-table">
-                      <thead><tr><th>Name</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                      <thead
+                        ><tr
+                          ><th>Name</th><th>Type</th><th>Required</th><th
+                            >Description</th
+                          ></tr
+                        ></thead
+                      >
                       <tbody>
                         {#each queryParams as p}
                           <tr>
                             <td><code>{p.name}</code></td>
-                            <td><span class="type-tag">{p.schema?.format ?? p.schema?.type ?? "string"}</span></td>
+                            <td
+                              ><span class="type-tag"
+                                >{p.schema?.format ??
+                                  p.schema?.type ??
+                                  "string"}</span
+                              ></td
+                            >
                             <td>{p.required ? "✓" : "—"}</td>
                             <td>{p.description ?? ""}</td>
                           </tr>
@@ -707,17 +946,29 @@ const data = await response.json();`;
                   <div class="ep-block">
                     <h4 class="block-title">
                       Request Body
-                      <span class="content-type-tag">{bodySchema.contentType}</span>
+                      <span class="content-type-tag"
+                        >{bodySchema.contentType}</span
+                      >
                     </h4>
                     <table class="param-table">
-                      <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                      <thead
+                        ><tr
+                          ><th>Field</th><th>Type</th><th>Required</th><th
+                            >Description</th
+                          ></tr
+                        ></thead
+                      >
                       <tbody>
                         {#each bodySchema.fields as field}
                           <tr>
                             <td>
                               <code>{field.name}</code>
                               {#if field.default !== undefined}
-                                <span class="default-tag">default: {JSON.stringify(field.default)}</span>
+                                <span class="default-tag"
+                                  >default: {JSON.stringify(
+                                    field.default,
+                                  )}</span
+                                >
                               {/if}
                             </td>
                             <td>
@@ -730,7 +981,9 @@ const data = await response.json();`;
                                 </div>
                               {/if}
                             </td>
-                            <td class={field.required ? "req-yes" : ""}>{field.required ? "✓" : "—"}</td>
+                            <td class={field.required ? "req-yes" : ""}
+                              >{field.required ? "✓" : "—"}</td
+                            >
                             <td>{field.description}</td>
                           </tr>
                         {/each}
@@ -745,18 +998,20 @@ const data = await response.json();`;
                   <div class="response-codes">
                     {#each responses as [code, resp]}
                       <div class="response-code-row">
-                        <span class="status-badge {getStatusBadgeClass(code)}">{code}</span>
-                        <span class="response-desc">{getStatusLabel(code, resp.description)}</span>
+                        <span class="status-badge {getStatusBadgeClass(code)}"
+                          >{code}</span
+                        >
+                        <span class="response-desc"
+                          >{getStatusLabel(code, resp.description)}</span
+                        >
                       </div>
                     {/each}
                   </div>
                 </div>
-
               </div>
 
               <!-- Right column: code examples -->
               <div class="ep-right">
-
                 <!-- Request example tabs -->
                 <div class="code-card">
                   <div class="code-card-header">
@@ -765,17 +1020,21 @@ const data = await response.json();`;
                       <button
                         class="tab-btn"
                         class:active={tabKey === "curl"}
-                        onclick={() => setTab(ep.id, "curl")}
-                      >curl</button>
+                        onclick={() => setTab(ep.id, "curl")}>curl</button
+                      >
                       <button
                         class="tab-btn"
                         class:active={tabKey === "fetch"}
-                        onclick={() => setTab(ep.id, "fetch")}
-                      >fetch</button>
+                        onclick={() => setTab(ep.id, "fetch")}>fetch</button
+                      >
                     </div>
                     <button
                       class="copy-btn"
-                      onclick={() => copy(tabKey === "curl" ? curlSnippet : fetchSnippet, `req-${ep.id}`)}
+                      onclick={() =>
+                        copy(
+                          tabKey === "curl" ? curlSnippet : fetchSnippet,
+                          `req-${ep.id}`,
+                        )}
                     >
                       {copiedId === `req-${ep.id}` ? "✓ copied" : "copy"}
                     </button>
@@ -795,7 +1054,10 @@ const data = await response.json();`;
                     <div class="code-card-header">
                       <span class="code-card-label">Response</span>
                       <span class="status-badge status-2xx">200</span>
-                      <button class="copy-btn" onclick={() => copy(responseExample, `res-${ep.id}`)}>
+                      <button
+                        class="copy-btn"
+                        onclick={() => copy(responseExample, `res-${ep.id}`)}
+                      >
                         {copiedId === `res-${ep.id}` ? "✓ copied" : "copy"}
                       </button>
                     </div>
@@ -804,45 +1066,49 @@ const data = await response.json();`;
                     </div>
                   </div>
                 {/if}
-
               </div>
             </div>
           </section>
         {/each}
       {/each}
-
     </main>
   </div>
 </div>
 
 <style>
   /* ── Reset & tokens ── */
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
 
   :root {
-    --bg:         #080808;
-    --bg2:        #0f0f0f;
-    --bg3:        #151515;
-    --bg4:        #1c1c1c;
-    --bg5:        #242424;
-    --border:     rgba(255,255,255,0.06);
-    --border2:    rgba(255,255,255,0.1);
-    --border3:    rgba(255,255,255,0.16);
-    --text:       #eeebe4;
-    --text-dim:   #b8b4ac;
+    --bg: #080808;
+    --bg2: #0f0f0f;
+    --bg3: #151515;
+    --bg4: #1c1c1c;
+    --bg5: #242424;
+    --border: rgba(255, 255, 255, 0.06);
+    --border2: rgba(255, 255, 255, 0.1);
+    --border3: rgba(255, 255, 255, 0.16);
+    --text: #eeebe4;
+    --text-dim: #b8b4ac;
     --text-muted: #7a7670;
     --text-ghost: #3d3b38;
-    --green:      #3dd68c;
-    --green-dim:  rgba(61,214,140,0.1);
-    --blue:       #5b9cf6;
-    --blue-dim:   rgba(91,156,246,0.1);
-    --amber:      #f5a623;
-    --amber-dim:  rgba(245,166,35,0.1);
-    --red:        #f26b6b;
-    --red-dim:    rgba(242,107,107,0.1);
-    --radius:     6px;
-    --radius-sm:  3px;
-    --font-mono:  'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
+    --green: #3dd68c;
+    --green-dim: rgba(61, 214, 140, 0.1);
+    --blue: #5b9cf6;
+    --blue-dim: rgba(91, 156, 246, 0.1);
+    --amber: #f5a623;
+    --amber-dim: rgba(245, 166, 35, 0.1);
+    --red: #f26b6b;
+    --red-dim: rgba(242, 107, 107, 0.1);
+    --radius: 6px;
+    --radius-sm: 3px;
+    --font-mono: "JetBrains Mono", "Fira Code", "SF Mono", monospace;
   }
 
   .page {
@@ -864,7 +1130,7 @@ const data = await response.json();`;
     justify-content: space-between;
     height: 50px;
     padding: 0 24px;
-    background: rgba(8,8,8,0.92);
+    background: rgba(8, 8, 8, 0.92);
     backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border);
   }
@@ -885,7 +1151,10 @@ const data = await response.json();`;
     text-decoration: none;
   }
 
-  .topbar-divider { color: var(--text-ghost); font-size: 16px; }
+  .topbar-divider {
+    color: var(--text-ghost);
+    font-size: 16px;
+  }
 
   .topbar-label {
     font-size: 12px;
@@ -901,7 +1170,10 @@ const data = await response.json();`;
     padding: 4px;
     border-radius: var(--radius-sm);
   }
-  .hamburger:hover { color: var(--text); background: var(--bg3); }
+  .hamburger:hover {
+    color: var(--text);
+    background: var(--bg3);
+  }
 
   .topbar-nav {
     display: flex;
@@ -913,9 +1185,11 @@ const data = await response.json();`;
     font-size: 12px;
     color: var(--text-muted);
     text-decoration: none;
-    transition: color .12s;
+    transition: color 0.12s;
   }
-  .topbar-nav a:hover { color: var(--text); }
+  .topbar-nav a:hover {
+    color: var(--text);
+  }
 
   .btn-signin {
     height: 28px;
@@ -927,19 +1201,24 @@ const data = await response.json();`;
     display: flex;
     align-items: center;
   }
-  .btn-signin:hover { border-color: var(--border3) !important; color: var(--text) !important; }
+  .btn-signin:hover {
+    border-color: var(--border3) !important;
+    color: var(--text) !important;
+  }
 
   /* ── Layout ── */
   .layout {
     display: flex;
     max-width: 1440px;
     margin: 0 auto;
+    height: calc(100vh - 50px);
+    overflow: hidden;
   }
 
   .overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.7);
+    background: rgba(0, 0, 0, 0.7);
     z-index: 199;
   }
 
@@ -947,15 +1226,16 @@ const data = await response.json();`;
   .sidebar {
     width: 224px;
     flex-shrink: 0;
-    position: sticky;
-    top: 50px;
-    height: calc(100vh - 50px);
+    height: 100%;
     overflow-y: auto;
     border-right: 1px solid var(--border);
     background: var(--bg);
     scrollbar-width: none;
   }
-  .sidebar::-webkit-scrollbar { display: none; }
+
+  .sidebar::-webkit-scrollbar {
+    display: none;
+  }
 
   .sidebar-inner {
     padding: 16px 0 40px;
@@ -975,7 +1255,7 @@ const data = await response.json();`;
     font-weight: 600;
     color: var(--text-dim);
     text-transform: uppercase;
-    letter-spacing: .06em;
+    letter-spacing: 0.06em;
   }
 
   .sidebar-close {
@@ -998,7 +1278,7 @@ const data = await response.json();`;
     font-weight: 700;
     color: var(--text-ghost);
     text-transform: uppercase;
-    letter-spacing: .1em;
+    letter-spacing: 0.1em;
     padding: 10px 6px 4px;
   }
 
@@ -1010,10 +1290,17 @@ const data = await response.json();`;
     padding: 5px 8px;
     border-radius: var(--radius-sm);
     border-left: 2px solid transparent;
-    transition: all .1s;
+    transition: all 0.1s;
   }
-  .sidebar-link:hover { color: var(--text-dim); background: var(--bg2); }
-  .sidebar-link.active { color: var(--text); background: var(--bg3); border-left-color: var(--text-dim); }
+  .sidebar-link:hover {
+    color: var(--text-dim);
+    background: var(--bg2);
+  }
+  .sidebar-link.active {
+    color: var(--text);
+    background: var(--bg3);
+    border-left-color: var(--text-dim);
+  }
 
   .sidebar-endpoint {
     display: flex;
@@ -1025,11 +1312,18 @@ const data = await response.json();`;
     padding: 4px 8px;
     border-radius: var(--radius-sm);
     border-left: 2px solid transparent;
-    transition: all .1s;
+    transition: all 0.1s;
     overflow: hidden;
   }
-  .sidebar-endpoint:hover { color: var(--text-dim); background: var(--bg2); }
-  .sidebar-endpoint.active { color: var(--text); background: var(--bg3); border-left-color: var(--text-dim); }
+  .sidebar-endpoint:hover {
+    color: var(--text-dim);
+    background: var(--bg2);
+  }
+  .sidebar-endpoint.active {
+    color: var(--text);
+    background: var(--bg3);
+    border-left-color: var(--text-dim);
+  }
 
   .sidebar-method {
     font-size: 9px;
@@ -1038,7 +1332,7 @@ const data = await response.json();`;
     border-radius: 2px;
     text-transform: uppercase;
     flex-shrink: 0;
-    letter-spacing: .03em;
+    letter-spacing: 0.03em;
   }
 
   .sidebar-path {
@@ -1053,6 +1347,8 @@ const data = await response.json();`;
     flex: 1;
     min-width: 0;
     padding: 0 0 80px;
+    overflow-y: auto;
+    height: 100%;
   }
 
   /* ── Doc section ── */
@@ -1067,7 +1363,7 @@ const data = await response.json();`;
     font-weight: 700;
     color: var(--green);
     text-transform: uppercase;
-    letter-spacing: .1em;
+    letter-spacing: 0.1em;
     margin-bottom: 10px;
   }
 
@@ -1075,7 +1371,7 @@ const data = await response.json();`;
     font-size: 32px;
     font-weight: 700;
     color: var(--text);
-    letter-spacing: -.025em;
+    letter-spacing: -0.025em;
     margin-bottom: 10px;
     line-height: 1.15;
   }
@@ -1092,7 +1388,7 @@ const data = await response.json();`;
     font-size: 20px;
     font-weight: 700;
     color: var(--text);
-    letter-spacing: -.02em;
+    letter-spacing: -0.02em;
     margin-bottom: 8px;
     line-height: 1.2;
   }
@@ -1105,7 +1401,9 @@ const data = await response.json();`;
     margin-bottom: 24px;
   }
 
-  .section-desc strong { color: var(--text-dim); }
+  .section-desc strong {
+    color: var(--text-dim);
+  }
   .section-desc code {
     font-family: var(--font-mono);
     font-size: 11px;
@@ -1138,7 +1436,7 @@ const data = await response.json();`;
     font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: .06em;
+    letter-spacing: 0.06em;
     color: var(--text-ghost);
   }
 
@@ -1151,7 +1449,9 @@ const data = await response.json();`;
     padding: 0;
   }
 
-  .spec-download { margin-top: 4px; }
+  .spec-download {
+    margin-top: 4px;
+  }
 
   .spec-link {
     display: inline-flex;
@@ -1161,12 +1461,14 @@ const data = await response.json();`;
     color: var(--blue);
     text-decoration: none;
     padding: 6px 10px;
-    border: 1px solid rgba(91,156,246,0.2);
+    border: 1px solid rgba(91, 156, 246, 0.2);
     border-radius: var(--radius-sm);
     background: var(--blue-dim);
-    transition: all .12s;
+    transition: all 0.12s;
   }
-  .spec-link:hover { border-color: rgba(91,156,246,0.4); }
+  .spec-link:hover {
+    border-color: rgba(91, 156, 246, 0.4);
+  }
 
   /* ── Auth cards ── */
   .auth-cards {
@@ -1229,7 +1531,7 @@ const data = await response.json();`;
     font-size: 44px;
     font-weight: 700;
     color: var(--green);
-    letter-spacing: -.04em;
+    letter-spacing: -0.04em;
     line-height: 1;
   }
 
@@ -1239,29 +1541,34 @@ const data = await response.json();`;
   }
 
   /* ── Tables ── */
-  .ref-table, .param-table {
+  .ref-table,
+  .param-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 12px;
   }
 
-  .ref-table th, .ref-table td,
-  .param-table th, .param-table td {
+  .ref-table th,
+  .ref-table td,
+  .param-table th,
+  .param-table td {
     text-align: left;
     padding: 8px 12px;
     border: 1px solid var(--border);
   }
 
-  .ref-table th, .param-table th {
+  .ref-table th,
+  .param-table th {
     background: var(--bg2);
     color: var(--text-muted);
     font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: .06em;
+    letter-spacing: 0.06em;
   }
 
-  .ref-table td, .param-table td {
+  .ref-table td,
+  .param-table td {
     background: var(--bg);
     color: var(--text-dim);
     vertical-align: top;
@@ -1284,7 +1591,10 @@ const data = await response.json();`;
     color: var(--text-dim);
   }
 
-  .ref-table strong { color: var(--text-dim); font-weight: 500; }
+  .ref-table strong {
+    color: var(--text-dim);
+    font-weight: 500;
+  }
 
   /* ── Quickstart steps ── */
   .steps {
@@ -1304,7 +1614,7 @@ const data = await response.json();`;
     font-weight: 700;
     color: var(--green);
     background: var(--green-dim);
-    border: 1px solid rgba(61,214,140,0.2);
+    border: 1px solid rgba(61, 214, 140, 0.2);
     width: 32px;
     height: 32px;
     border-radius: var(--radius);
@@ -1417,7 +1727,9 @@ const data = await response.json();`;
     overflow-y: auto;
     scrollbar-width: none;
   }
-  .ep-right::-webkit-scrollbar { display: none; }
+  .ep-right::-webkit-scrollbar {
+    display: none;
+  }
 
   /* ── Endpoint blocks ── */
   .ep-block {
@@ -1430,7 +1742,7 @@ const data = await response.json();`;
     font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: .08em;
+    letter-spacing: 0.08em;
     color: var(--text-ghost);
     display: flex;
     align-items: center;
@@ -1453,7 +1765,7 @@ const data = await response.json();`;
     font-size: 10px;
     color: var(--blue);
     background: var(--blue-dim);
-    border: 1px solid rgba(91,156,246,0.15);
+    border: 1px solid rgba(91, 156, 246, 0.15);
     padding: 1px 6px;
     border-radius: 3px;
     font-family: var(--font-mono);
@@ -1482,7 +1794,9 @@ const data = await response.json();`;
     margin-top: 2px;
   }
 
-  .req-yes { color: var(--green); }
+  .req-yes {
+    color: var(--green);
+  }
 
   .response-codes {
     display: flex;
@@ -1522,7 +1836,7 @@ const data = await response.json();`;
     font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: .06em;
+    letter-spacing: 0.06em;
     color: var(--text-ghost);
     flex: 1;
   }
@@ -1544,10 +1858,15 @@ const data = await response.json();`;
     border-radius: 3px;
     color: var(--text-muted);
     cursor: pointer;
-    transition: all .1s;
+    transition: all 0.1s;
   }
-  .tab-btn:hover { color: var(--text-dim); }
-  .tab-btn.active { background: var(--bg); color: var(--text); }
+  .tab-btn:hover {
+    color: var(--text-dim);
+  }
+  .tab-btn.active {
+    background: var(--bg);
+    color: var(--text);
+  }
 
   .code-body {
     overflow-x: auto;
@@ -1568,7 +1887,11 @@ const data = await response.json();`;
     border-radius: 0;
   }
 
-  .code-body code { background: none; border: none; padding: 0; }
+  .code-body code {
+    background: none;
+    border: none;
+    padding: 0;
+  }
 
   /* ── Standalone code block ── */
   .code-block {
@@ -1591,7 +1914,7 @@ const data = await response.json();`;
     font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: .06em;
+    letter-spacing: 0.06em;
     color: var(--text-ghost);
     flex: 1;
   }
@@ -1608,7 +1931,11 @@ const data = await response.json();`;
     border: none;
   }
 
-  .code-block code { background: none; border: none; padding: 0; }
+  .code-block code {
+    background: none;
+    border: none;
+    padding: 0;
+  }
 
   /* ── Copy button ── */
   .copy-btn {
@@ -1620,11 +1947,14 @@ const data = await response.json();`;
     border-radius: var(--radius-sm);
     color: var(--text-muted);
     cursor: pointer;
-    transition: all .1s;
+    transition: all 0.1s;
     white-space: nowrap;
     flex-shrink: 0;
   }
-  .copy-btn:hover { color: var(--text); border-color: var(--border3); }
+  .copy-btn:hover {
+    color: var(--text);
+    border-color: var(--border3);
+  }
 
   /* ── Badges ── */
   .badge {
@@ -1635,12 +1965,21 @@ const data = await response.json();`;
     font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: .04em;
+    letter-spacing: 0.04em;
   }
 
-  .badge-green { background: var(--green-dim); color: var(--green); }
-  .badge-blue  { background: var(--blue-dim);  color: var(--blue); }
-  .badge-amber { background: var(--amber-dim); color: var(--amber); }
+  .badge-green {
+    background: var(--green-dim);
+    color: var(--green);
+  }
+  .badge-blue {
+    background: var(--blue-dim);
+    color: var(--blue);
+  }
+  .badge-amber {
+    background: var(--amber-dim);
+    color: var(--amber);
+  }
 
   .method-badge {
     display: inline-flex;
@@ -1650,16 +1989,31 @@ const data = await response.json();`;
     font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: .04em;
+    letter-spacing: 0.04em;
     flex-shrink: 0;
   }
 
   /* sidebar method mini badges */
-  .method-get    { background: var(--green-dim); color: var(--green); }
-  .method-post   { background: var(--blue-dim);  color: var(--blue); }
-  .method-delete { background: var(--red-dim);   color: var(--red); }
-  .method-put    { background: var(--amber-dim); color: var(--amber); }
-  .method-patch  { background: var(--amber-dim); color: var(--amber); }
+  .method-get {
+    background: var(--green-dim);
+    color: var(--green);
+  }
+  .method-post {
+    background: var(--blue-dim);
+    color: var(--blue);
+  }
+  .method-delete {
+    background: var(--red-dim);
+    color: var(--red);
+  }
+  .method-put {
+    background: var(--amber-dim);
+    color: var(--amber);
+  }
+  .method-patch {
+    background: var(--amber-dim);
+    color: var(--amber);
+  }
 
   .auth-badge {
     font-size: 10px;
@@ -1672,13 +2026,13 @@ const data = await response.json();`;
   .auth-bearer {
     background: var(--blue-dim);
     color: var(--blue);
-    border-color: rgba(91,156,246,0.2);
+    border-color: rgba(91, 156, 246, 0.2);
   }
 
   .auth-apikey {
     background: var(--green-dim);
     color: var(--green);
-    border-color: rgba(61,214,140,0.2);
+    border-color: rgba(61, 214, 140, 0.2);
   }
 
   .auth-none {
@@ -1694,9 +2048,18 @@ const data = await response.json();`;
     border-radius: 3px;
   }
 
-  .scope-green { background: var(--green-dim); color: var(--green); }
-  .scope-blue  { background: var(--blue-dim);  color: var(--blue); }
-  .scope-amber { background: var(--amber-dim); color: var(--amber); }
+  .scope-green {
+    background: var(--green-dim);
+    color: var(--green);
+  }
+  .scope-blue {
+    background: var(--blue-dim);
+    color: var(--blue);
+  }
+  .scope-amber {
+    background: var(--amber-dim);
+    color: var(--amber);
+  }
 
   .scope-inline {
     background: var(--bg4);
@@ -1716,13 +2079,26 @@ const data = await response.json();`;
     flex-shrink: 0;
   }
 
-  .status-2xx { background: var(--green-dim); color: var(--green); }
-  .status-4xx { background: var(--amber-dim); color: var(--amber); }
-  .status-5xx { background: var(--red-dim);   color: var(--red); }
+  .status-2xx {
+    background: var(--green-dim);
+    color: var(--green);
+  }
+  .status-4xx {
+    background: var(--amber-dim);
+    color: var(--amber);
+  }
+  .status-5xx {
+    background: var(--red-dim);
+    color: var(--red);
+  }
 
   /* Syntax */
-  .ck { color: var(--green); }
-  .cs { color: var(--amber); }
+  .ck {
+    color: var(--green);
+  }
+  .cs {
+    color: var(--amber);
+  }
 
   /* ── Responsive ── */
   @media (max-width: 1100px) {
@@ -1755,26 +2131,66 @@ const data = await response.json();`;
       height: 100vh;
       z-index: 200;
       transform: translateX(-100%);
-      transition: transform .2s ease;
+      transition: transform 0.2s ease;
       width: 240px;
     }
-    .sidebar.open { transform: translateX(0); }
-    .sidebar-close-row { display: flex; }
-    .hamburger { display: flex; }
-    .auth-cards { grid-template-columns: 1fr; }
-    .ep-left, .ep-right { padding: 20px 24px; }
-    .ep-header { padding: 16px 24px 12px; }
-    .doc-section { padding: 32px 24px; }
+    .sidebar.open {
+      transform: translateX(0);
+    }
+    .sidebar-close-row {
+      display: flex;
+    }
+    .hamburger {
+      display: flex;
+    }
+    .auth-cards {
+      grid-template-columns: 1fr;
+    }
+    .ep-left,
+    .ep-right {
+      padding: 20px 24px;
+    }
+    .ep-header {
+      padding: 16px 24px 12px;
+    }
+    .doc-section {
+      padding: 32px 24px;
+    }
+    .layout {
+      height: auto;
+      overflow: visible;
+    }
+    .content {
+      overflow-y: visible;
+      height: auto;
+    }
   }
 
   @media (max-width: 640px) {
-    .topbar { padding: 0 16px; }
-    .doc-section { padding: 24px 16px; }
-    .ep-header { padding: 14px 16px 10px; }
-    .ep-left, .ep-right { padding: 16px; }
-    .ep-title-row { flex-wrap: wrap; }
-    .info-grid { grid-template-columns: 1fr 1fr; }
-    .section-hero { font-size: 24px; }
-    .topbar-label { display: none; }
+    .topbar {
+      padding: 0 16px;
+    }
+    .doc-section {
+      padding: 24px 16px;
+    }
+    .ep-header {
+      padding: 14px 16px 10px;
+    }
+    .ep-left,
+    .ep-right {
+      padding: 16px;
+    }
+    .ep-title-row {
+      flex-wrap: wrap;
+    }
+    .info-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+    .section-hero {
+      font-size: 24px;
+    }
+    .topbar-label {
+      display: none;
+    }
   }
 </style>

@@ -23,16 +23,44 @@ const router = Router();
  *           type: integer
  *           default: 100
  *           maximum: 100
+ *         description: Number of files to return (max 100)
  *       - name: cursor
  *         in: query
  *         schema:
  *           type: string
+ *         description: Pagination cursor from previous response's nextCursor
  *     x-scope: read
  *     x-body-description: null
- *     x-response-example: '[{"id":"550e8400-e29b-41d4-a716-446655440000","name":"document.pdf","mimeType":"application/pdf","sizeBytes":1024000,"createdAt":"2026-04-10T12:00:00Z"}]'
+ *     x-response-example: '{"data":[{"id":"550e8400-e29b-41d4-a716-446655440000","name":"document.pdf","mimeType":"application/pdf","sizeBytes":1024000,"createdAt":"2026-04-10T12:00:00Z"}],"pagination":{"limit":100,"hasMore":false,"nextCursor":null}}'
  *     responses:
  *       200:
- *         description: List of files
+ *         description: Paginated list of files
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/File'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     limit:
+ *                       type: integer
+ *                     hasMore:
+ *                       type: boolean
+ *                     nextCursor:
+ *                       type: string
+ *                       nullable: true
+ *                       description: Pass this as the cursor param in your next request
+ *       400:
+ *         description: Invalid cursor
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       403:
@@ -193,6 +221,20 @@ router.post('/', requireScope('write'), upload.single('file'), async (req: ApiKe
 router.get('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
   try {
     const orgId = req.orgId!;
+    const limit = Math.min(parseInt(req.query.limit as string || '100', 10), 100);
+    const cursor = req.query.cursor as string | undefined;
+
+    // Cursor is base64-encoded JSON: { createdAt: string, id: string }
+    let cursorCondition = sql`TRUE`;
+    if (cursor) {
+      try {
+        const { createdAt, id } = JSON.parse(Buffer.from(cursor, 'base64url').toString());
+        cursorCondition = sql`(${files.createdAt}, ${files.id}) < (${new Date(createdAt)}, ${id}::uuid)`;
+      } catch {
+        res.status(400).json({ error: 'Invalid cursor' });
+        return;
+      }
+    }
 
     const result = await db.select({
       id: files.id,
@@ -202,10 +244,28 @@ router.get('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) 
       createdAt: files.createdAt,
     })
       .from(files)
-      .where(and(eq(files.orgId, orgId), isNull(files.deletedAt)))
-      .orderBy(sql`${files.createdAt} DESC`);
+      .where(and(eq(files.orgId, orgId), isNull(files.deletedAt), cursorCondition))
+      .orderBy(sql`${files.createdAt} DESC, ${files.id} DESC`)
+      .limit(limit + 1); // fetch one extra to detect if there's a next page
 
-    res.json(result);
+    const hasMore = result.length > limit;
+    const items = hasMore ? result.slice(0, limit) : result;
+
+    const nextCursor = hasMore
+      ? Buffer.from(JSON.stringify({
+          createdAt: items[items.length - 1].createdAt,
+          id: items[items.length - 1].id,
+        })).toString('base64url')
+      : null;
+
+    res.json({
+      data: items,
+      pagination: {
+        limit,
+        hasMore,
+        nextCursor,
+      },
+    });
   } catch (error) {
     console.error('Error listing files:', error);
     res.status(500).json({ error: 'Failed to list files' });

@@ -1,8 +1,8 @@
 # Prompt:
-this is the codebase for my api
+this is my current codebase for my api
 
-# File collection from: /home/nyxox/Documents/Projects/Kyro/api/src
-# Generated: 2026-04-12 15:19:24
+# File collection from: /home/nyxox/Documents/Projects/Kyro/packages/api/src
+# Generated: 2026-04-13 13:16:27
 ------------------------------------------------------------
 
 ## config/index.ts
@@ -41,7 +41,7 @@ const config: Config = {
   nodeEnv: getRequired('NODE_ENV'),
   databaseUrl: getRequired('DATABASE_URL'),
   jwtSecret: getRequired('JWT_SECRET'),
-  redisUrl: getRequired('REDIS_URL'),  // fail fast if missing
+  redisUrl: process.env.REDIS_URL || '',  // optional for dev without redis
 };
 
 export default config;
@@ -123,13 +123,13 @@ export async function runMigrations() {
 import Redis from 'ioredis';
 import config from '../config';
 
-let redis: Redis | null = null;
+let redis: Redis | null | undefined = undefined;
 let redisAvailable = false;
 
-export function getRedis(): Redis {
+export function getRedis(): Redis | null {
   if (!redis) {
     if (!config.redisUrl) {
-      throw new Error('REDIS_URL environment variable is required');
+      return null;
     }
 
     redis = new Redis(config.redisUrl, {  // ← use URL directly
@@ -176,8 +176,10 @@ export async function closeRedis(): Promise<void> {
 
 export async function healthCheck(): Promise<boolean> {
   try {
+    const r = getRedis();
+    if (!r) return false;
     const result = await Promise.race([
-      getRedis().ping(),
+      r.ping(),
       new Promise<string>((_, reject) =>
         setTimeout(() => reject(new Error('Redis health check timeout')), 3000)
       ),
@@ -390,7 +392,7 @@ export function verifyJWT(token: string): JWTPayload {
 ## lib/openapi.ts
 
 import swaggerJsdoc from 'swagger-jsdoc';
-import { OpenAPIV3_1 } from 'openapi-types';
+// import { OpenAPIV3_1 } from 'openapi-types';
 
 const options: swaggerJsdoc.Options = {
   definition: {
@@ -631,22 +633,22 @@ For file operations:
 
 export const specs = swaggerJsdoc(options);
 
-export function generateSpec(): OpenAPIV3_1.Document {
+export function generateSpec() {
   return specs;
 }
 
 if (require.main === module) {
   const fs = require('fs');
   const path = require('path');
-  
+
   const outputPath = path.join(__dirname, '../../openapi.yaml');
-  
+
   let yamlOutput = '';
-  
+
   function convertToYaml(obj: any, indent: number = 0): string {
     const spaces = '  '.repeat(indent);
     let result = '';
-    
+
     if (Array.isArray(obj)) {
       for (const item of obj) {
         if (typeof item === 'object' && item !== null) {
@@ -678,7 +680,7 @@ if (require.main === module) {
     }
     return result;
   }
-  
+
   console.log('Generating OpenAPI spec...');
   console.log(JSON.stringify(specs, null, 2));
 }
@@ -686,7 +688,7 @@ if (require.main === module) {
 
 ## lib/password.ts
 
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -1141,6 +1143,9 @@ async function findUniqueSlug(slug: string): Promise<string> {
  *   post:
  *     tags: [Authentication]
  *     summary: Register new user and organisation
+ *     x-scope: null
+ *     x-body-description: '{ "orgName": "Acme Inc", "email": "admin@acme.com", "password": "secure123" }'
+ *     x-response-example: '{"token":"eyJhbGciOiJIUzI1NiIs...","user":{"id":"550e8400-e29b-41d4-a716-446655440000","email":"admin@acme.com","role":"owner","orgId":"550e8400-e29b-41d4-a716-446655440000"}}'
  *     requestBody:
  *       required: true
  *       content:
@@ -1257,6 +1262,9 @@ router.post('/register', async (req: Request, res: Response) => {
  *   post:
  *     tags: [Authentication]
  *     summary: Login user
+ *     x-scope: null
+ *     x-body-description: '{ "email": "admin@acme.com", "password": "secure123" }'
+ *     x-response-example: '{"token":"eyJhbGciOiJIUzI1NiIs...","user":{"id":"550e8400-e29b-41d4-a716-446655440000","email":"admin@acme.com","role":"owner","orgId":"550e8400-e29b-41d4-a716-446655440000"}}'
  *     requestBody:
  *       required: true
  *       content:
@@ -1347,6 +1355,9 @@ router.post('/login', async (req: Request, res: Response) => {
  *     summary: Get current user
  *     security:
  *       - bearerAuth: []
+ *     x-scope: null
+ *     x-body-description: null
+ *     x-response-example: '{"id":"550e8400-e29b-41d4-a716-446655440000","email":"admin@acme.com","role":"owner","orgId":"550e8400-e29b-41d4-a716-446655440000"}'
  *     responses:
  *       200:
  *         description: Current user details
@@ -1420,6 +1431,9 @@ const router = Router();
  *         in: query
  *         schema:
  *           type: string
+ *     x-scope: read
+ *     x-body-description: null
+ *     x-response-example: '[{"id":"550e8400-e29b-41d4-a716-446655440000","name":"document.pdf","mimeType":"application/pdf","sizeBytes":1024000,"createdAt":"2026-04-10T12:00:00Z"}]'
  *     responses:
  *       200:
  *         description: List of files
@@ -1445,6 +1459,9 @@ const router = Router();
  *                 type: string
  *                 format: binary
  *                 description: File to upload
+ *     x-scope: write
+ *     x-body-description: file — File (multipart/form-data)
+ *     x-response-example: '{"id":"550e8400-e29b-41d4-a716-446655440000","name":"document.pdf","mimeType":"application/pdf","sizeBytes":1024000,"createdAt":"2026-04-10T12:00:00Z"}'
  *     responses:
  *       201:
  *         description: File uploaded
@@ -1535,6 +1552,9 @@ router.post('/', requireScope('write'), upload.single('file'), async (req: ApiKe
  *         schema:
  *           type: string
  *           format: uuid
+ *     x-scope: read
+ *     x-body-description: null
+ *     x-response-example: 'Binary file data with appropriate Content-Type header.'
  *     responses:
  *       200:
  *         description: File content
@@ -1561,6 +1581,9 @@ router.post('/', requireScope('write'), upload.single('file'), async (req: ApiKe
  *         schema:
  *           type: string
  *         description: File UUID
+ *     x-scope: write
+ *     x-body-description: null
+ *     x-response-example: '{"message":"File deleted","id":"550e8400-e29b-41d4-a716-446655440000"}'
  *     responses:
  *       200:
  *         description: File deleted
@@ -1661,6 +1684,7 @@ export default router;
 ## routes/health.ts
 
 import { Router, Request, Response } from 'express';
+import config from '../config';
 import { healthCheck as dbHealthCheck } from '../db';
 import { healthCheck as redisHealthCheck } from '../db/redis';
 
@@ -1670,9 +1694,10 @@ const startTime = Date.now();
 
 router.get('/', async (req: Request, res: Response) => {
   const dbHealthy = await dbHealthCheck();
-  const redisHealthy = await redisHealthCheck();
+  const redisConfigured = !!config.redisUrl;
+  const redisHealthy = redisConfigured ? await redisHealthCheck() : true;
 
-  const allHealthy = dbHealthy && redisHealthy;
+  const allHealthy = dbHealthy && (redisConfigured ? redisHealthy : true);
   const status = allHealthy ? 'ok' : 'degraded';
   const statusCode = allHealthy ? 200 : 503;
 
@@ -1682,7 +1707,7 @@ router.get('/', async (req: Request, res: Response) => {
     test: "Kyro",
     timestamp: new Date().toISOString(),
     database: dbHealthy ? 'connected' : 'disconnected',
-    redis: redisHealthy ? 'connected' : 'disconnected',
+    redis: redisConfigured ? (redisHealthy ? 'connected' : 'disconnected') : 'optional',
   });
 });
 
@@ -1713,6 +1738,9 @@ const createKeySchema = z.object({
  *     summary: List API keys
  *     security:
  *       - bearerAuth: []
+ *     x-scope: null
+ *     x-body-description: null
+ *     x-response-example: '[{"id":"550e8400-e29b-41d4-a716-446655440000","name":"Production Key","key_prefix":"kyr_abc123","scopes":["read","write"],"last_used_at":"2026-04-10T12:00:00Z","revoked_at":null,"created_at":"2026-04-10T12:00:00Z"}]'
  *     responses:
  *       200:
  *         description: List of API keys
@@ -1750,6 +1778,9 @@ const createKeySchema = z.object({
  *                   enum: [read, write, admin]
  *                 default: [read]
  *                 description: Key permissions
+ *     x-scope: null
+ *     x-body-description: '{ "name": "Production Key", "scopes": ["read", "write"] }'
+ *     x-response-example: '{"id":"550e8400-e29b-41d4-a716-446655440000","name":"Production Key","key_prefix":"kyr_abc123","scopes":["read","write"],"key":"kyr_abc123xyz...","created_at":"2026-04-10T12:00:00Z"}'
  *     responses:
  *       201:
  *         description: API key created
@@ -1849,6 +1880,9 @@ router.get('/', authMiddleware, requireRole('owner', 'admin', 'member'), async (
  *         schema:
  *           type: string
  *           format: uuid
+ *     x-scope: null
+ *     x-body-description: null
+ *     x-response-example: '{"message":"API key revoked","id":"550e8400-e29b-41d4-a716-446655440000"}'
  *     responses:
  *       200:
  *         description: Key revoked
@@ -1909,6 +1943,9 @@ const router = Router();
  *     summary: Get current organisation
  *     security:
  *       - bearerAuth: []
+ *     x-scope: null
+ *     x-body-description: null
+ *     x-response-example: '{"id":"550e8400-e29b-41d4-a716-446655440000","name":"Acme Inc","slug":"acme-inc","plan":"free","createdAt":"2026-04-10T12:00:00Z"}'
  *     responses:
  *       200:
  *         description: Organisation details
@@ -1958,6 +1995,9 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
  *     summary: List organisation members
  *     security:
  *       - bearerAuth: []
+ *     x-scope: null
+ *     x-body-description: null
+ *     x-response-example: '[{"id":"550e8400-e29b-41d4-a716-446655440000","email":"admin@acme.com","role":"owner","createdAt":"2026-04-10T12:00:00Z"}]'
  *     responses:
  *       200:
  *         description: List of members
@@ -1994,6 +2034,9 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
  *                 type: string
  *                 enum: [owner, admin, member]
  *                 default: member
+ *     x-scope: null
+ *     x-body-description: '{ "email": "user@acme.com", "password": "secure123", "role": "member" }'
+ *     x-response-example: '{"id":"550e8400-e29b-41d4-a716-446655440000","email":"user@acme.com","role":"member"}'
  *     responses:
  *       201:
  *         description: Member invited
@@ -2082,6 +2125,9 @@ router.post('/members', authMiddleware, requireRole('owner'), async (req: Reques
  *         schema:
  *           type: string
  *           format: uuid
+ *     x-scope: null
+ *     x-body-description: null
+ *     x-response-example: '204 No Content'
  *     responses:
  *       204:
  *         description: Member removed
@@ -2156,6 +2202,9 @@ const router = Router();
  *           type: string
  *           format: date
  *         description: End date (YYYY-MM-DD)
+ *     x-scope: null
+ *     x-body-description: null
+ *     x-response-example: '{"total_requests":1250,"total_bytes_in":52428800,"total_bytes_out":104857600,"total_storage":1073741824,"active_api_keys":3}'
  *     responses:
  *       200:
  *         description: Usage statistics
@@ -2235,6 +2284,9 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
  *         schema:
  *           type: string
  *           format: date
+ *     x-scope: null
+ *     x-body-description: null
+ *     x-response-example: '[{"date":"2026-04-10","requests":150,"bytes_in":5242880,"bytes_out":10485760}]'
  *     responses:
  *       200:
  *         description: Daily usage data
@@ -2419,7 +2471,7 @@ const specs = swaggerJsdoc(options) as {
   components?: Record<string, unknown>;
 };
 
-const outputDir = path.join(__dirname, '../../');
+const outputDir = path.join(__dirname, '../../../shared/openapi/');
 const jsonPath = path.join(outputDir, 'openapi-generated.json');
 const yamlPath = path.join(outputDir, 'openapi-generated.yaml');
 

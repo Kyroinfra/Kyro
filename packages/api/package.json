@@ -15,8 +15,8 @@
     "test": "jest --config=jest.config.ts",
     "test:watch": "jest --watch --config=jest.config.ts",
     "test:coverage": "jest --coverage --config=jest.config.ts",
-    "openapi:generate": "ts-node src/scripts/generate-openapi.ts",
-    "openapi:validate": "npm run openapi:generate && npx swagger-cli validate openapi.yaml"
+    "generate:openapi": "ts-node src/scripts/generate-openapi.ts",
+    "validate:openapi": "npm run openapi:generate && npx swagger-cli validate openapi.yaml"
   },
   "keywords": [],
   "author": "",

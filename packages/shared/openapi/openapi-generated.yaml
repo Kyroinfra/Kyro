@@ -333,16 +333,44 @@ paths:
             type: integer
             default: 100
             maximum: 100
+          description: Number of files to return (max 100)
         - name: cursor
           in: query
           schema:
             type: string
+          description: Pagination cursor from previous response's nextCursor
       x-scope: read
       x-body-description: null
-      x-response-example: '[{"id":"550e8400-e29b-41d4-a716-446655440000","name":"document.pdf","mimeType":"application/pdf","sizeBytes":1024000,"createdAt":"2026-04-10T12:00:00Z"}]'
+      x-response-example: '{"data":[{"id":"550e8400-e29b-41d4-a716-446655440000","name":"document.pdf","mimeType":"application/pdf","sizeBytes":1024000,"createdAt":"2026-04-10T12:00:00Z"}],"pagination":{"limit":100,"hasMore":false,"nextCursor":null}}'
       responses:
         "200":
-          description: List of files
+          description: Paginated list of files
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/File"
+                  pagination:
+                    type: object
+                    properties:
+                      limit:
+                        type: integer
+                      hasMore:
+                        type: boolean
+                      nextCursor:
+                        type: string
+                        nullable: true
+                        description: Pass this as the cursor param in your next request
+        "400":
+          description: Invalid cursor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":

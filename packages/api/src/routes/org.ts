@@ -124,22 +124,27 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
  */
 router.get('/members', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const users = await query<{
-      id: string;
-      email: string;
-      role: string;
-      created_at: string;
-    }>(
-      `SELECT id, email, role, created_at FROM users WHERE org_id = $1 ORDER BY created_at`,
-      [req.user!.orgId]
-    );
+    const limit = Math.min(parseInt(req.query.limit as string || '50', 10), 100);
+    const offset = Math.max(parseInt(req.query.offset as string || '0', 10), 0);
 
-    res.json(users.map((user) => ({
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      createdAt: user.created_at,
-    })));
+    const [rows, countRows] = await Promise.all([
+      query<{ id: string; email: string; role: string; created_at: string }>(
+        `SELECT id, email, role, created_at FROM users
+         WHERE org_id = $1 ORDER BY created_at LIMIT $2 OFFSET $3`,
+        [req.user!.orgId, limit, offset]
+      ),
+      query<{ count: string }>(`SELECT COUNT(*) as count FROM users WHERE org_id = $1`, [req.user!.orgId]),
+    ]);
+
+    res.json({
+      data: rows.map(u => ({ id: u.id, email: u.email, role: u.role, createdAt: u.created_at })),
+      pagination: {
+        total: parseInt(countRows[0]?.count || '0', 10),
+        limit,
+        offset,
+        hasMore: offset + rows.length < parseInt(countRows[0]?.count || '0', 10),
+      },
+    });
   } catch (error) {
     console.error('Get members error:', error);
     res.status(500).json({ error: 'Internal server error' });

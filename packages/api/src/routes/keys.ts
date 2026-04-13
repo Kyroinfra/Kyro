@@ -118,29 +118,30 @@ router.post('/', authMiddleware, requireRole('owner', 'admin'), async (req: Requ
 router.get('/', authMiddleware, requireRole('owner', 'admin', 'member'), async (req: Request, res: Response) => {
   try {
     const orgId = req.user?.orgId;
+    if (!orgId) { res.status(401).json({ error: 'Unauthorized' }); return; }
 
-    if (!orgId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
+    const limit = Math.min(parseInt(req.query.limit as string || '50', 10), 100);
+    const offset = Math.max(parseInt(req.query.offset as string || '0', 10), 0);
 
-    const result = await query<{
-      id: string;
-      name: string;
-      key_prefix: string;
-      scopes: string[];
-      last_used_at: Date | null;
-      revoked_at: Date | null;
-      created_at: Date;
-    }>(
-      `SELECT id, name, key_prefix, scopes, last_used_at, revoked_at, created_at
-       FROM api_keys
-       WHERE org_id = $1
-       ORDER BY created_at DESC`,
-      [orgId]
-    );
+    const [rows, countRows] = await Promise.all([
+      query<{ id: string; name: string; key_prefix: string; scopes: string[]; last_used_at: Date | null; revoked_at: Date | null; created_at: Date }>(
+        `SELECT id, name, key_prefix, scopes, last_used_at, revoked_at, created_at
+         FROM api_keys WHERE org_id = $1
+         ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
+        [orgId, limit, offset]
+      ),
+      query<{ count: string }>(`SELECT COUNT(*) as count FROM api_keys WHERE org_id = $1`, [orgId]),
+    ]);
 
-    res.json(result);
+    res.json({
+      data: rows,
+      pagination: {
+        total: parseInt(countRows[0]?.count || '0', 10),
+        limit,
+        offset,
+        hasMore: offset + rows.length < parseInt(countRows[0]?.count || '0', 10),
+      },
+    });
   } catch (error) {
     console.error('Error listing API keys:', error);
     res.status(500).json({ error: 'Failed to list API keys' });
