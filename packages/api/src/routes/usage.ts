@@ -47,6 +47,24 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
+    // FIX 3: Actually read and apply start_date / end_date query params,
+    // consistent with how /usage/daily handles them.
+    const { start_date, end_date } = req.query;
+
+    let dateFilter = '';
+    const usageParams: any[] = [orgId];
+
+    if (start_date && end_date) {
+      dateFilter = 'AND created_at >= $2 AND created_at <= $3';
+      usageParams.push(start_date, end_date);
+    } else if (start_date) {
+      dateFilter = 'AND created_at >= $2';
+      usageParams.push(start_date);
+    } else if (end_date) {
+      dateFilter = 'AND created_at <= $2';
+      usageParams.push(end_date);
+    }
+
     const usageResult = await query<{
       total_requests: string;
       total_bytes_in: string;
@@ -57,10 +75,11 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
         COALESCE(SUM(bytes_in), 0) as total_bytes_in,
         COALESCE(SUM(bytes_out), 0) as total_bytes_out
        FROM usage_logs
-       WHERE org_id = $1`,
-      [orgId]
+       WHERE org_id = $1 ${dateFilter}`,
+      usageParams
     );
 
+    // Storage and API key counts are not time-scoped — they reflect current state
     const storageResult = await query<{ total_storage: string }>(
       `SELECT COALESCE(SUM(size_bytes), 0) as total_storage
        FROM files

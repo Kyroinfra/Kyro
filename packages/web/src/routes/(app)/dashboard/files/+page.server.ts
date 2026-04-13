@@ -1,7 +1,7 @@
-import { fail, redirect } from '@sveltejs/kit';
+import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { getKeys, type ApiKey } from '$lib/api/keys';
-import { getFiles, type FileItem } from '$lib/api/files';
+import { getKeys } from '$lib/api/keys';
+import { getFiles } from '$lib/api/files';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	const token = locals.user?.token;
@@ -10,40 +10,23 @@ export const load: PageServerLoad = async ({ locals }) => {
 	}
 
 	try {
-		const keys = await getKeys(token);
+		const keys = await getKeys(token, 100, 0);
 		const activeKeys = keys.filter(k => !k.revoked_at);
-		const apiKey = activeKeys[0]?.key_prefix ? `${activeKeys[0].key_prefix}_placeholder` : null;
 
-		if (apiKey) {
-			try {
-				const files = await getFiles(apiKey);
-				return {
-					files: files.map(f => ({
-						id: f.id,
-						name: f.name,
-						mimeType: f.mimeType,
-						sizeBytes: f.sizeBytes,
-						createdAt: f.createdAt
-					})),
-					hasApiKey: true,
-					apiKeyPrefix: activeKeys[0].key_prefix
-				};
-			} catch {
-				return {
-					files: [],
-					hasApiKey: true,
-					apiKeyPrefix: activeKeys[0].key_prefix
-				};
-			}
+		if (activeKeys.length === 0) {
+			return { files: [], hasApiKey: false, apiKeyPrefix: null };
 		}
 
+		// We only have the key prefix server-side, not the full key.
+		// Return the prefix so the client knows keys exist; the full key
+		// must be entered by the user in the browser.
 		return {
 			files: [],
-			hasApiKey: false,
-			apiKeyPrefix: null
+			hasApiKey: true,
+			apiKeyPrefix: activeKeys[0].key_prefix
 		};
 	} catch (error) {
-		console.error('Failed to load files:', error);
+		console.error('Failed to load files page:', error);
 		return { files: [], hasApiKey: false, apiKeyPrefix: null };
 	}
 };

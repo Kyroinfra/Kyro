@@ -13,8 +13,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 	try {
 		const [usage, keys, members] = await Promise.all([
 			getUsage(token),
-			getKeys(token),
-			getMembers(token)
+			getKeys(token),      // returns ApiKey[] directly (first page, 50 items)
+			getMembers(token)    // returns Member[] directly (first page, 50 items)
 		]);
 
 		return {

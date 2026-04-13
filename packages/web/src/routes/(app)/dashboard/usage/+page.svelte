@@ -29,14 +29,12 @@
   let chart: Chart | null = null;
   let selectedRange = $state<"7" | "30" | "90">("30");
 
-  const filteredData = $derived(() => {
-    const days = parseInt(selectedRange);
-    return data.daily.slice(0, days).reverse();
-  });
-
-  const totalBandwidth = $derived(
-    data.stats.totalBytesIn + data.stats.totalBytesOut,
+  // FIX 1: $derived should not wrap a function — it IS the reactive value
+  const filteredData = $derived(
+    data.daily.slice(0, parseInt(selectedRange)).reverse(),
   );
+
+  // FIX 4: removed unused `totalBandwidth` derived
 
   function renderChart() {
     if (chart) {
@@ -46,12 +44,11 @@
     const ctx = chartCanvas.getContext("2d");
     if (!ctx) return;
 
-    const chartData = filteredData();
-
+    // FIX 1 (cont.): use filteredData directly, not filteredData()
     chart = new Chart(ctx, {
       type: "line",
       data: {
-        labels: chartData.map((d) => {
+        labels: filteredData.map((d) => {
           const date = new Date(d.date);
           return date.toLocaleDateString("en-US", {
             month: "short",
@@ -61,7 +58,7 @@
         datasets: [
           {
             label: "Requests",
-            data: chartData.map((d) => d.requests),
+            data: filteredData.map((d) => d.requests),
             borderColor: "#ffffff",
             backgroundColor: "rgba(255, 255, 255, 0.05)",
             fill: true,
@@ -126,11 +123,10 @@
     };
   });
 
+  // FIX 2: let $derived track selectedRange properly via filteredData,
+  // no need to manually "touch" selectedRange inside the effect
   $effect(() => {
-    selectedRange;
-    if (chartCanvas) {
-      renderChart();
-    }
+    if (chartCanvas && filteredData) renderChart();
   });
 </script>
 
@@ -190,6 +186,18 @@
           <span class="stat-value">
             <span class="bracket">[</span>
             {formatBytes(data.stats.totalStorage)}
+            <span class="bracket">]</span>
+          </span>
+        </div>
+      </div>
+    </Card>
+    <Card>
+      <div class="stat-card">
+        <div class="stat-info">
+          <span class="stat-label">Active API Keys</span>
+          <span class="stat-value">
+            <span class="bracket">[</span>
+            {formatNumber(data.stats.activeApiKeys)}
             <span class="bracket">]</span>
           </span>
         </div>
@@ -325,7 +333,7 @@
   .range-btn {
     padding: var(--space-1) var(--space-3);
     background: transparent;
-    border: 1px solid transparent; /* subtle structure */
+    border: 1px solid transparent;
     border-radius: var(--radius-sm);
     color: var(--color-text-muted);
     font-size: var(--font-size-sm);
@@ -334,29 +342,27 @@
     transition: all 0.15s ease;
   }
 
-  /* improve readability */
   .range-btn:hover {
     color: var(--color-text);
     background: rgba(255, 255, 255, 0.03);
   }
 
-  /* active state — more contrast but still on-theme */
   .range-btn.active {
     background: var(--color-accent);
-    color: var(--color-bg); /* instead of white */
+    color: var(--color-bg);
     border-color: var(--color-accent);
     font-weight: 600;
   }
 
-  /* optional: slightly brighter inactive text */
   .range-btn:not(.active) {
-    color: #8b8b98; /* or tweak your muted variable slightly */
+    color: #8b8b98;
   }
 
   .chart-container {
     height: 300px;
     position: relative;
   }
+
   @media (max-width: 640px) {
     .usage-page {
       max-width: 100%;
@@ -387,4 +393,3 @@
     }
   }
 </style>
-

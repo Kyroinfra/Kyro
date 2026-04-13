@@ -1,8 +1,8 @@
 # Prompt:
-this is my current codebase for my api
+This is the codebase of my api
 
 # File collection from: /home/nyxox/Documents/Projects/Kyro/packages/api/src
-# Generated: 2026-04-13 13:16:27
+# Generated: 2026-04-13 14:30:55
 ------------------------------------------------------------
 
 ## config/index.ts
@@ -1427,16 +1427,44 @@ const router = Router();
  *           type: integer
  *           default: 100
  *           maximum: 100
+ *         description: Number of files to return (max 100)
  *       - name: cursor
  *         in: query
  *         schema:
  *           type: string
+ *         description: Pagination cursor from previous response's nextCursor
  *     x-scope: read
  *     x-body-description: null
- *     x-response-example: '[{"id":"550e8400-e29b-41d4-a716-446655440000","name":"document.pdf","mimeType":"application/pdf","sizeBytes":1024000,"createdAt":"2026-04-10T12:00:00Z"}]'
+ *     x-response-example: '{"data":[{"id":"550e8400-e29b-41d4-a716-446655440000","name":"document.pdf","mimeType":"application/pdf","sizeBytes":1024000,"createdAt":"2026-04-10T12:00:00Z"}],"pagination":{"limit":100,"hasMore":false,"nextCursor":null}}'
  *     responses:
  *       200:
- *         description: List of files
+ *         description: Paginated list of files
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/File'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     limit:
+ *                       type: integer
+ *                     hasMore:
+ *                       type: boolean
+ *                     nextCursor:
+ *                       type: string
+ *                       nullable: true
+ *                       description: Pass this as the cursor param in your next request
+ *       400:
+ *         description: Invalid cursor
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       403:
@@ -1597,6 +1625,20 @@ router.post('/', requireScope('write'), upload.single('file'), async (req: ApiKe
 router.get('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
   try {
     const orgId = req.orgId!;
+    const limit = Math.min(parseInt(req.query.limit as string || '100', 10), 100);
+    const cursor = req.query.cursor as string | undefined;
+
+    // Cursor is base64-encoded JSON: { createdAt: string, id: string }
+    let cursorCondition = sql`TRUE`;
+    if (cursor) {
+      try {
+        const { createdAt, id } = JSON.parse(Buffer.from(cursor, 'base64url').toString());
+        cursorCondition = sql`(${files.createdAt}, ${files.id}) < (${new Date(createdAt)}, ${id}::uuid)`;
+      } catch {
+        res.status(400).json({ error: 'Invalid cursor' });
+        return;
+      }
+    }
 
     const result = await db.select({
       id: files.id,
@@ -1606,10 +1648,28 @@ router.get('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) 
       createdAt: files.createdAt,
     })
       .from(files)
-      .where(and(eq(files.orgId, orgId), isNull(files.deletedAt)))
-      .orderBy(sql`${files.createdAt} DESC`);
+      .where(and(eq(files.orgId, orgId), isNull(files.deletedAt), cursorCondition))
+      .orderBy(sql`${files.createdAt} DESC, ${files.id} DESC`)
+      .limit(limit + 1); // fetch one extra to detect if there's a next page
 
-    res.json(result);
+    const hasMore = result.length > limit;
+    const items = hasMore ? result.slice(0, limit) : result;
+
+    const nextCursor = hasMore
+      ? Buffer.from(JSON.stringify({
+          createdAt: items[items.length - 1].createdAt,
+          id: items[items.length - 1].id,
+        })).toString('base64url')
+      : null;
+
+    res.json({
+      data: items,
+      pagination: {
+        limit,
+        hasMore,
+        nextCursor,
+      },
+    });
   } catch (error) {
     console.error('Error listing files:', error);
     res.status(500).json({ error: 'Failed to list files' });
@@ -1836,29 +1896,30 @@ router.post('/', authMiddleware, requireRole('owner', 'admin'), async (req: Requ
 router.get('/', authMiddleware, requireRole('owner', 'admin', 'member'), async (req: Request, res: Response) => {
   try {
     const orgId = req.user?.orgId;
+    if (!orgId) { res.status(401).json({ error: 'Unauthorized' }); return; }
 
-    if (!orgId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
+    const limit = Math.min(parseInt(req.query.limit as string || '50', 10), 100);
+    const offset = Math.max(parseInt(req.query.offset as string || '0', 10), 0);
 
-    const result = await query<{
-      id: string;
-      name: string;
-      key_prefix: string;
-      scopes: string[];
-      last_used_at: Date | null;
-      revoked_at: Date | null;
-      created_at: Date;
-    }>(
-      `SELECT id, name, key_prefix, scopes, last_used_at, revoked_at, created_at
-       FROM api_keys
-       WHERE org_id = $1
-       ORDER BY created_at DESC`,
-      [orgId]
-    );
+    const [rows, countRows] = await Promise.all([
+      query<{ id: string; name: string; key_prefix: string; scopes: string[]; last_used_at: Date | null; revoked_at: Date | null; created_at: Date }>(
+        `SELECT id, name, key_prefix, scopes, last_used_at, revoked_at, created_at
+         FROM api_keys WHERE org_id = $1
+         ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
+        [orgId, limit, offset]
+      ),
+      query<{ count: string }>(`SELECT COUNT(*) as count FROM api_keys WHERE org_id = $1`, [orgId]),
+    ]);
 
-    res.json(result);
+    res.json({
+      data: rows,
+      pagination: {
+        total: parseInt(countRows[0]?.count || '0', 10),
+        limit,
+        offset,
+        hasMore: offset + rows.length < parseInt(countRows[0]?.count || '0', 10),
+      },
+    });
   } catch (error) {
     console.error('Error listing API keys:', error);
     res.status(500).json({ error: 'Failed to list API keys' });
@@ -2053,22 +2114,27 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
  */
 router.get('/members', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const users = await query<{
-      id: string;
-      email: string;
-      role: string;
-      created_at: string;
-    }>(
-      `SELECT id, email, role, created_at FROM users WHERE org_id = $1 ORDER BY created_at`,
-      [req.user!.orgId]
-    );
+    const limit = Math.min(parseInt(req.query.limit as string || '50', 10), 100);
+    const offset = Math.max(parseInt(req.query.offset as string || '0', 10), 0);
 
-    res.json(users.map((user) => ({
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      createdAt: user.created_at,
-    })));
+    const [rows, countRows] = await Promise.all([
+      query<{ id: string; email: string; role: string; created_at: string }>(
+        `SELECT id, email, role, created_at FROM users
+         WHERE org_id = $1 ORDER BY created_at LIMIT $2 OFFSET $3`,
+        [req.user!.orgId, limit, offset]
+      ),
+      query<{ count: string }>(`SELECT COUNT(*) as count FROM users WHERE org_id = $1`, [req.user!.orgId]),
+    ]);
+
+    res.json({
+      data: rows.map(u => ({ id: u.id, email: u.email, role: u.role, createdAt: u.created_at })),
+      pagination: {
+        total: parseInt(countRows[0]?.count || '0', 10),
+        limit,
+        offset,
+        hasMore: offset + rows.length < parseInt(countRows[0]?.count || '0', 10),
+      },
+    });
   } catch (error) {
     console.error('Get members error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -2224,6 +2290,24 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
+    // FIX 3: Actually read and apply start_date / end_date query params,
+    // consistent with how /usage/daily handles them.
+    const { start_date, end_date } = req.query;
+
+    let dateFilter = '';
+    const usageParams: any[] = [orgId];
+
+    if (start_date && end_date) {
+      dateFilter = 'AND created_at >= $2 AND created_at <= $3';
+      usageParams.push(start_date, end_date);
+    } else if (start_date) {
+      dateFilter = 'AND created_at >= $2';
+      usageParams.push(start_date);
+    } else if (end_date) {
+      dateFilter = 'AND created_at <= $2';
+      usageParams.push(end_date);
+    }
+
     const usageResult = await query<{
       total_requests: string;
       total_bytes_in: string;
@@ -2234,10 +2318,11 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
         COALESCE(SUM(bytes_in), 0) as total_bytes_in,
         COALESCE(SUM(bytes_out), 0) as total_bytes_out
        FROM usage_logs
-       WHERE org_id = $1`,
-      [orgId]
+       WHERE org_id = $1 ${dateFilter}`,
+      usageParams
     );
 
+    // Storage and API key counts are not time-scoped — they reflect current state
     const storageResult = await query<{ total_storage: string }>(
       `SELECT COALESCE(SUM(size_bytes), 0) as total_storage
        FROM files
