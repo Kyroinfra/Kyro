@@ -1,8 +1,8 @@
 # Prompt:
-This is the codebase of my api
+This is my current codebase
 
 # File collection from: /home/nyxox/Documents/Projects/Kyro/packages/api/src
-# Generated: 2026-04-13 14:30:55
+# Generated: 2026-04-15 12:55:22
 ------------------------------------------------------------
 
 ## config/index.ts
