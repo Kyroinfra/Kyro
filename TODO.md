@@ -1,5 +1,9 @@
 # Kyro — Language-Agnostic API Platform TODO (Final Structured Plan)
 
+## My todo
+
+- Better OpenAPI docs, file routes need both jwt and api key
+
 ---
 
 # 0. SOURCE OF TRUTH (NON-NEGOTIABLE)
