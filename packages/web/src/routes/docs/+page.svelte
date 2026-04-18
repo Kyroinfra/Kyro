@@ -192,7 +192,6 @@
 
     function generateCurl(ep: Endpoint): string {
         const authType = getAuthType(ep.op);
-        const scope = getScopeRequired(ep.op);
         const body = parseRequestBody(ep.op);
         const baseUrl = "https://api.kyro.io/api/v1";
 
@@ -326,7 +325,6 @@ const data = await response.json();`;
                 for (const entry of entries) {
                     if (entry.isIntersecting) {
                         activeSection = entry.target.id;
-                        // Scroll the active sidebar link into view
                         const link = document.querySelector(
                             `.sidebar a[href="#${entry.target.id}"]`,
                         );
@@ -340,7 +338,6 @@ const data = await response.json();`;
             },
             { rootMargin: "-80px 0px -55% 0px", threshold: 0 },
         );
-        const contentEl = document.querySelector(".content") as HTMLElement;
         document
             .querySelectorAll(".doc-section, .endpoint-section")
             .forEach((s) => observer.observe(s));
@@ -356,7 +353,7 @@ const data = await response.json();`;
         {
             code: "401",
             label: "Unauthorized",
-            desc: "Missing or invalid API key / JWT token",
+            desc: "Missing or invalid API key",
         },
         {
             code: "403",
@@ -379,24 +376,6 @@ const data = await response.json();`;
             code: "500",
             label: "Internal Server Error",
             desc: "Unexpected server-side error",
-        },
-    ];
-
-    const scopes = [
-        {
-            name: "read",
-            color: "green",
-            desc: "List and download files, read usage statistics",
-        },
-        {
-            name: "write",
-            color: "blue",
-            desc: "Upload and delete files, create API keys",
-        },
-        {
-            name: "admin",
-            color: "amber",
-            desc: "Full access including organisation management",
         },
     ];
 </script>
@@ -495,6 +474,7 @@ const data = await response.json();`;
 
         <!-- ── Main content ── -->
         <main class="content">
+
             <!-- OVERVIEW -->
             <section id="overview" class="doc-section">
                 <div class="section-eyebrow">
@@ -527,8 +507,8 @@ const data = await response.json();`;
                         >
                     </div>
                     <div class="info-card">
-                        <span class="info-label">Auth methods</span>
-                        <code class="info-value">Bearer JWT · X-Api-Key</code>
+                        <span class="info-label">Auth</span>
+                        <code class="info-value">X-Api-Key</code>
                     </div>
                 </div>
 
@@ -555,6 +535,7 @@ const data = await response.json();`;
                 </div>
             </section>
 
+            <!-- SDK OVERVIEW -->
             <section id="sdk" class="doc-section">
                 <h2 class="section-title">TypeScript SDK</h2>
                 <p class="section-desc">
@@ -596,11 +577,9 @@ const data = await response.json();`;
                                 <div class="code-toolbar">
                                     <span class="code-lang">scopes</span>
                                 </div>
-                                <pre><code
-                                        >read   — list and download files
+                                <pre><code>read   — list and download files
 write  — upload and delete files
-admin  — full access</code
-                                    ></pre>
+admin  — full access</code></pre>
                             </div>
                         </div>
                     </div>
@@ -650,39 +629,29 @@ admin  — full access</code
                                             : "copy"}
                                     </button>
                                 </div>
-                                <pre><code
-                                        ><span class="ck">import</span
-                                        > {"{"} KyroClient {"}"} <span
-                                            class="ck">from</span
-                                        > <span class="cs">"@kyro/sdk"</span>;
+                                <pre><code><span class="ck">import</span> {"{"} KyroClient {"}"} <span class="ck">from</span> <span class="cs">"@kyro/sdk"</span>;
 
-<span class="ck">const</span> kyro = <span class="ck">new</span
-                                        > KyroClient({"{"} 
+<span class="ck">const</span> kyro = <span class="ck">new</span> KyroClient({"{"} 
   apiKey: process.env.<span class="ck">KYRO_API_KEY</span>,
-{"}"});</code
-                                    ></pre>
+{"}"});</code></pre>
                             </div>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <!-- ADD: SDK Files -->
+            <!-- SDK FILES -->
             <section id="sdk-files" class="doc-section">
                 <h2 class="section-title">sdk.files</h2>
                 <p class="section-desc">
-                    All file operations. Requires an API key with <code
-                        >read</code
-                    >
+                    All file operations. Requires an API key with <code>read</code>
                     or <code>write</code> scope depending on the method.
                 </p>
 
                 <div class="sdk-methods">
                     <div class="sdk-method">
                         <div class="sdk-method-header">
-                            <code class="sdk-method-name"
-                                >kyro.files.uploadFile(file, fileName?)</code
-                            >
+                            <code class="sdk-method-name">kyro.files.uploadFile(file, fileName?)</code>
                             <span class="scope-tag scope-inline">write</span>
                         </div>
                         <div class="code-block">
@@ -699,49 +668,33 @@ admin  — full access</code
                                     {copiedId === "sdk-upload" ? "✓" : "copy"}
                                 </button>
                             </div>
-                            <pre><code
-                                    ><span class="ck">const</span
-                                    > uploaded = <span class="ck">await</span
-                                    > kyro.files.<span class="cs"
-                                        >uploadFile</span
-                                    >(file, <span class="cs">"report.pdf"</span
-                                    >);
-console.log(uploaded.id, uploaded.sizeBytes);</code
-                                ></pre>
+                            <pre><code><span class="ck">const</span> uploaded = <span class="ck">await</span> kyro.files.<span class="cs">uploadFile</span>(file, <span class="cs">"report.pdf"</span>);
+console.log(uploaded.id, uploaded.sizeBytes);</code></pre>
                         </div>
                         <table class="param-table" style="margin-top: 10px">
-                            <thead
-                                ><tr
-                                    ><th>Param</th><th>Type</th><th>Required</th
-                                    ><th>Description</th></tr
-                                ></thead
-                            >
+                            <thead>
+                                <tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr>
+                            </thead>
                             <tbody>
-                                <tr
-                                    ><td><code>file</code></td><td
-                                        ><span class="type-tag"
-                                            >File | Blob</span
-                                        ></td
-                                    ><td class="req-yes">✓</td><td
-                                        >The file to upload</td
-                                    ></tr
-                                >
-                                <tr
-                                    ><td><code>fileName</code></td><td
-                                        ><span class="type-tag">string</span
-                                        ></td
-                                    ><td>—</td><td>Override the filename</td
-                                    ></tr
-                                >
+                                <tr>
+                                    <td><code>file</code></td>
+                                    <td><span class="type-tag">File | Blob</span></td>
+                                    <td class="req-yes">✓</td>
+                                    <td>The file to upload</td>
+                                </tr>
+                                <tr>
+                                    <td><code>fileName</code></td>
+                                    <td><span class="type-tag">string</span></td>
+                                    <td>—</td>
+                                    <td>Override the filename</td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
 
                     <div class="sdk-method">
                         <div class="sdk-method-header">
-                            <code class="sdk-method-name"
-                                >kyro.files.listFiles(limit?, cursor?)</code
-                            >
+                            <code class="sdk-method-name">kyro.files.listFiles(limit?, cursor?)</code>
                             <span class="scope-tag scope-inline">read</span>
                         </div>
                         <div class="code-block">
@@ -758,52 +711,35 @@ console.log(uploaded.id, uploaded.sizeBytes);</code
                                     {copiedId === "sdk-list" ? "✓" : "copy"}
                                 </button>
                             </div>
-                            <pre><code
-                                    ><span class="ck">const</span> files = <span
-                                        class="ck">await</span
-                                    > kyro.files.<span class="cs"
-                                        >listFiles</span
-                                    >(50);
-<span class="ck">for</span> (<span class="ck">const</span> f <span class="ck"
-                                        >of</span
-                                    > files) {"{"} 
+                            <pre><code><span class="ck">const</span> files = <span class="ck">await</span> kyro.files.<span class="cs">listFiles</span>(50);
+<span class="ck">for</span> (<span class="ck">const</span> f <span class="ck">of</span> files) {"{"}
   console.log(f.name, f.sizeBytes);
-{"}"}</code
-                                ></pre>
+{"}"}</code></pre>
                         </div>
                         <table class="param-table" style="margin-top: 10px">
-                            <thead
-                                ><tr
-                                    ><th>Param</th><th>Type</th><th>Required</th
-                                    ><th>Description</th></tr
-                                ></thead
-                            >
+                            <thead>
+                                <tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr>
+                            </thead>
                             <tbody>
-                                <tr
-                                    ><td><code>limit</code></td><td
-                                        ><span class="type-tag">number</span
-                                        ></td
-                                    ><td>—</td><td>Max results, default 100</td
-                                    ></tr
-                                >
-                                <tr
-                                    ><td><code>cursor</code></td><td
-                                        ><span class="type-tag">string</span
-                                        ></td
-                                    ><td>—</td><td
-                                        >Pagination cursor from previous
-                                        response</td
-                                    ></tr
-                                >
+                                <tr>
+                                    <td><code>limit</code></td>
+                                    <td><span class="type-tag">number</span></td>
+                                    <td>—</td>
+                                    <td>Max results, default 100</td>
+                                </tr>
+                                <tr>
+                                    <td><code>cursor</code></td>
+                                    <td><span class="type-tag">string</span></td>
+                                    <td>—</td>
+                                    <td>Pagination cursor from previous response</td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
 
                     <div class="sdk-method">
                         <div class="sdk-method-header">
-                            <code class="sdk-method-name"
-                                >kyro.files.downloadFile(id)</code
-                            >
+                            <code class="sdk-method-name">kyro.files.downloadFile(id)</code>
                             <span class="scope-tag scope-inline">read</span>
                         </div>
                         <div class="code-block">
@@ -820,23 +756,27 @@ console.log(uploaded.id, uploaded.sizeBytes);</code
                                     {copiedId === "sdk-download" ? "✓" : "copy"}
                                 </button>
                             </div>
-                            <pre><code
-                                    ><span class="ck">const</span> blob = <span
-                                        class="ck">await</span
-                                    > kyro.files.<span class="cs"
-                                        >downloadFile</span
-                                    >(<span class="cs">"file-id"</span>);
-<span class="ck">const</span> url = URL.<span class="cs">createObjectURL</span
-                                    >(blob);</code
-                                ></pre>
+                            <pre><code><span class="ck">const</span> blob = <span class="ck">await</span> kyro.files.<span class="cs">downloadFile</span>(<span class="cs">"file-id"</span>);
+<span class="ck">const</span> url = URL.<span class="cs">createObjectURL</span>(blob);</code></pre>
                         </div>
+                        <table class="param-table" style="margin-top: 10px">
+                            <thead>
+                                <tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><code>id</code></td>
+                                    <td><span class="type-tag">string</span></td>
+                                    <td class="req-yes">✓</td>
+                                    <td>File UUID from listFiles</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
 
                     <div class="sdk-method">
                         <div class="sdk-method-header">
-                            <code class="sdk-method-name"
-                                >kyro.files.deleteFile(id)</code
-                            >
+                            <code class="sdk-method-name">kyro.files.deleteFile(id)</code>
                             <span class="scope-tag scope-inline">write</span>
                         </div>
                         <div class="code-block">
@@ -853,18 +793,26 @@ console.log(uploaded.id, uploaded.sizeBytes);</code
                                     {copiedId === "sdk-delete" ? "✓" : "copy"}
                                 </button>
                             </div>
-                            <pre><code
-                                    ><span class="ck">await</span
-                                    > kyro.files.<span class="cs"
-                                        >deleteFile</span
-                                    >(<span class="cs">"file-id"</span>);</code
-                                ></pre>
+                            <pre><code><span class="ck">await</span> kyro.files.<span class="cs">deleteFile</span>(<span class="cs">"file-id"</span>);</code></pre>
                         </div>
+                        <table class="param-table" style="margin-top: 10px">
+                            <thead>
+                                <tr><th>Param</th><th>Type</th><th>Required</th><th>Description</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><code>id</code></td>
+                                    <td><span class="type-tag">string</span></td>
+                                    <td class="req-yes">✓</td>
+                                    <td>File UUID to delete</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </section>
 
-            <!-- ADD: SDK Health section -->
+            <!-- SDK HEALTH -->
             <section id="sdk-health" class="doc-section">
                 <h2 class="section-title">sdk.health</h2>
                 <p class="section-desc">
@@ -872,35 +820,51 @@ console.log(uploaded.id, uploaded.sizeBytes);</code
                     monitoring or startup checks. Requires no API key.
                 </p>
 
-                <div class="sdk-method">
-                    <div class="sdk-method-header">
-                        <code class="sdk-method-name"
-                            >kyro.health.getHealth()</code
-                        >
-                        <span class="auth-badge auth-none">No auth</span>
-                    </div>
-                    <div class="code-block">
-                        <div class="code-toolbar">
-                            <span class="code-lang">typescript</span>
-                            <button
-                                class="copy-btn"
-                                onclick={() =>
-                                    copy(
-                                        `const status = await kyro.health.getHealth();\nconsole.log(status.status); // "ok" | "degraded"`,
-                                        "sdk-health",
-                                    )}
-                            >
-                                {copiedId === "sdk-health" ? "✓" : "copy"}
-                            </button>
+                <div class="sdk-methods">
+                    <div class="sdk-method">
+                        <div class="sdk-method-header">
+                            <code class="sdk-method-name">kyro.health.getHealth()</code>
+                            <span class="auth-badge auth-none">No auth</span>
                         </div>
-                        <pre><code
-                                ><span class="ck">const</span> status = <span
-                                    class="ck">await</span
-                                > kyro.health.<span class="cs">getHealth</span
-                                >();
-console.log(status.status); <span class="c-comment">// "ok" | "degraded"</span
-                                ></code
-                            ></pre>
+                        <div class="code-block">
+                            <div class="code-toolbar">
+                                <span class="code-lang">typescript</span>
+                                <button
+                                    class="copy-btn"
+                                    onclick={() =>
+                                        copy(
+                                            `const status = await kyro.health.getHealth();\nconsole.log(status.status); // "ok" | "degraded"`,
+                                            "sdk-health-copy",
+                                        )}
+                                >
+                                    {copiedId === "sdk-health-copy" ? "✓" : "copy"}
+                                </button>
+                            </div>
+                            <pre><code><span class="ck">const</span> status = <span class="ck">await</span> kyro.health.<span class="cs">getHealth</span>();
+console.log(status.status); <span class="c-comment">// "ok" | "degraded"</span></code></pre>
+                        </div>
+                        <table class="param-table" style="margin-top: 10px">
+                            <thead>
+                                <tr><th>Returns</th><th>Type</th><th>Description</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><code>status</code></td>
+                                    <td><span class="type-tag">string</span></td>
+                                    <td>"ok" or "degraded"</td>
+                                </tr>
+                                <tr>
+                                    <td><code>database</code></td>
+                                    <td><span class="type-tag">string</span></td>
+                                    <td>"connected" or "disconnected"</td>
+                                </tr>
+                                <tr>
+                                    <td><code>uptime</code></td>
+                                    <td><span class="type-tag">number</span></td>
+                                    <td>Server uptime in seconds</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </section>
@@ -923,26 +887,22 @@ console.log(status.status); <span class="c-comment">// "ok" | "degraded"</span
                         <tr><th>Header</th><th>Description</th></tr>
                     </thead>
                     <tbody>
-                        <tr
-                            ><td><code>X-RateLimit-Limit</code></td><td
-                                >Max requests per window</td
-                            ></tr
-                        >
-                        <tr
-                            ><td><code>X-RateLimit-Remaining</code></td><td
-                                >Requests remaining in current window</td
-                            ></tr
-                        >
-                        <tr
-                            ><td><code>X-RateLimit-Reset</code></td><td
-                                >Unix timestamp when limit resets</td
-                            ></tr
-                        >
-                        <tr
-                            ><td><code>Retry-After</code></td><td
-                                >Seconds to wait before retrying (on 429)</td
-                            ></tr
-                        >
+                        <tr>
+                            <td><code>X-RateLimit-Limit</code></td>
+                            <td>Max requests per window</td>
+                        </tr>
+                        <tr>
+                            <td><code>X-RateLimit-Remaining</code></td>
+                            <td>Requests remaining in current window</td>
+                        </tr>
+                        <tr>
+                            <td><code>X-RateLimit-Reset</code></td>
+                            <td>Unix timestamp when limit resets</td>
+                        </tr>
+                        <tr>
+                            <td><code>Retry-After</code></td>
+                            <td>Seconds to wait before retrying (on 429)</td>
+                        </tr>
                     </tbody>
                 </table>
             </section>
@@ -951,24 +911,21 @@ console.log(status.status); <span class="c-comment">// "ok" | "degraded"</span
             <section id="errors" class="doc-section">
                 <h2 class="section-title">Error Codes</h2>
                 <p class="section-desc">
-                    All errors return a consistent JSON body. Check <code
-                        >error.code</code
-                    > for machine-readable classification.
+                    All errors return a consistent JSON body. Check <code>error.code</code>
+                    for machine-readable classification.
                 </p>
 
                 <div class="code-block" style="margin-bottom: 20px">
                     <div class="code-toolbar">
                         <span class="code-lang">json</span>
                     </div>
-                    <pre><code
-                            >{`{
+                    <pre><code>{`{
   "error": {
     "message": "API key does not have write scope",
     "code": "forbidden",
     "details": []
   }
-}`}</code
-                        ></pre>
+}`}</code></pre>
                 </div>
 
                 <table class="ref-table">
@@ -978,13 +935,9 @@ console.log(status.status); <span class="c-comment">// "ok" | "degraded"</span
                     <tbody>
                         {#each errorCodes as err}
                             <tr>
-                                <td
-                                    ><span
-                                        class="status-badge {getStatusBadgeClass(
-                                            err.code,
-                                        )}">{err.code}</span
-                                    ></td
-                                >
+                                <td>
+                                    <span class="status-badge {getStatusBadgeClass(err.code)}">{err.code}</span>
+                                </td>
                                 <td><strong>{err.label}</strong></td>
                                 <td>{err.desc}</td>
                             </tr>
@@ -993,24 +946,25 @@ console.log(status.status); <span class="c-comment">// "ok" | "degraded"</span
                 </table>
             </section>
 
-            <!-- QUICKSTART -->
-            <!-- ADD: SDK Overview section -->
-
-            <!-- ADD: SDK Files section -->
-
-            <!-- ADD: HTTP Reference divider section -->
+            <!-- HTTP REFERENCE -->
             <section id="http-reference" class="doc-section">
                 <div class="section-eyebrow">advanced</div>
                 <h2 class="section-title">HTTP API Reference</h2>
                 <p class="section-desc">
                     Direct HTTP endpoints for teams not using the TypeScript SDK
                     — useful for other languages or low-level integrations.
-                    Authenticate using your API key in the <code>X-Api-Key</code
-                    > header.
+                    Authenticate using your API key in the <code>X-Api-Key</code>
+                    header.
                 </p>
                 <div class="code-block">
                     <div class="code-toolbar">
                         <span class="code-lang">http</span>
+                        <button
+                            class="copy-btn"
+                            onclick={() => copy("X-Api-Key: kyro_live_your_key_here", "http-auth")}
+                        >
+                            {copiedId === "http-auth" ? "✓ copied" : "copy"}
+                        </button>
                     </div>
                     <pre><code>X-Api-Key: kyro_live_your_key_here</code></pre>
                 </div>
@@ -1021,12 +975,9 @@ console.log(status.status); <span class="c-comment">// "ok" | "degraded"</span
                 <section id={tag.id} class="doc-section tag-section">
                     <div class="tag-header">
                         <h2 class="section-title">{tag.label}</h2>
-                        <span class="endpoint-count"
-                            >{tag.endpoints.length} endpoint{tag.endpoints
-                                .length !== 1
-                                ? "s"
-                                : ""}</span
-                        >
+                        <span class="endpoint-count">
+                            {tag.endpoints.length} endpoint{tag.endpoints.length !== 1 ? "s" : ""}
+                        </span>
                     </div>
                     <p class="section-desc">
                         {(openapiSpec as any).tags?.find(
@@ -1040,100 +991,51 @@ console.log(status.status); <span class="c-comment">// "ok" | "degraded"</span
                     {@const authType = getAuthType(ep.op)}
                     {@const scope = getScopeRequired(ep.op)}
                     {@const bodySchema = parseRequestBody(ep.op)}
-                    {@const pathParams =
-                        ep.op.parameters?.filter((p) => p.in === "path") ?? []}
-                    {@const queryParams =
-                        ep.op.parameters?.filter((p) => p.in === "query") ?? []}
+                    {@const pathParams = ep.op.parameters?.filter((p) => p.in === "path") ?? []}
+                    {@const queryParams = ep.op.parameters?.filter((p) => p.in === "query") ?? []}
                     {@const responses = Object.entries(ep.op.responses || {})}
-                    {@const responseExample = formatResponseExample(
-                        ep.op["x-response-example"],
-                    )}
+                    {@const responseExample = formatResponseExample(ep.op["x-response-example"])}
                     {@const curlSnippet = generateCurl(ep)}
                     {@const fetchSnippet = generateFetch(ep)}
                     {@const tabKey = getTab(ep.id)}
 
                     <section id={ep.id} class="endpoint-section">
-                        <!-- Endpoint header -->
                         <div class="ep-header">
                             <div class="ep-title-row">
-                                <span
-                                    class="method-badge method-{ep.method.toLowerCase()}"
-                                    >{ep.method}</span
-                                >
-                                <code class="ep-path"
-                                    >{ep.path.replace("/api/v1", "")}</code
-                                >
-                                <span class="ep-summary"
-                                    >{ep.op.summary ?? ""}</span
-                                >
+                                <span class="method-badge method-{ep.method.toLowerCase()}">{ep.method}</span>
+                                <code class="ep-path">{ep.path.replace("/api/v1", "")}</code>
+                                <span class="ep-summary">{ep.op.summary ?? ""}</span>
                             </div>
                             <div class="ep-badges">
                                 {#if authType === "bearer"}
-                                    <span class="auth-badge auth-bearer"
-                                        >Bearer JWT</span
-                                    >
+                                    <span class="auth-badge auth-bearer">Bearer JWT</span>
                                 {:else if authType === "apiKey"}
-                                    <span class="auth-badge auth-apikey"
-                                        >X-Api-Key</span
-                                    >
+                                    <span class="auth-badge auth-apikey">X-Api-Key</span>
                                 {:else}
-                                    <span class="auth-badge auth-none"
-                                        >No auth</span
-                                    >
+                                    <span class="auth-badge auth-none">No auth</span>
                                 {/if}
                                 {#if scope}
-                                    <span class="scope-tag scope-inline"
-                                        >scope: {scope}</span
-                                    >
+                                    <span class="scope-tag scope-inline">scope: {scope}</span>
                                 {/if}
                             </div>
                         </div>
 
                         <div class="ep-body">
-                            <!-- Left column: schema info -->
                             <div class="ep-left">
-                                <!-- Path parameters -->
                                 {#if pathParams.length > 0}
                                     <div class="ep-block">
-                                        <h4 class="block-title">
-                                            Path Parameters
-                                        </h4>
+                                        <h4 class="block-title">Path Parameters</h4>
                                         <table class="param-table">
-                                            <thead
-                                                ><tr
-                                                    ><th>Name</th><th>Type</th
-                                                    ><th>Required</th><th
-                                                        >Description</th
-                                                    ></tr
-                                                ></thead
-                                            >
+                                            <thead>
+                                                <tr><th>Name</th><th>Type</th><th>Required</th><th>Description</th></tr>
+                                            </thead>
                                             <tbody>
                                                 {#each pathParams as p}
                                                     <tr>
-                                                        <td
-                                                            ><code
-                                                                >{p.name}</code
-                                                            ></td
-                                                        >
-                                                        <td
-                                                            ><span
-                                                                class="type-tag"
-                                                                >{p.schema
-                                                                    ?.format ??
-                                                                    p.schema
-                                                                        ?.type ??
-                                                                    "string"}</span
-                                                            ></td
-                                                        >
-                                                        <td
-                                                            >{p.required
-                                                                ? "✓"
-                                                                : "—"}</td
-                                                        >
-                                                        <td
-                                                            >{p.description ??
-                                                                ""}</td
-                                                        >
+                                                        <td><code>{p.name}</code></td>
+                                                        <td><span class="type-tag">{p.schema?.format ?? p.schema?.type ?? "string"}</span></td>
+                                                        <td>{p.required ? "✓" : "—"}</td>
+                                                        <td>{p.description ?? ""}</td>
                                                     </tr>
                                                 {/each}
                                             </tbody>
@@ -1141,48 +1043,20 @@ console.log(status.status); <span class="c-comment">// "ok" | "degraded"</span
                                     </div>
                                 {/if}
 
-                                <!-- Query parameters -->
                                 {#if queryParams.length > 0}
                                     <div class="ep-block">
-                                        <h4 class="block-title">
-                                            Query Parameters
-                                        </h4>
+                                        <h4 class="block-title">Query Parameters</h4>
                                         <table class="param-table">
-                                            <thead
-                                                ><tr
-                                                    ><th>Name</th><th>Type</th
-                                                    ><th>Required</th><th
-                                                        >Description</th
-                                                    ></tr
-                                                ></thead
-                                            >
+                                            <thead>
+                                                <tr><th>Name</th><th>Type</th><th>Required</th><th>Description</th></tr>
+                                            </thead>
                                             <tbody>
                                                 {#each queryParams as p}
                                                     <tr>
-                                                        <td
-                                                            ><code
-                                                                >{p.name}</code
-                                                            ></td
-                                                        >
-                                                        <td
-                                                            ><span
-                                                                class="type-tag"
-                                                                >{p.schema
-                                                                    ?.format ??
-                                                                    p.schema
-                                                                        ?.type ??
-                                                                    "string"}</span
-                                                            ></td
-                                                        >
-                                                        <td
-                                                            >{p.required
-                                                                ? "✓"
-                                                                : "—"}</td
-                                                        >
-                                                        <td
-                                                            >{p.description ??
-                                                                ""}</td
-                                                        >
+                                                        <td><code>{p.name}</code></td>
+                                                        <td><span class="type-tag">{p.schema?.format ?? p.schema?.type ?? "string"}</span></td>
+                                                        <td>{p.required ? "✓" : "—"}</td>
+                                                        <td>{p.description ?? ""}</td>
                                                     </tr>
                                                 {/each}
                                             </tbody>
@@ -1190,69 +1064,37 @@ console.log(status.status); <span class="c-comment">// "ok" | "degraded"</span
                                     </div>
                                 {/if}
 
-                                <!-- Request body -->
                                 {#if bodySchema}
                                     <div class="ep-block">
                                         <h4 class="block-title">
                                             Request Body
-                                            <span class="content-type-tag"
-                                                >{bodySchema.contentType}</span
-                                            >
+                                            <span class="content-type-tag">{bodySchema.contentType}</span>
                                         </h4>
                                         <table class="param-table">
-                                            <thead
-                                                ><tr
-                                                    ><th>Field</th><th>Type</th
-                                                    ><th>Required</th><th
-                                                        >Description</th
-                                                    ></tr
-                                                ></thead
-                                            >
+                                            <thead>
+                                                <tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr>
+                                            </thead>
                                             <tbody>
                                                 {#each bodySchema.fields as field}
                                                     <tr>
                                                         <td>
-                                                            <code
-                                                                >{field.name}</code
-                                                            >
+                                                            <code>{field.name}</code>
                                                             {#if field.default !== undefined}
-                                                                <span
-                                                                    class="default-tag"
-                                                                    >default: {JSON.stringify(
-                                                                        field.default,
-                                                                    )}</span
-                                                                >
+                                                                <span class="default-tag">default: {JSON.stringify(field.default)}</span>
                                                             {/if}
                                                         </td>
                                                         <td>
-                                                            <span
-                                                                class="type-tag"
-                                                                >{field.type}</span
-                                                            >
+                                                            <span class="type-tag">{field.type}</span>
                                                             {#if field.enum}
-                                                                <div
-                                                                    class="enum-list"
-                                                                >
+                                                                <div class="enum-list">
                                                                     {#each field.enum as val}
-                                                                        <span
-                                                                            class="enum-val"
-                                                                            >{val}</span
-                                                                        >
+                                                                        <span class="enum-val">{val}</span>
                                                                     {/each}
                                                                 </div>
                                                             {/if}
                                                         </td>
-                                                        <td
-                                                            class={field.required
-                                                                ? "req-yes"
-                                                                : ""}
-                                                            >{field.required
-                                                                ? "✓"
-                                                                : "—"}</td
-                                                        >
-                                                        <td
-                                                            >{field.description}</td
-                                                        >
+                                                        <td class={field.required ? "req-yes" : ""}>{field.required ? "✓" : "—"}</td>
+                                                        <td>{field.description}</td>
                                                     </tr>
                                                 {/each}
                                             </tbody>
@@ -1260,107 +1102,69 @@ console.log(status.status); <span class="c-comment">// "ok" | "degraded"</span
                                     </div>
                                 {/if}
 
-                                <!-- Response codes -->
                                 <div class="ep-block">
                                     <h4 class="block-title">Response Codes</h4>
                                     <div class="response-codes">
                                         {#each responses as [code, resp]}
                                             <div class="response-code-row">
-                                                <span
-                                                    class="status-badge {getStatusBadgeClass(
-                                                        code,
-                                                    )}">{code}</span
-                                                >
-                                                <span class="response-desc"
-                                                    >{getStatusLabel(
-                                                        code,
-                                                        resp.description,
-                                                    )}</span
-                                                >
+                                                <span class="status-badge {getStatusBadgeClass(code)}">{code}</span>
+                                                <span class="response-desc">{getStatusLabel(code, resp.description)}</span>
                                             </div>
                                         {/each}
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- Right column: code examples -->
                             <div class="ep-right">
-                                <!-- Request example tabs -->
                                 <div class="code-card">
                                     <div class="code-card-header">
-                                        <span class="code-card-label"
-                                            >Request</span
-                                        >
+                                        <span class="code-card-label">Request</span>
                                         <div class="tab-group">
                                             <button
                                                 class="tab-btn"
                                                 class:active={tabKey === "curl"}
-                                                onclick={() =>
-                                                    setTab(ep.id, "curl")}
-                                                >curl</button
-                                            >
+                                                onclick={() => setTab(ep.id, "curl")}
+                                            >curl</button>
                                             <button
                                                 class="tab-btn"
-                                                class:active={tabKey ===
-                                                    "fetch"}
-                                                onclick={() =>
-                                                    setTab(ep.id, "fetch")}
-                                                >fetch</button
-                                            >
+                                                class:active={tabKey === "fetch"}
+                                                onclick={() => setTab(ep.id, "fetch")}
+                                            >fetch</button>
                                         </div>
                                         <button
                                             class="copy-btn"
                                             onclick={() =>
                                                 copy(
-                                                    tabKey === "curl"
-                                                        ? curlSnippet
-                                                        : fetchSnippet,
+                                                    tabKey === "curl" ? curlSnippet : fetchSnippet,
                                                     `req-${ep.id}`,
                                                 )}
                                         >
-                                            {copiedId === `req-${ep.id}`
-                                                ? "✓ copied"
-                                                : "copy"}
+                                            {copiedId === `req-${ep.id}` ? "✓ copied" : "copy"}
                                         </button>
                                     </div>
                                     <div class="code-body">
                                         {#if tabKey === "curl"}
-                                            <pre><code>{curlSnippet}</code
-                                                ></pre>
+                                            <pre><code>{curlSnippet}</code></pre>
                                         {:else}
-                                            <pre><code>{fetchSnippet}</code
-                                                ></pre>
+                                            <pre><code>{fetchSnippet}</code></pre>
                                         {/if}
                                     </div>
                                 </div>
 
-                                <!-- Response example -->
                                 {#if responseExample}
                                     <div class="code-card">
                                         <div class="code-card-header">
-                                            <span class="code-card-label"
-                                                >Response</span
-                                            >
-                                            <span
-                                                class="status-badge status-2xx"
-                                                >200</span
-                                            >
+                                            <span class="code-card-label">Response</span>
+                                            <span class="status-badge status-2xx">200</span>
                                             <button
                                                 class="copy-btn"
-                                                onclick={() =>
-                                                    copy(
-                                                        responseExample,
-                                                        `res-${ep.id}`,
-                                                    )}
+                                                onclick={() => copy(responseExample, `res-${ep.id}`)}
                                             >
-                                                {copiedId === `res-${ep.id}`
-                                                    ? "✓ copied"
-                                                    : "copy"}
+                                                {copiedId === `res-${ep.id}` ? "✓ copied" : "copy"}
                                             </button>
                                         </div>
                                         <div class="code-body">
-                                            <pre><code>{responseExample}</code
-                                                ></pre>
+                                            <pre><code>{responseExample}</code></pre>
                                         </div>
                                     </div>
                                 {/if}
@@ -1374,7 +1178,6 @@ console.log(status.status); <span class="c-comment">// "ok" | "degraded"</span
 </div>
 
 <style>
-    /* ── Reset & tokens ── */
     *,
     *::before,
     *::after {
@@ -1649,7 +1452,7 @@ console.log(status.status); <span class="c-comment">// "ok" | "degraded"</span
         height: 100%;
     }
 
-    /* ── Doc section ── */
+    /* ── Doc sections ── */
     .doc-section {
         padding: 48px 56px;
         border-bottom: 1px solid var(--border);
@@ -1712,7 +1515,7 @@ console.log(status.status); <span class="c-comment">// "ok" | "degraded"</span
         color: var(--text-dim);
     }
 
-    /* ── Info grid (overview) ── */
+    /* ── Info grid ── */
     .info-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -1766,50 +1569,6 @@ console.log(status.status); <span class="c-comment">// "ok" | "degraded"</span
     }
     .spec-link:hover {
         border-color: rgba(91, 156, 246, 0.4);
-    }
-
-    /* ── Auth cards ── */
-    .auth-cards {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 12px;
-    }
-
-    .auth-card {
-        background: var(--bg2);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        padding: 20px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-    }
-
-    .auth-card-header {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-
-    .auth-card-title {
-        font-size: 11px;
-        color: var(--text-muted);
-    }
-
-    .auth-card-desc {
-        font-size: 12px;
-        color: var(--text-muted);
-        line-height: 1.65;
-    }
-
-    .auth-card-desc code {
-        font-family: var(--font-mono);
-        font-size: 11px;
-        background: var(--bg3);
-        padding: 1px 5px;
-        border-radius: var(--radius-sm);
-        border: 1px solid var(--border2);
-        color: var(--text-dim);
     }
 
     /* ── Rate card ── */
@@ -1894,7 +1653,7 @@ console.log(status.status); <span class="c-comment">// "ok" | "degraded"</span
         font-weight: 500;
     }
 
-    /* ── Quickstart steps ── */
+    /* ── Steps ── */
     .steps {
         display: flex;
         flex-direction: column;
@@ -1935,6 +1694,36 @@ console.log(status.status); <span class="c-comment">// "ok" | "degraded"</span
         font-size: 13px;
         font-weight: 600;
         color: var(--text);
+    }
+
+    /* ── SDK method blocks ── */
+    .sdk-methods {
+        display: flex;
+        flex-direction: column;
+        gap: 28px;
+    }
+
+    .sdk-method {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .sdk-method-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .sdk-method-name {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--text);
+        background: var(--bg3);
+        border: 1px solid var(--border2);
+        padding: 3px 10px;
+        border-radius: var(--radius-sm);
     }
 
     /* ── Tag section header ── */
@@ -2255,30 +2044,6 @@ console.log(status.status); <span class="c-comment">// "ok" | "degraded"</span
     }
 
     /* ── Badges ── */
-    .badge {
-        display: inline-flex;
-        align-items: center;
-        padding: 2px 8px;
-        border-radius: 3px;
-        font-size: 10px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-    }
-
-    .badge-green {
-        background: var(--green-dim);
-        color: var(--green);
-    }
-    .badge-blue {
-        background: var(--blue-dim);
-        color: var(--blue);
-    }
-    .badge-amber {
-        background: var(--amber-dim);
-        color: var(--amber);
-    }
-
     .method-badge {
         display: inline-flex;
         align-items: center;
@@ -2291,7 +2056,6 @@ console.log(status.status); <span class="c-comment">// "ok" | "degraded"</span
         flex-shrink: 0;
     }
 
-    /* sidebar method mini badges */
     .method-get {
         background: var(--green-dim);
         color: var(--green);
@@ -2346,19 +2110,6 @@ console.log(status.status); <span class="c-comment">// "ok" | "degraded"</span
         border-radius: 3px;
     }
 
-    .scope-green {
-        background: var(--green-dim);
-        color: var(--green);
-    }
-    .scope-blue {
-        background: var(--blue-dim);
-        color: var(--blue);
-    }
-    .scope-amber {
-        background: var(--amber-dim);
-        color: var(--amber);
-    }
-
     .scope-inline {
         background: var(--bg4);
         color: var(--text-muted);
@@ -2390,12 +2141,16 @@ console.log(status.status); <span class="c-comment">// "ok" | "degraded"</span
         color: var(--red);
     }
 
-    /* Syntax */
+    /* ── Syntax highlighting ── */
     .ck {
         color: var(--green);
     }
     .cs {
         color: var(--amber);
+    }
+    .c-comment {
+        color: var(--text-ghost);
+        font-style: italic;
     }
 
     /* ── Responsive ── */
@@ -2441,9 +2196,6 @@ console.log(status.status); <span class="c-comment">// "ok" | "degraded"</span
         .hamburger {
             display: flex;
         }
-        .auth-cards {
-            grid-template-columns: 1fr;
-        }
         .ep-left,
         .ep-right {
             padding: 20px 24px;
@@ -2464,34 +2216,6 @@ console.log(status.status); <span class="c-comment">// "ok" | "degraded"</span
         }
     }
 
-    .sdk-methods {
-        display: flex;
-        flex-direction: column;
-        gap: 28px;
-    }
-
-    .sdk-method {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-    }
-
-    .sdk-method-header {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        flex-wrap: wrap;
-    }
-
-    .sdk-method-name {
-        font-family: var(--font-mono);
-        font-size: 12px;
-        color: var(--text);
-        background: var(--bg3);
-        border: 1px solid var(--border2);
-        padding: 3px 10px;
-        border-radius: var(--radius-sm);
-    }
     @media (max-width: 640px) {
         .topbar {
             padding: 0 16px;
