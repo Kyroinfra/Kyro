@@ -1,9 +1,9 @@
 import { Router, Request, Response } from 'express';
-import { query, getClient } from '../../db';
-import { hashPassword, verifyPassword } from '../../lib/password';
-import { signJWT } from '../../lib/auth';
-import { authMiddleware } from '../../middleware/auth';
-import { registerSchema, loginSchema, RegisterInput, LoginInput } from '../../validations/auth';
+import { query, getClient } from '../db';
+import { hashPassword, verifyPassword } from '../lib/password';
+import { signJWT } from '../lib/auth';
+import { authMiddleware } from '../middleware/auth';
+import { registerSchema, loginSchema, RegisterInput, LoginInput } from '../validations/auth';
 
 const router = Router();
 

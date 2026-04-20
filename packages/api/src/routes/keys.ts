@@ -1,8 +1,8 @@
 import { Router, Response, Request } from 'express';
-import { query } from '../../db';
-import { generateApiKey } from '../../lib/apiKey';
-import { authMiddleware } from '../../middleware/auth';
-import { requireRole } from '../../middleware/auth';
+import { query } from '../db';
+import { generateApiKey } from '../lib/apiKey';
+import { authMiddleware } from '../middleware/auth';
+import { requireRole } from '../middleware/auth';
 import { z } from 'zod';
 
 const router = Router();

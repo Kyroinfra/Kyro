@@ -1,10 +1,10 @@
 import { Router, Response, Request } from 'express';
-import { db } from '../../db';
-import { apiKeys, organisations, files } from '../../db/schema';
+import { db } from '../db'
+import { apiKeys, organisations, files } from '../db/schema';
 import { eq, and, isNull, sql } from 'drizzle-orm';
-import { apiKeyAuthMiddleware, ApiKeyRequest, requireScope } from '../../middleware/apiKeyAuth';
-import { upload } from '../../middleware/upload';
-import { saveFile, deleteFile, getFilePath } from '../../lib/storage';
+import { apiKeyAuthMiddleware, ApiKeyRequest, requireScope } from '../middleware/apiKeyAuth';
+import { upload } from '../middleware/upload';
+import { saveFile, deleteFile, getFilePath } from '../lib/storage';
 
 const router = Router();
 
