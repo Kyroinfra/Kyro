@@ -4,13 +4,7 @@ import config from './config';
 import { requestLogger } from './middleware/requestLogger';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import healthRouter from './routes/health';
-import authRouter from './routes/auth';
-import orgRouter from './routes/org';
-import keysRouter from './routes/keys';
-import filesRouter from './routes/files';
-import usageRouter from './routes/usage';
-import { usageLoggerMiddleware } from './middleware/usageLogger';
-import { rateLimitMiddleware } from './middleware/rateLimit';
+import v1Router from './routes/v1';
 import { runMigrations } from './db/migrate';
 
 const app = express();
@@ -22,11 +16,7 @@ app.use(cors());
 app.use(express.json());
 app.use(requestLogger);
 app.use('/health', healthRouter);
-app.use('/api/v1/auth', authRouter);
-app.use('/api/v1/org', orgRouter);
-app.use('/api/v1/keys', keysRouter);
-app.use('/api/v1/files', rateLimitMiddleware, usageLoggerMiddleware, filesRouter);
-app.use('/api/v1/usage', usageRouter);
+app.use('/api/v1', v1Router);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
