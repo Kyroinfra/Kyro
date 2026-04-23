@@ -51,10 +51,28 @@ export const files = pgTable('files', {
   storageKey: text('storage_key').notNull(),
   mimeType: varchar('mime_type', { length: 255 }),
   sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull(),
+  extractedText: text('extracted_text'),
+  extractionJobId: uuid('extraction_job_id'),
   deletedAt: timestamp('deleted_at'),
   createdAt: timestamp('created_at').defaultNow(),
 }, (table) => ({
   orgIdIdx: index('idx_files_org_id').on(table.orgId).where(sql`${table.deletedAt} IS NULL`),
+  extractionJobIdIdx: index('idx_files_extraction_job_id').on(table.extractionJobId),
+}));
+
+export const textExtractionJobs = pgTable('text_extraction_jobs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  fileId: uuid('file_id').notNull().references(() => files.id, { onDelete: 'cascade' }),
+  status: varchar('status', { length: 50 }).notNull().default('pending'),
+  attempts: integer('attempts').notNull().default(0),
+  maxAttempts: integer('max_attempts').notNull().default(3),
+  error: text('error'),
+  startedAt: timestamp('started_at'),
+  completedAt: timestamp('completed_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+  fileIdIdx: uniqueIndex('idx_text_jobs_file_id').on(table.fileId),
+  statusIdx: index('idx_text_jobs_status').on(table.status),
 }));
 
 export const usageLogs = pgTable('usage_logs', {

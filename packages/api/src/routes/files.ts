@@ -1,10 +1,12 @@
 import { Router, Response, Request } from 'express';
 import { db } from '../db'
-import { apiKeys, organisations, files } from '../db/schema';
+import { apiKeys, organisations, files, textExtractionJobs } from '../db/schema';
 import { eq, and, isNull, sql } from 'drizzle-orm';
 import { apiKeyAuthMiddleware, ApiKeyRequest, requireScope } from '../middleware/apiKeyAuth';
 import { upload } from '../middleware/upload';
 import { saveFile, deleteFile, getFilePath } from '../lib/storage';
+import { textExtractionQueue } from '../lib/queue';
+import { getRedis } from '../db/redis';
 
 const router = Router();
 
@@ -153,6 +155,29 @@ router.post('/', requireScope('write'), upload.single('file'), async (req: ApiKe
       sizeBytes: files.sizeBytes,
       createdAt: files.createdAt,
     });
+
+    const fileId = result[0].id;
+
+    const jobRecord = await db.insert(textExtractionJobs).values({
+      fileId,
+      status: 'pending',
+    }).returning({ id: textExtractionJobs.id });
+
+    const jobId = jobRecord[0].id;
+
+    await db.update(files)
+      .set({ extractionJobId: jobId })
+      .where(eq(files.id, fileId));
+
+    const redis = getRedis();
+    if (redis) {
+      await textExtractionQueue.add('extract', {
+        fileId,
+        storageKey,
+        mimeType: req.file.mimetype,
+        jobId,
+      });
+    }
 
     res.status(201).json(result[0]);
   } catch (error) {
@@ -331,6 +356,59 @@ router.delete('/:id', requireScope('write'), async (req: ApiKeyRequest, res: Res
   } catch (error) {
     console.error('Error deleting file:', error);
     res.status(500).json({ error: 'Failed to delete file' });
+  }
+});
+
+router.get('/:id/extraction-status', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const orgId = req.orgId!;
+    const { id } = req.params;
+
+    const fileResult = await db.select({
+      id: files.id,
+      extractedText: files.extractedText,
+      extractionJobId: files.extractionJobId,
+    })
+      .from(files)
+      .where(and(eq(files.id, id as string), eq(files.orgId, orgId), isNull(files.deletedAt)));
+
+    if (fileResult.length === 0) {
+      res.status(404).json({ error: 'File not found' });
+      return;
+    }
+
+    const file = fileResult[0];
+    const jobId = file.extractionJobId;
+
+    if (!jobId) {
+      res.json({
+        status: 'pending',
+        extractedText: null,
+        error: null,
+        completedAt: null,
+      });
+      return;
+    }
+
+    const jobResult = await db.select({
+      status: textExtractionJobs.status,
+      error: textExtractionJobs.error,
+      completedAt: textExtractionJobs.completedAt,
+    })
+      .from(textExtractionJobs)
+      .where(eq(textExtractionJobs.id, jobId));
+
+    const job = jobResult[0];
+
+    res.json({
+      status: job?.status || 'pending',
+      extractedText: file.extractedText,
+      error: job?.error || null,
+      completedAt: job?.completedAt ? job.completedAt.toISOString() : null,
+    });
+  } catch (error) {
+    console.error('Error getting extraction status:', error);
+    res.status(500).json({ error: 'Failed to get extraction status' });
   }
 });
 
