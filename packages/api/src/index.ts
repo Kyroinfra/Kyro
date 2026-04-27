@@ -5,6 +5,7 @@ import { requestLogger } from './middleware/requestLogger';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import healthRouter from './routes/health';
 import v1Router from './routes/v1';
+import v2Router from './routes/v2';
 // import { runMigrations } from './db/migrate';
 
 const app = express();
@@ -17,6 +18,7 @@ app.use(express.json());
 app.use(requestLogger);
 app.use('/health', healthRouter);
 app.use('/api/v1', v1Router);
+app.use('/api/v2', v2Router);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
