@@ -43,6 +43,8 @@ services:
     command: node dist/db/migrate.js
     environment:
       - NODE_ENV=production
+      - PORT=3000
+      - JWT_SECRET=unused
       - DATABASE_URL=postgresql://kyro:secret@postgres:5432/kyro
     depends_on:
       postgres:
