@@ -5,7 +5,8 @@ import { requestLogger } from './middleware/requestLogger';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import healthRouter from './routes/health';
 import v1Router from './routes/v1';
-import { runMigrations } from './db/migrate';
+import v2Router from './routes/v2';
+// import { runMigrations } from './db/migrate';
 
 const app = express();
 
@@ -17,17 +18,18 @@ app.use(express.json());
 app.use(requestLogger);
 app.use('/health', healthRouter);
 app.use('/api/v1', v1Router);
+app.use('/api/v2', v2Router);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
 async function start() {
-  try {
-    await runMigrations();
-    console.log('Database migrations completed');
-  } catch (error) {
-    console.error('Failed to run migrations:', error);
-    process.exit(1);
-  }
+  // try {
+  //   await runMigrations();
+  //   console.log('Database migrations completed');
+  // } catch (error) {
+  //   console.error('Failed to run migrations:', error);
+  //   process.exit(1);
+  // }
 
   const server = app.listen(config.port, () => {
     console.log(`[${config.nodeEnv}] Server running on port ${config.port}`);
