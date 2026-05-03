@@ -111,6 +111,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:80/misc/ping"]
       interval: 30s
@@ -168,6 +170,7 @@ services:
 volumes:
   pg_data:
   redis_data:
+  pgadmin_data:
 
 networks:
   kyro-net:
