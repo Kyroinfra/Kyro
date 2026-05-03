@@ -143,6 +143,8 @@ services:
     command: node dist/workers/textExtractor.js
     environment:
       - NODE_ENV=production
+      - PORT=3000
+      - JWT_SECRET=${JWT_SECRET}
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
     depends_on:
