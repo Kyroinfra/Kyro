@@ -1,0 +1,5 @@
+# docker-compose.dev.yml
+services:
+  pgadmin:
+    ports:
+      - "5055:80"  # Open binding — fine locally, never in prod
