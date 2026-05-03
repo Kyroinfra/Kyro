@@ -2,4 +2,4 @@
 services:
   pgadmin:
     ports:
-      - "5050:80"  # Open binding — fine locally, never in prod
+      - "5055:80"  # Open binding — fine locally, never in prod
