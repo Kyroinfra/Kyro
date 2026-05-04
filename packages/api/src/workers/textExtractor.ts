@@ -1,12 +1,11 @@
 import { Worker, UnrecoverableError } from 'bullmq';
 import { db } from '../db';
 import { files, textExtractionJobs } from '../db/schema';
-import { eq } from 'drizzle-orm';
-import { sql } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { getFilePath } from '../lib/storage';
 import { extractText } from '../lib/extractors';
 import { getRedis } from '../db/redis';
-// import { runMigrations } from '../db/migrate';
+import { getBullMQRedis } from '../db/redis';
 import fs from 'fs';
 
 interface TextExtractionJobData {
@@ -14,6 +13,24 @@ interface TextExtractionJobData {
     storageKey: string;
     mimeType: string;
     jobId: string;
+}
+
+// On startup, reset any jobs that were left as 'processing' from a previous
+// worker crash — they will never complete on their own.
+async function recoverStuckJobs(): Promise<void> {
+    try {
+        const stuck = await db
+            .update(textExtractionJobs)
+            .set({ status: 'pending', startedAt: null })
+            .where(inArray(textExtractionJobs.status, ['processing']))
+            .returning({ id: textExtractionJobs.id });
+
+        if (stuck.length > 0) {
+            console.log(`Worker: Reset ${stuck.length} stuck 'processing' job(s) to 'pending'`);
+        }
+    } catch (err) {
+        console.error('Worker: Failed to recover stuck jobs:', err);
+    }
 }
 
 async function processTextExtractionJob(job: { data: TextExtractionJobData }): Promise<void> {
@@ -28,79 +45,36 @@ async function processTextExtractionJob(job: { data: TextExtractionJobData }): P
         .set({
             status: 'processing',
             startedAt: new Date(),
+            attempts: db.$count(textExtractionJobs, eq(textExtractionJobs.id, jobId)),
         })
         .where(eq(textExtractionJobs.id, jobId));
 
-    try {
-        const extractedText = await extractText(mimeType, filePath);
+    const extractedText = await extractText(mimeType, filePath);
 
-        await db.transaction(async (tx) => {
-            await tx.update(files)
-                .set({ extractedText })
-                .where(eq(files.id, fileId));
+    await db.transaction(async (tx) => {
+        await tx.update(files)
+            .set({ extractedText })
+            .where(eq(files.id, fileId));
 
-            await tx.update(textExtractionJobs)
-                .set({
-                    status: 'completed',
-                    completedAt: new Date(),
-                })
-                .where(eq(textExtractionJobs.id, jobId));
-        });
-
-        console.log(`Text extraction completed for file ${fileId}`);
-    } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
-        if (error instanceof UnrecoverableError) {
-            await db.update(textExtractionJobs)
-                .set({
-                    status: 'failed',
-                    error: errorMessage,
-                    completedAt: new Date(),
-                })
-                .where(eq(textExtractionJobs.id, jobId));
-            throw error;
-        }
-
-        await db.update(textExtractionJobs)
-            .set({ attempts: sql`${textExtractionJobs.attempts} + 1` })
+        await tx.update(textExtractionJobs)
+            .set({ status: 'completed', completedAt: new Date() })
             .where(eq(textExtractionJobs.id, jobId));
+    });
 
-        const jobRecord = await db.select({ attempts: textExtractionJobs.attempts, maxAttempts: textExtractionJobs.maxAttempts })
-            .from(textExtractionJobs)
-            .where(eq(textExtractionJobs.id, jobId));
-
-        const attempts = jobRecord[0]?.attempts || 0;
-        const maxAttempts = jobRecord[0]?.maxAttempts || 3;
-
-        if (attempts >= maxAttempts) {
-            await db.update(textExtractionJobs)
-                .set({
-                    status: 'failed',
-                    error: `Max retry attempts (${maxAttempts}) exceeded. Last error: ${errorMessage}`,
-                    completedAt: new Date(),
-                })
-                .where(eq(textExtractionJobs.id, jobId));
-        }
-
-        throw error;
-    }
+    console.log(`Worker: Text extraction completed for file ${fileId}`);
 }
+// NOTE: We no longer catch errors here — BullMQ handles retries automatically
+// when the job processor throws. The 'failed' event handler below marks the
+// DB record as failed only on the *final* attempt.
 
 async function start() {
-    // try {
-    //   await runMigrations();
-    //   console.log('Worker: Database migrations completed');
-    // } catch (error) {
-    //   console.error('Worker: Failed to run migrations:', error);
-    //   process.exit(1);
-    // }
-
-    const redisConnection = getRedis();
+    const redisConnection = getBullMQRedis();
     if (!redisConnection) {
         console.error('Worker: Redis not available, exiting');
         process.exit(1);
     }
+
+    await recoverStuckJobs();
 
     const worker = new Worker<TextExtractionJobData>(
         'text-extraction',
@@ -117,8 +91,23 @@ async function start() {
         console.log(`Worker: Job ${job.id} completed`);
     });
 
-    worker.on('failed', (job, error) => {
-        console.error(`Worker: Job ${job?.id} failed:`, error.message);
+    worker.on('failed', async (job, error) => {
+        if (!job) return;
+        const maxAttempts = job.opts.attempts ?? 3;
+        const isFinal = job.attemptsMade >= maxAttempts;
+
+        console.error(`Worker: Job ${job.id} attempt ${job.attemptsMade}/${maxAttempts} failed:`, error.message);
+
+        if (isFinal) {
+            const { jobId } = job.data as TextExtractionJobData;
+            try {
+                await db.update(textExtractionJobs)
+                    .set({ status: 'failed', error: error.message, completedAt: new Date() })
+                    .where(eq(textExtractionJobs.id, jobId));
+            } catch (dbErr) {
+                console.error('Worker: Failed to mark job as failed in DB:', dbErr);
+            }
+        }
     });
 
     worker.on('error', (error) => {
@@ -127,17 +116,14 @@ async function start() {
 
     console.log('Worker: Text extraction worker started');
 
-    process.on('SIGTERM', async () => {
-        console.log('Worker: SIGTERM received, shutting down');
+    async function shutdown(signal: string) {
+        console.log(`Worker: ${signal} received, shutting down`);
         await worker.close();
         process.exit(0);
-    });
+    }
 
-    process.on('SIGINT', async () => {
-        console.log('Worker: SIGINT received, shutting down');
-        await worker.close();
-        process.exit(0);
-    });
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 start();

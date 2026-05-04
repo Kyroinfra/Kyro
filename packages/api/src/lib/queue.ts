@@ -1,5 +1,6 @@
 import { Queue, QueueOptions } from 'bullmq';
 import { getRedis, isRedisAvailable } from '../db/redis';
+import { getBullMQRedis } from '../db/redis';
 
 let queueInstance: Queue | null = null;
 
@@ -9,7 +10,7 @@ function createQueue(): Queue | null {
     return null;
   }
 
-  const redisConnection = getRedis();
+  const redisConnection = getBullMQRedis();
   if (!redisConnection) {
     return null;
   }
