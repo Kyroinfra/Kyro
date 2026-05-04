@@ -64,6 +64,9 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
       - JWT_SECRET=${JWT_SECRET}
+      - UPLOAD_DIR=/app/uploads  # explicit so worker uses the same path
+    volumes:
+      - uploads_data:/app/uploads  # shared with worker
     deploy:
       replicas: 3
     depends_on:
@@ -81,6 +84,39 @@ services:
       start_period: 20s
     networks:
       - kyro-net
+
+  worker:
+    build:
+      context: .
+      dockerfile: packages/api/Dockerfile
+    restart: unless-stopped
+    command: node dist/workers/textExtractor.js
+    environment:
+      - NODE_ENV=production
+      - PORT=3000  # required by config/index.ts even though worker doesn't listen
+      - JWT_SECRET=${JWT_SECRET}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - UPLOAD_DIR=/app/uploads  # must match api service
+    volumes:
+      - uploads_data:/app/uploads  # same volume as api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f textExtractor.js || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - kyro-net
+    deploy:
+      replicas: 2
 
   postgres:
     image: postgres:16
@@ -137,40 +173,11 @@ services:
     networks:
       - kyro-net
 
-  worker:
-    build:
-      context: .
-      dockerfile: packages/api/Dockerfile
-    restart: unless-stopped
-    command: node dist/workers/textExtractor.js
-    environment:
-      - NODE_ENV=production
-      - PORT=3000
-      - JWT_SECRET=${JWT_SECRET}
-      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD-SHELL", "pgrep -f textExtractor.js || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
-    networks:
-      - kyro-net
-    deploy:
-      replicas: 2
-
 volumes:
   pg_data:
   redis_data:
   pgadmin_data:
+  uploads_data:
 
 networks:
   kyro-net:
