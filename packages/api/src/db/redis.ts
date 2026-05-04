@@ -38,6 +38,19 @@ export function getRedis(): Redis | null {
   return redis;
 }
 
+// Add this alongside getRedis()
+export function getBullMQRedis(): Redis {
+  const redisUrl = config.redisUrl;
+  if (!redisUrl) {
+    throw new Error('REDIS_URL is required for BullMQ');
+  }
+
+  return new Redis(redisUrl, {
+    maxRetriesPerRequest: null,  // required by BullMQ
+    enableReadyCheck: false,     // also required by BullMQ
+  });
+}
+
 // rest of file unchanged
 
 export function isRedisAvailable(): boolean {

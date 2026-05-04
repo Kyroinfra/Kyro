@@ -8,6 +8,7 @@ import { saveFile, deleteFile, getFilePath } from '../../lib/storage';
 import { textExtractionQueue } from '../../lib/queue';
 import { extractText, SUPPORTED_MIME_TYPES_LIST } from '../../lib/extractors';
 import { isRedisAvailable } from '../../db/redis';
+import fs from 'fs';
 
 const router = Router();
 
@@ -139,21 +140,24 @@ router.post(
 
       // ── Redis available — queue async extraction ───────────────────────────
       if (isRedisAvailable()) {
-        // Create a job tracking record first
-        const [job] = await db
-          .insert(textExtractionJobs)
-          .values({
-            fileId: fileRecord.id,
-            status: 'pending',
-          })
-          .returning({ id: textExtractionJobs.id });
+        // Atomically create the job record and link it to the file.
+        // The enqueue happens after commit so the worker never picks up a job
+        // whose file row hasn't been updated yet.
+        const job = await db.transaction(async (tx) => {
+          const [newJob] = await tx
+            .insert(textExtractionJobs)
+            .values({ fileId: fileRecord.id, status: 'pending' })
+            .returning({ id: textExtractionJobs.id });
 
-        // Update file with job reference
-        await db
-          .update(files)
-          .set({ extractionJobId: job.id })
-          .where(eq(files.id, fileRecord.id));
+          await tx
+            .update(files)
+            .set({ extractionJobId: newJob.id })
+            .where(eq(files.id, fileRecord.id));
 
+          return newJob;
+        });
+
+        // Enqueue outside the transaction — DB must be committed first
         await textExtractionQueue.add('extract', {
           fileId: fileRecord.id,
           storageKey,
@@ -161,7 +165,7 @@ router.post(
           jobId: job.id,
         });
 
-        res.status(201).json({ ...fileRecord, extractionStatus: 'queued' });
+        res.status(201).json({ ...fileRecord, extractionStatus: 'pending' });
         return;
       }
 
@@ -182,6 +186,7 @@ router.post(
         });
       } catch (extractErr) {
         console.error('Synchronous extraction failed:', extractErr);
+        // File was saved successfully — still return 201, just note extraction failed
         res.status(201).json({ ...fileRecord, extractionStatus: 'failed' });
       }
     } catch (error) {
@@ -251,7 +256,7 @@ router.get('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) 
     const hasMore = result.length > limit;
     const items = hasMore ? result.slice(0, limit) : result;
 
-    // Batch-fetch job statuses for files that have a job
+    // Batch-fetch job statuses for files that have a linked job
     const jobIds = items
       .map((f) => f.extractionJobId)
       .filter(Boolean) as string[];
@@ -267,14 +272,23 @@ router.get('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) 
       }
     }
 
-    const data = items.map(({ extractionJobId, extractedText, ...f }) => ({
-      ...f,
-      extractionStatus: extractionJobId
-        ? (jobStatusMap[extractionJobId] ?? 'pending')
-        : extractedText
-          ? 'completed'
-          : 'skipped',
-    }));
+    const data = items.map(({ extractionJobId, extractedText, ...f }) => {
+      let extractionStatus: string;
+      if (extractionJobId) {
+        // Job exists — use its status (default pending if not found, shouldn't happen)
+        extractionStatus = jobStatusMap[extractionJobId] ?? 'pending';
+      } else if (extractedText) {
+        // No job but text present — came from sync extraction path
+        extractionStatus = 'completed';
+      } else if (SUPPORTED_MIME_TYPES_LIST.includes(f.mimeType ?? '')) {
+        // Extractable type but no job and no text — sync extraction failed silently
+        extractionStatus = 'failed';
+      } else {
+        // Not an extractable type
+        extractionStatus = 'skipped';
+      }
+      return { ...f, extractionStatus };
+    });
 
     const nextCursor = hasMore
       ? Buffer.from(
@@ -316,12 +330,20 @@ router.get('/:id', requireScope('read'), async (req: ApiKeyRequest, res: Respons
       return;
     }
 
+    const filePath = getFilePath(file.storageKey);
+
+    // Guard against missing file on disk
+    if (!fs.existsSync(filePath)) {
+      console.error(`File record ${id} exists in DB but not on disk: ${filePath}`);
+      res.status(404).json({ error: 'File data not found' });
+      return;
+    }
+
     res.setHeader('Content-Type', file.mimeType ?? 'application/octet-stream');
     res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
     res.setHeader('Content-Length', file.sizeBytes);
 
-    const fs = require('fs');
-    fs.createReadStream(getFilePath(file.storageKey)).pipe(res);
+    fs.createReadStream(filePath).pipe(res);
   } catch (error) {
     console.error('Error downloading file (v2):', error);
     res.status(500).json({ error: 'Failed to download file' });
@@ -384,7 +406,7 @@ router.get('/:id/text', requireScope('read'), async (req: ApiKeyRequest, res: Re
       return;
     }
 
-    // Already extracted (synchronous path or previously completed)
+    // Already extracted (synchronous path or previously completed async job)
     if (file.extractedText) {
       res.json({
         fileId: file.id,
@@ -394,12 +416,14 @@ router.get('/:id/text', requireScope('read'), async (req: ApiKeyRequest, res: Re
       return;
     }
 
-    // No job and no text — file type wasn't extractable
+    // No job and no text
     if (!file.extractionJobId) {
       const isExtractable = SUPPORTED_MIME_TYPES_LIST.includes(file.mimeType ?? '');
       res.json({
         fileId: file.id,
-        extractionStatus: isExtractable ? 'pending' : 'skipped',
+        // If it's an extractable type but has no job and no text, sync extraction
+        // failed silently — surface that honestly rather than saying 'pending'
+        extractionStatus: isExtractable ? 'failed' : 'skipped',
         extractedText: null,
       });
       return;
@@ -499,28 +523,33 @@ router.post('/:id/extract', requireScope('write'), async (req: ApiKeyRequest, re
 
     // ── Queue async ────────────────────────────────────────────────────────
     if (isRedisAvailable()) {
-      // Upsert the job record (replace a previous failed/completed one)
-      const [job] = await db
-        .insert(textExtractionJobs)
-        .values({ fileId: file.id, status: 'pending' })
-        .onConflictDoUpdate({
-          target: textExtractionJobs.fileId,
-          set: {
-            status: 'pending',
-            attempts: 0,
-            error: null,
-            startedAt: null,
-            completedAt: null,
-            createdAt: new Date(),
-          },
-        })
-        .returning({ id: textExtractionJobs.id });
+      // Atomically upsert the job record and link it back to the file
+      const job = await db.transaction(async (tx) => {
+        const [newJob] = await tx
+          .insert(textExtractionJobs)
+          .values({ fileId: file.id, status: 'pending' })
+          .onConflictDoUpdate({
+            target: textExtractionJobs.fileId,
+            set: {
+              status: 'pending',
+              attempts: 0,
+              error: null,
+              startedAt: null,
+              completedAt: null,
+              createdAt: new Date(),
+            },
+          })
+          .returning({ id: textExtractionJobs.id });
 
-      await db
-        .update(files)
-        .set({ extractionJobId: job.id })
-        .where(eq(files.id, file.id));
+        await tx
+          .update(files)
+          .set({ extractionJobId: newJob.id })
+          .where(eq(files.id, file.id));
 
+        return newJob;
+      });
+
+      // Enqueue outside the transaction — DB must be committed first
       await textExtractionQueue.add('extract', {
         fileId: file.id,
         storageKey: file.storageKey,
@@ -530,7 +559,7 @@ router.post('/:id/extract', requireScope('write'), async (req: ApiKeyRequest, re
 
       res.status(202).json({
         fileId: file.id,
-        extractionStatus: 'queued',
+        extractionStatus: 'pending',
         message: 'Extraction queued. Poll GET /files/:id/text for status.',
       });
       return;
