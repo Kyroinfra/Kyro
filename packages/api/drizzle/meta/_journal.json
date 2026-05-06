@@ -15,6 +15,13 @@
       "when": 1776966825977,
       "tag": "0001_overconfident_jimmy_woo",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778062580923,
+      "tag": "0002_chubby_miek",
+      "breakpoints": true
     }
   ]
 }
