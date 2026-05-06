@@ -1,5 +1,11 @@
-import { pgTable, uuid, varchar, text, timestamp, bigint, date, index, uniqueIndex, serial, integer, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, bigint, date, index, uniqueIndex, serial, integer, boolean, customType } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+
+const tsvector = customType<{ data: string }>({
+  dataType() {
+    return 'tsvector';
+  },
+});
 
 export const migrations = pgTable('_migrations', {
   id: serial('id').primaryKey(),
@@ -52,6 +58,7 @@ export const files = pgTable('files', {
   mimeType: varchar('mime_type', { length: 255 }),
   sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull(),
   extractedText: text('extracted_text'),
+  textSearchVector: tsvector('text_search_vector'),
   extractionJobId: uuid('extraction_job_id'),
   deletedAt: timestamp('deleted_at'),
   createdAt: timestamp('created_at').defaultNow(),

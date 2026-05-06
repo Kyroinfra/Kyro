@@ -307,6 +307,153 @@ router.get('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) 
     }
 });
 
+// ─── GET /files/search ────────────────────────────────────────────────────────
+
+/**
+ * @swagger
+ * /files/search:
+ *   get:
+ *     tags: [Files]
+ *     summary: Full-text search over extracted file content
+ *     security:
+ *       - apiKey: []
+ *     parameters:
+ *       - name: q
+ *         in: query
+ *         required: true
+ *         schema: { type: string }
+ *         description: Search query (supports phrases with quotes, e.g. "invoice total")
+ *       - name: limit
+ *         in: query
+ *         schema: { type: integer, default: 20, maximum: 100 }
+ *       - name: cursor
+ *         in: query
+ *         schema: { type: string }
+ *         description: Pagination cursor from previous response
+ *     x-scope: read
+ *     responses:
+ *       200:
+ *         description: Ranked search results
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     allOf:
+ *                       - $ref: '#/components/schemas/File'
+ *                       - type: object
+ *                         properties:
+ *                           rank:
+ *                             type: number
+ *                             description: Relevance score (higher = more relevant)
+ *                           headline:
+ *                             type: string
+ *                             description: Snippet with matched terms highlighted in <mark> tags
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     limit: { type: integer }
+ *                     hasMore: { type: boolean }
+ *                     nextCursor: { type: string, nullable: true }
+ *       400:
+ *         description: Missing or empty search query
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ */
+router.get('/search', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const orgId = req.orgId!;
+    const q = (req.query.q as string | undefined)?.trim();
+
+    if (!q) {
+      res.status(400).json({ error: 'Query parameter "q" is required' });
+      return;
+    }
+
+    const limit = Math.min(parseInt((req.query.limit as string) || '20', 10), 100);
+    const cursor = req.query.cursor as string | undefined;
+
+    // Convert free-text query into a tsquery.
+    // plainto_tsquery handles arbitrary user input safely (no special chars needed).
+    // websearch_to_tsquery (Postgres 11+) also supports quoted phrases and OR — use
+    // that if you want more power without teaching users tsquery syntax.
+    const tsQuery = sql`websearch_to_tsquery('english', ${q})`;
+
+    // Cursor is base64url-encoded JSON: { rank: number, id: string }
+    // We sort by rank DESC, then id DESC for stable pagination.
+    let cursorCondition = sql`TRUE`;
+    if (cursor) {
+      try {
+        const { rank, id } = JSON.parse(Buffer.from(cursor, 'base64url').toString());
+        cursorCondition = sql`
+          (ts_rank(${files.textSearchVector}, ${tsQuery}), ${files.id})
+          < (${rank}::float4, ${id}::uuid)
+        `;
+      } catch {
+        res.status(400).json({ error: 'Invalid cursor' });
+        return;
+      }
+    }
+
+    const rows = await db.execute(sql`
+      SELECT
+        f.id,
+        f.name,
+        f.mime_type   AS "mimeType",
+        f.size_bytes  AS "sizeBytes",
+        f.created_at  AS "createdAt",
+        ts_rank(f.text_search_vector, ${tsQuery})                    AS rank,
+        ts_headline(
+          'english',
+          f.extracted_text,
+          ${tsQuery},
+          'StartSel=<mark>, StopSel=</mark>, MaxWords=35, MinWords=15, ShortWord=3, HighlightAll=false, MaxFragments=2, FragmentDelimiter=" … "'
+        )                                                             AS headline
+      FROM files f
+      WHERE
+        f.org_id    = ${orgId}
+        AND f.deleted_at IS NULL
+        AND f.text_search_vector @@ ${tsQuery}
+        AND ${cursorCondition}
+      ORDER BY rank DESC, f.id DESC
+      LIMIT ${limit + 1}
+    `);
+
+    const results = rows.rows as Array<{
+      id: string;
+      name: string;
+      mimeType: string;
+      sizeBytes: number;
+      createdAt: Date;
+      rank: number;
+      headline: string;
+    }>;
+
+    const hasMore = results.length > limit;
+    const items = hasMore ? results.slice(0, limit) : results;
+
+    const nextCursor = hasMore
+      ? Buffer.from(
+          JSON.stringify({
+            rank: items[items.length - 1].rank,
+            id:   items[items.length - 1].id,
+          }),
+        ).toString('base64url')
+      : null;
+
+    res.json({
+      data: items,
+      pagination: { limit, hasMore, nextCursor },
+    });
+  } catch (error) {
+    console.error('Error searching files (v2):', error);
+    res.status(500).json({ error: 'Failed to search files' });
+  }
+});
+
 // ─── GET /files/:id ───────────────────────────────────────────────────────────
 // Download file binary — same as v1.
 
