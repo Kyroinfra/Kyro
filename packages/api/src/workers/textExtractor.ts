@@ -4,6 +4,7 @@ import { files, textExtractionJobs } from '../db/schema';
 import { eq, inArray } from 'drizzle-orm';
 import { getFilePath } from '../lib/storage';
 import { extractText } from '../lib/extractors';
+import { dispatchWebhookEvent } from '../lib/webhook';
 import { getRedis } from '../db/redis';
 import { getBullMQRedis } from '../db/redis';
 import fs from 'fs';
@@ -13,6 +14,7 @@ interface TextExtractionJobData {
     storageKey: string;
     mimeType: string;
     jobId: string;
+    orgId: string;
 }
 
 // On startup, reset any jobs that were left as 'processing' from a previous
@@ -34,7 +36,7 @@ async function recoverStuckJobs(): Promise<void> {
 }
 
 async function processTextExtractionJob(job: { data: TextExtractionJobData }): Promise<void> {
-    const { fileId, storageKey, mimeType, jobId } = job.data;
+    const { fileId, storageKey, mimeType, jobId, orgId } = job.data;
 
     const filePath = getFilePath(storageKey);
     if (!fs.existsSync(filePath)) {
@@ -49,6 +51,8 @@ async function processTextExtractionJob(job: { data: TextExtractionJobData }): P
         })
         .where(eq(textExtractionJobs.id, jobId));
 
+    await dispatchWebhookEvent(orgId, 'extraction.started', { fileId, jobId });
+
     const extractedText = await extractText(mimeType, filePath);
 
     await db.transaction(async (tx) => {
@@ -60,6 +64,9 @@ async function processTextExtractionJob(job: { data: TextExtractionJobData }): P
             .set({ status: 'completed', completedAt: new Date() })
             .where(eq(textExtractionJobs.id, jobId));
     });
+
+
+    await dispatchWebhookEvent(orgId, 'extraction.completed', { fileId, jobId, extractedTextLength: extractedText.length });
 
     console.log(`Worker: Text extraction completed for file ${fileId}`);
 }
@@ -99,11 +106,13 @@ async function start() {
         console.error(`Worker: Job ${job.id} attempt ${job.attemptsMade}/${maxAttempts} failed:`, error.message);
 
         if (isFinal) {
-            const { jobId } = job.data as TextExtractionJobData;
+            const { jobId, orgId, fileId } = job.data as TextExtractionJobData;
             try {
                 await db.update(textExtractionJobs)
                     .set({ status: 'failed', error: error.message, completedAt: new Date() })
                     .where(eq(textExtractionJobs.id, jobId));
+
+                await dispatchWebhookEvent(orgId, 'extraction.failed', { fileId, jobId, error: error.message });
             } catch (dbErr) {
                 console.error('Worker: Failed to mark job as failed in DB:', dbErr);
             }
