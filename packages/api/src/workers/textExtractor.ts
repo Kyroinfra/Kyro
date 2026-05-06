@@ -75,6 +75,8 @@ async function processTextExtractionJob(job: { data: TextExtractionJobData }): P
 // DB record as failed only on the *final* attempt.
 
 async function start() {
+    getRedis();
+
     const redisConnection = getBullMQRedis();
     if (!redisConnection) {
         console.error('Worker: Redis not available, exiting');
