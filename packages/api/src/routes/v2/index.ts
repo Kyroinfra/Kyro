@@ -4,6 +4,7 @@ import orgRouter from '../v1/org';
 import keysRouter from '../v1/keys';
 import filesRouter from './files';
 import usageRouter from '../v1/usage';
+import webhookRouter from '../v1/webhook'
 import { usageLoggerMiddleware } from '../../middleware/usageLogger';
 import { rateLimitMiddleware } from '../../middleware/rateLimit';
 
@@ -14,5 +15,6 @@ v2Router.use('/org', orgRouter);
 v2Router.use('/keys', keysRouter);
 v2Router.use('/files', rateLimitMiddleware, usageLoggerMiddleware, filesRouter);
 v2Router.use('/usage', usageRouter);
+v2Router.use('/webhooks', webhookRouter);
 
 export default v2Router;
