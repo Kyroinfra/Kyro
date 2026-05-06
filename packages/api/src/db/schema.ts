@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, timestamp, bigint, date, index, uniqueIndex, serial, integer } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, bigint, date, index, uniqueIndex, serial, integer, boolean } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 export const migrations = pgTable('_migrations', {
@@ -101,4 +101,31 @@ export const usageDaily = pgTable('usage_daily', {
   storageBytes: bigint('storage_bytes', { mode: 'number' }).default(0),
 }, (table) => ({
   orgDateIdx: uniqueIndex('idx_usage_daily_org_date').on(table.orgId, table.date),
+}));
+
+export const webhooks = pgTable('webhooks', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orgId: uuid('org_id').notNull().references(() => organisations.id, { onDelete: 'cascade' }),
+  url: text('url').notNull(),
+  secret: text('secret').notNull(),          // HMAC-SHA256 signing secret
+  events: text('events').array().notNull(),  // e.g. ['extraction.completed','extraction.failed']
+  enabled: boolean('enabled').notNull().default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+  orgIdIdx: index('idx_webhooks_org_id').on(table.orgId),
+}));
+
+export const webhookDeliveries = pgTable('webhook_deliveries', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  webhookId: uuid('webhook_id').notNull().references(() => webhooks.id, { onDelete: 'cascade' }),
+  event: varchar('event', { length: 100 }).notNull(),
+  payload: text('payload').notNull(),        // JSON string — stored for replay/debug
+  status: varchar('status', { length: 50 }).notNull().default('pending'),
+  statusCode: integer('status_code'),
+  attempts: integer('attempts').notNull().default(0),
+  lastAttemptAt: timestamp('last_attempt_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+  webhookIdIdx: index('idx_webhook_deliveries_webhook_id').on(table.webhookId),
+  statusIdx: index('idx_webhook_deliveries_status').on(table.status),
 }));
