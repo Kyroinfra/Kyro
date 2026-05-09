@@ -12,8 +12,6 @@ import fs from 'fs';
 
 const router = Router();
 
-router.use(apiKeyAuthMiddleware);
-
 // ─── POST /files ─────────────────────────────────────────────────────────────
 // Upload a file. Auto-queues text extraction for supported MIME types.
 // Falls back to synchronous extraction if Redis is unavailable.

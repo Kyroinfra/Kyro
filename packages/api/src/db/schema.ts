@@ -23,10 +23,10 @@ const tsvector = customType<{ data: string }>({
   dataType() { return 'tsvector'; },
 });
 
-// pgvector — fixed at 1536 dims (text-embedding-3-small).
+// pgvector — fixed at 768 dims (nomic-embed-text).
 // Change the number if you switch to a different model.
 const vector = customType<{ data: number[]; driverData: string }>({
-  dataType() { return 'vector(1536)'; },
+  dataType() { return 'vector(768)'; },
   toDriver(value: number[]): string {
     return `[${value.join(',')}]`;
   },

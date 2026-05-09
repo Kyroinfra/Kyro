@@ -8,6 +8,7 @@ import semanticRouter from './semantic';   // ← NEW
 import usageRouter   from '../v1/usage';
 import webhookRouter from '../v1/webhook';
 import { usageLoggerMiddleware } from '../../middleware/usageLogger';
+import { apiKeyAuthMiddleware } from '../../middleware/apiKeyAuth';
 import { rateLimitMiddleware }   from '../../middleware/rateLimit';
 
 const v2Router = Router();
@@ -18,10 +19,16 @@ v2Router.use('/keys',     keysRouter);
 v2Router.use('/usage',    usageRouter);
 v2Router.use('/webhooks', webhookRouter);
 
+
+v2Router.use((req, res, next) => {
+  console.log('v2Router hit:', req.method, req.path);
+  next();
+});
 // semantic router MUST be mounted before filesRouter so that
 // /files/semantic-search and /files/ask don't get swallowed by /files/:id
 v2Router.use(
   '/files',
+  apiKeyAuthMiddleware,
   rateLimitMiddleware,
   usageLoggerMiddleware,
   semanticRouter,  // handles /semantic-search, /ask, /:id/embed

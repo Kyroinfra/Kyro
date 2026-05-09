@@ -93,8 +93,8 @@ async function processTextExtractionJob(job: { data: TextExtractionJobData }): P
   // continue. The file's embeddingStatus will be left as 'pending' or 'failed'
   // and can be retried via POST /v2/files/:id/embed.
 
-  if (!process.env.OPENAI_API_KEY) {
-    console.warn(`Worker: OPENAI_API_KEY not set — skipping embedding for file ${fileId}`);
+  if (!process.env.OLLAMA_URL && process.env.NODE_ENV === 'production') {
+    console.warn(`Worker: OLLAMA_URL not set — skipping embedding for file ${fileId}`);
     await db.update(files)
       .set({ embeddingStatus: 'skipped' })
       .where(eq(files.id, fileId));
