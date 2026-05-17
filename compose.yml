@@ -58,15 +58,20 @@ services:
       context: .
       dockerfile: packages/api/Dockerfile
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - PORT=3000
       - NODE_ENV=production
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
       - JWT_SECRET=${JWT_SECRET}
-      - UPLOAD_DIR=/app/uploads  # explicit so worker uses the same path
+      - UPLOAD_DIR=/app/uploads
+      - OLLAMA_URL=${OLLAMA_URL}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text}
+      - CHAT_MODEL=${CHAT_MODEL:-llama3.2}
     volumes:
-      - uploads_data:/app/uploads  # shared with worker
+      - uploads_data:/app/uploads
     deploy:
       replicas: 3
     depends_on:
@@ -91,15 +96,20 @@ services:
       dockerfile: packages/api/Dockerfile
     restart: unless-stopped
     command: node dist/workers/textExtractor.js
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - NODE_ENV=production
-      - PORT=3000  # required by config/index.ts even though worker doesn't listen
+      - PORT=3000
       - JWT_SECRET=${JWT_SECRET}
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
-      - UPLOAD_DIR=/app/uploads  # must match api service
+      - UPLOAD_DIR=/app/uploads
+      - OLLAMA_URL=${OLLAMA_URL}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text}
+      - CHAT_MODEL=${CHAT_MODEL:-llama3.2}
     volumes:
-      - uploads_data:/app/uploads  # same volume as api
+      - uploads_data:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -119,7 +129,7 @@ services:
       replicas: 2
 
   postgres:
-    image: postgres:16
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -174,32 +184,32 @@ services:
       - kyro-net
 
   webhook-worker:
-      build:
-        context: .
-        dockerfile: packages/api/Dockerfile
-      restart: unless-stopped
-      command: node dist/workers/webhookDelivery.js
-      environment:
-        - NODE_ENV=production
-        - PORT=3000
-        - JWT_SECRET=${JWT_SECRET}
-        - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-        - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
-      depends_on:
-        postgres:
-          condition: service_healthy
-        redis:
-          condition: service_healthy
-        migrate:
-          condition: service_completed_successfully
-      healthcheck:
-        test: ["CMD-SHELL", "pgrep -f webhookDelivery.js || exit 1"]
-        interval: 30s
-        timeout: 10s
-        retries: 3
-        start_period: 20s
-      networks:
-        - kyro-net
+    build:
+      context: .
+      dockerfile: packages/api/Dockerfile
+    restart: unless-stopped
+    command: node dist/workers/webhookDelivery.js
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - JWT_SECRET=${JWT_SECRET}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f webhookDelivery.js || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - kyro-net
 
 volumes:
   pg_data:

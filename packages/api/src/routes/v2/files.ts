@@ -12,11 +12,7 @@ import fs from 'fs';
 
 const router = Router();
 
-router.use(apiKeyAuthMiddleware);
-
 // ─── POST /files ─────────────────────────────────────────────────────────────
-// Upload a file. Auto-queues text extraction for supported MIME types.
-// Falls back to synchronous extraction if Redis is unavailable.
 
 /**
  * @swagger
@@ -78,14 +74,12 @@ router.post(
                 return;
             }
 
-            // Resolve the uploading user from the API key
             const keyResult = await db
                 .select({ userId: apiKeys.userId })
                 .from(apiKeys)
                 .where(eq(apiKeys.id, apiKeyId));
             const userId = keyResult[0]?.userId;
 
-            // Enforce storage quota
             const orgResult = await db
                 .select({ storageLimit: organisations.storageLimit })
                 .from(organisations)
@@ -103,7 +97,6 @@ router.post(
                 return;
             }
 
-            // Persist the file to disk
             const { storageKey } = await saveFile(orgId, {
                 originalname: req.file.originalname,
                 buffer: req.file.buffer,
@@ -111,7 +104,6 @@ router.post(
                 size: req.file.size,
             });
 
-            // Insert file record
             const [fileRecord] = await db
                 .insert(files)
                 .values({
@@ -132,17 +124,12 @@ router.post(
 
             const isExtractable = SUPPORTED_MIME_TYPES_LIST.includes(req.file.mimetype ?? '');
 
-            // ── Not a supported type — skip extraction entirely ────────────────────
             if (!isExtractable) {
                 res.status(201).json({ ...fileRecord, extractionStatus: 'skipped' });
                 return;
             }
 
-            // ── Redis available — queue async extraction ───────────────────────────
             if (isRedisAvailable()) {
-                // Atomically create the job record and link it to the file.
-                // The enqueue happens after commit so the worker never picks up a job
-                // whose file row hasn't been updated yet.
                 const job = await db.transaction(async (tx) => {
                     const [newJob] = await tx
                         .insert(textExtractionJobs)
@@ -157,7 +144,6 @@ router.post(
                     return newJob;
                 });
 
-                // Enqueue outside the transaction — DB must be committed first
                 await textExtractionQueue.add('extract', {
                     fileId: fileRecord.id,
                     storageKey,
@@ -170,7 +156,6 @@ router.post(
                 return;
             }
 
-            // ── Redis unavailable — extract synchronously ──────────────────────────
             try {
                 const filePath = getFilePath(storageKey);
                 const extractedText = await extractText(req.file.mimetype ?? '', filePath);
@@ -187,7 +172,6 @@ router.post(
                 });
             } catch (extractErr) {
                 console.error('Synchronous extraction failed:', extractErr);
-                // File was saved successfully — still return 201, just note extraction failed
                 res.status(201).json({ ...fileRecord, extractionStatus: 'failed' });
             }
         } catch (error) {
@@ -198,7 +182,6 @@ router.post(
 );
 
 // ─── GET /files ───────────────────────────────────────────────────────────────
-// Cursor-paginated list — identical to v1 but also returns extractionStatus.
 
 /**
  * @swagger
@@ -257,7 +240,6 @@ router.get('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) 
         const hasMore = result.length > limit;
         const items = hasMore ? result.slice(0, limit) : result;
 
-        // Batch-fetch job statuses for files that have a linked job
         const jobIds = items
             .map((f) => f.extractionJobId)
             .filter(Boolean) as string[];
@@ -276,16 +258,12 @@ router.get('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) 
         const data = items.map(({ extractionJobId, extractedText, ...f }) => {
             let extractionStatus: string;
             if (extractionJobId) {
-                // Job exists — use its status (default pending if not found, shouldn't happen)
                 extractionStatus = jobStatusMap[extractionJobId] ?? 'pending';
             } else if (extractedText) {
-                // No job but text present — came from sync extraction path
                 extractionStatus = 'completed';
             } else if (SUPPORTED_MIME_TYPES_LIST.includes(f.mimeType ?? '')) {
-                // Extractable type but no job and no text — sync extraction failed silently
                 extractionStatus = 'failed';
             } else {
-                // Not an extractable type
                 extractionStatus = 'skipped';
             }
             return { ...f, extractionStatus };
@@ -308,6 +286,7 @@ router.get('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) 
 });
 
 // ─── GET /files/search ────────────────────────────────────────────────────────
+// IMPORTANT: must be registered BEFORE /:id so Express doesn't swallow it.
 
 /**
  * @swagger
@@ -364,41 +343,35 @@ router.get('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) 
  *         $ref: '#/components/responses/Unauthorized'
  */
 router.get('/search', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
-  try {
-    const orgId = req.orgId!;
-    const q = (req.query.q as string | undefined)?.trim();
+    try {
+        const orgId = req.orgId!;
+        const q = (req.query.q as string | undefined)?.trim();
 
-    if (!q) {
-      res.status(400).json({ error: 'Query parameter "q" is required' });
-      return;
-    }
+        if (!q) {
+            res.status(400).json({ error: 'Query parameter "q" is required' });
+            return;
+        }
 
-    const limit = Math.min(parseInt((req.query.limit as string) || '20', 10), 100);
-    const cursor = req.query.cursor as string | undefined;
+        const limit = Math.min(parseInt((req.query.limit as string) || '20', 10), 100);
+        const cursor = req.query.cursor as string | undefined;
 
-    // Convert free-text query into a tsquery.
-    // plainto_tsquery handles arbitrary user input safely (no special chars needed).
-    // websearch_to_tsquery (Postgres 11+) also supports quoted phrases and OR — use
-    // that if you want more power without teaching users tsquery syntax.
-    const tsQuery = sql`websearch_to_tsquery('english', ${q})`;
+        const tsQuery = sql`websearch_to_tsquery('english', ${q})`;
 
-    // Cursor is base64url-encoded JSON: { rank: number, id: string }
-    // We sort by rank DESC, then id DESC for stable pagination.
-    let cursorCondition = sql`TRUE`;
-    if (cursor) {
-      try {
-        const { rank, id } = JSON.parse(Buffer.from(cursor, 'base64url').toString());
-        cursorCondition = sql`
+        let cursorCondition = sql`TRUE`;
+        if (cursor) {
+            try {
+                const { rank, id } = JSON.parse(Buffer.from(cursor, 'base64url').toString());
+                cursorCondition = sql`
           (ts_rank(${files.textSearchVector}, ${tsQuery}), ${files.id})
           < (${rank}::float4, ${id}::uuid)
         `;
-      } catch {
-        res.status(400).json({ error: 'Invalid cursor' });
-        return;
-      }
-    }
+            } catch {
+                res.status(400).json({ error: 'Invalid cursor' });
+                return;
+            }
+        }
 
-    const rows = await db.execute(sql`
+        const rows = await db.execute(sql`
       SELECT
         f.id,
         f.name,
@@ -422,84 +395,41 @@ router.get('/search', requireScope('read'), async (req: ApiKeyRequest, res: Resp
       LIMIT ${limit + 1}
     `);
 
-    const results = rows.rows as Array<{
-      id: string;
-      name: string;
-      mimeType: string;
-      sizeBytes: number;
-      createdAt: Date;
-      rank: number;
-      headline: string;
-    }>;
+        const results = rows.rows as Array<{
+            id: string;
+            name: string;
+            mimeType: string;
+            sizeBytes: number;
+            createdAt: Date;
+            rank: number;
+            headline: string;
+        }>;
 
-    const hasMore = results.length > limit;
-    const items = hasMore ? results.slice(0, limit) : results;
+        const hasMore = results.length > limit;
+        const items = hasMore ? results.slice(0, limit) : results;
 
-    const nextCursor = hasMore
-      ? Buffer.from(
-          JSON.stringify({
-            rank: items[items.length - 1].rank,
-            id:   items[items.length - 1].id,
-          }),
-        ).toString('base64url')
-      : null;
+        const nextCursor = hasMore
+            ? Buffer.from(
+                JSON.stringify({
+                    rank: items[items.length - 1].rank,
+                    id: items[items.length - 1].id,
+                }),
+            ).toString('base64url')
+            : null;
 
-    res.json({
-      data: items,
-      pagination: { limit, hasMore, nextCursor },
-    });
-  } catch (error) {
-    console.error('Error searching files (v2):', error);
-    res.status(500).json({ error: 'Failed to search files' });
-  }
-});
-
-// ─── GET /files/:id ───────────────────────────────────────────────────────────
-// Download file binary — same as v1.
-
-router.get('/:id', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
-    try {
-        const orgId = req.orgId!;
-        const id = req.params.id as string;
-
-        const [file] = await db
-            .select({
-                id: files.id,
-                name: files.name,
-                storageKey: files.storageKey,
-                mimeType: files.mimeType,
-                sizeBytes: files.sizeBytes,
-            })
-            .from(files)
-            .where(and(eq(files.id, id), eq(files.orgId, orgId), isNull(files.deletedAt)));
-
-        if (!file) {
-            res.status(404).json({ error: 'File not found' });
-            return;
-        }
-
-        const filePath = getFilePath(file.storageKey);
-
-        // Guard against missing file on disk
-        if (!fs.existsSync(filePath)) {
-            console.error(`File record ${id} exists in DB but not on disk: ${filePath}`);
-            res.status(404).json({ error: 'File data not found' });
-            return;
-        }
-
-        res.setHeader('Content-Type', file.mimeType ?? 'application/octet-stream');
-        res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
-        res.setHeader('Content-Length', file.sizeBytes);
-
-        fs.createReadStream(filePath).pipe(res);
+        res.json({
+            data: items,
+            pagination: { limit, hasMore, nextCursor },
+        });
     } catch (error) {
-        console.error('Error downloading file (v2):', error);
-        res.status(500).json({ error: 'Failed to download file' });
+        console.error('Error searching files (v2):', error);
+        res.status(500).json({ error: 'Failed to search files' });
     }
 });
 
 // ─── GET /files/:id/text ──────────────────────────────────────────────────────
-// Returns the extracted text for a file, or the current job status if pending.
+// IMPORTANT: /:id/text and /:id/extract must be registered BEFORE /:id,
+// otherwise /:id matches first and Express never reaches the sub-path handlers.
 
 /**
  * @swagger
@@ -554,7 +484,6 @@ router.get('/:id/text', requireScope('read'), async (req: ApiKeyRequest, res: Re
             return;
         }
 
-        // Already extracted (synchronous path or previously completed async job)
         if (file.extractedText) {
             res.json({
                 fileId: file.id,
@@ -564,20 +493,16 @@ router.get('/:id/text', requireScope('read'), async (req: ApiKeyRequest, res: Re
             return;
         }
 
-        // No job and no text
         if (!file.extractionJobId) {
             const isExtractable = SUPPORTED_MIME_TYPES_LIST.includes(file.mimeType ?? '');
             res.json({
                 fileId: file.id,
-                // If it's an extractable type but has no job and no text, sync extraction
-                // failed silently — surface that honestly rather than saying 'pending'
                 extractionStatus: isExtractable ? 'failed' : 'skipped',
                 extractedText: null,
             });
             return;
         }
 
-        // Look up the job for status
         const [job] = await db
             .select({
                 status: textExtractionJobs.status,
@@ -599,7 +524,6 @@ router.get('/:id/text', requireScope('read'), async (req: ApiKeyRequest, res: Re
 });
 
 // ─── POST /files/:id/extract ──────────────────────────────────────────────────
-// Manually trigger (or re-trigger) extraction on an existing file.
 
 /**
  * @swagger
@@ -653,7 +577,6 @@ router.post('/:id/extract', requireScope('write'), async (req: ApiKeyRequest, re
             return;
         }
 
-        // Guard: block if an active job already exists
         if (file.extractionJobId) {
             const [existing] = await db
                 .select({ status: textExtractionJobs.status })
@@ -669,9 +592,7 @@ router.post('/:id/extract', requireScope('write'), async (req: ApiKeyRequest, re
             }
         }
 
-        // ── Queue async ────────────────────────────────────────────────────────
         if (isRedisAvailable()) {
-            // Atomically upsert the job record and link it back to the file
             const job = await db.transaction(async (tx) => {
                 const [newJob] = await tx
                     .insert(textExtractionJobs)
@@ -697,13 +618,12 @@ router.post('/:id/extract', requireScope('write'), async (req: ApiKeyRequest, re
                 return newJob;
             });
 
-            // Enqueue outside the transaction — DB must be committed first
             await textExtractionQueue.add('extract', {
                 fileId: file.id,
                 storageKey: file.storageKey,
                 mimeType: file.mimeType,
                 jobId: job.id,
-                orgId
+                orgId,
             });
 
             res.status(202).json({
@@ -714,7 +634,6 @@ router.post('/:id/extract', requireScope('write'), async (req: ApiKeyRequest, re
             return;
         }
 
-        // ── Sync fallback ──────────────────────────────────────────────────────
         try {
             const filePath = getFilePath(file.storageKey);
             const extractedText = await extractText(file.mimeType ?? '', filePath);
@@ -739,8 +658,50 @@ router.post('/:id/extract', requireScope('write'), async (req: ApiKeyRequest, re
     }
 });
 
+// ─── GET /files/:id ───────────────────────────────────────────────────────────
+// Download file binary. Registered AFTER all named and sub-path routes.
+
+router.get('/:id', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
+    try {
+        const orgId = req.orgId!;
+        const id = req.params.id as string;
+
+        const [file] = await db
+            .select({
+                id: files.id,
+                name: files.name,
+                storageKey: files.storageKey,
+                mimeType: files.mimeType,
+                sizeBytes: files.sizeBytes,
+            })
+            .from(files)
+            .where(and(eq(files.id, id), eq(files.orgId, orgId), isNull(files.deletedAt)));
+
+        if (!file) {
+            res.status(404).json({ error: 'File not found' });
+            return;
+        }
+
+        const filePath = getFilePath(file.storageKey);
+
+        if (!fs.existsSync(filePath)) {
+            console.error(`File record ${id} exists in DB but not on disk: ${filePath}`);
+            res.status(404).json({ error: 'File data not found' });
+            return;
+        }
+
+        res.setHeader('Content-Type', file.mimeType ?? 'application/octet-stream');
+        res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
+        res.setHeader('Content-Length', file.sizeBytes);
+
+        fs.createReadStream(filePath).pipe(res);
+    } catch (error) {
+        console.error('Error downloading file (v2):', error);
+        res.status(500).json({ error: 'Failed to download file' });
+    }
+});
+
 // ─── DELETE /files/:id ────────────────────────────────────────────────────────
-// Soft-delete — identical to v1.
 
 router.delete('/:id', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
     try {
