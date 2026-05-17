@@ -1,22 +1,21 @@
-// routes/v2/semantic.ts
+// routes/v2/semantic.ts  (FIXED)
 // ─────────────────────────────────────────────────────────────────────────────
-// Two endpoints that complete the RAG stack:
-//
-//   GET  /v2/files/semantic-search   — vector similarity search over chunks
-//   POST /v2/files/ask               — retrieval-augmented answer via Ollama
-//   POST /v2/files/:id/embed         — trigger/re-trigger embedding for a file
-//
-// Mount this in routes/v2/index.ts BEFORE filesRouter so that
-// /semantic-search, /ask, and /:id/embed are matched before /:id.
-//
-// Both read routes require an API key with at least the 'read' scope.
+// Fixes applied:
+//   1. Replaced sql`` + sql.raw() vector interpolation with raw pool.query()
+//      calls. Drizzle's sql tag re-encodes the value as a bind parameter,
+//      stripping the ::vector cast and breaking all <=> operations.
+//   2. File ID arrays are passed as proper PG array parameters, not inlined
+//      via sql.raw() (which was a SQL injection risk).
+//   3. db.execute() result handling made consistent (some Drizzle versions
+//      return the array directly, others wrap it in { rows }).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { Router, Response } from 'express';
 import { db } from '../../db';
+import pool from '../../db';           // raw pg Pool — default export
 import { files, fileChunks } from '../../db/schema';
-import { eq, and, isNull, inArray, sql } from 'drizzle-orm';
-import { apiKeyAuthMiddleware, ApiKeyRequest, requireScope } from '../../middleware/apiKeyAuth';
+import { eq, and, isNull, inArray } from 'drizzle-orm';
+import { ApiKeyRequest, requireScope } from '../../middleware/apiKeyAuth';
 import { embedQuery, embedFile } from '../../lib/embeddings';
 import { z } from 'zod';
 
@@ -27,19 +26,8 @@ router.use((req, res, next) => {
     next();
 });
 
-// ── Config ────────────────────────────────────────────────────────────────────
-
 const OLLAMA_URL = process.env.OLLAMA_URL ?? 'http://localhost:11434';
 const CHAT_MODEL = process.env.CHAT_MODEL ?? 'llama3.2';
-
-// ── Shared helpers ─────────────────────────────────────────────────────────────
-
-// Build a pgvector literal from a JS float array.
-// MUST be inlined via sql.raw() — never passed as a Drizzle parameter —
-// because Postgres needs the literal value to apply the ::vector cast.
-function pgVecRaw(v: number[]) {
-    return sql.raw(`'[${v.join(',')}]'::vector`);
-}
 
 // ── GET /semantic-search ───────────────────────────────────────────────────────
 
@@ -49,12 +37,6 @@ function pgVecRaw(v: number[]) {
  *   get:
  *     tags: [Files]
  *     summary: Semantic (vector) search over extracted file content
- *     description: |
- *       Embeds the query with the same model used during ingestion, then returns
- *       the most semantically similar document chunks — regardless of exact keyword matches.
- *
- *       Requires that the relevant files have already been embedded (embeddingStatus = "completed").
- *       Files uploaded before embeddings were enabled can be re-embedded via POST /files/:id/embed.
  *     security:
  *       - apiKey: []
  *     parameters:
@@ -62,42 +44,22 @@ function pgVecRaw(v: number[]) {
  *         in: query
  *         required: true
  *         schema: { type: string }
- *         description: Natural language search query
  *       - name: limit
  *         in: query
  *         schema: { type: integer, default: 10, maximum: 50 }
- *         description: Number of chunks to return
  *       - name: min_score
  *         in: query
  *         schema: { type: number, default: 0.3 }
- *         description: Minimum cosine similarity score (0–1). Lower = more results but noisier.
  *       - name: file_ids
  *         in: query
  *         schema: { type: string }
- *         description: Comma-separated list of file UUIDs to restrict the search to
+ *         description: Comma-separated UUIDs
  *     x-scope: read
  *     responses:
  *       200:
  *         description: Ranked list of matching chunks
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 data:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       fileId:      { type: string, format: uuid }
- *                       fileName:    { type: string }
- *                       chunkIndex:  { type: integer }
- *                       content:     { type: string }
- *                       score:       { type: number, description: "Cosine similarity 0–1" }
- *                 query:  { type: string }
- *                 limit:  { type: integer }
  *       400:
- *         description: Missing query or embeddings not configured
+ *         description: Missing query or OLLAMA_URL not configured
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  */
@@ -116,61 +78,56 @@ router.get('/semantic-search', requireScope('read'), async (req: ApiKeyRequest, 
             return;
         }
 
-        const limit = Math.min(parseInt((req.query.limit as string) || '10', 10), 50);
+        const limit    = Math.min(parseInt((req.query.limit    as string) || '10',  10), 50);
         const minScore = parseFloat((req.query.min_score as string) || '0.3');
 
-        // Optional file filter
         let fileIdFilter: string[] | undefined;
         if (req.query.file_ids) {
             fileIdFilter = (req.query.file_ids as string)
-                .split(',')
-                .map(s => s.trim())
-                .filter(Boolean);
+                .split(',').map(s => s.trim()).filter(Boolean);
             if (fileIdFilter.length === 0) fileIdFilter = undefined;
         }
 
-        // Embed the query and build an inlined vector literal
-        const queryVec = await embedQuery(q);
-        const vec = pgVecRaw(queryVec);
+        const queryVec     = await embedQuery(q);
+        const vectorLiteral = `[${queryVec.join(',')}]`;
 
-        // File ID filter clause — inline the UUID array as a SQL literal
-        // to avoid binding issues with the ::uuid[] cast.
+        // Build query using raw pool — Drizzle's sql tag breaks ::vector casts
+        const params: unknown[] = [orgId, vectorLiteral, minScore, limit];
         const fileFilterClause = fileIdFilter && fileIdFilter.length > 0
-            ? sql.raw(`AND fc.file_id = ANY(ARRAY[${fileIdFilter.map(id => `'${id}'`).join(',')}]::uuid[])`)
-            : sql.raw('');
+            ? `AND fc.file_id = ANY($5::uuid[])`
+            : '';
+        if (fileIdFilter && fileIdFilter.length > 0) {
+            params.push(fileIdFilter);
+        }
 
-        const rows = await db.execute(sql`
+        const rawSql = `
             SELECT
                 fc.file_id         AS "fileId",
                 f.name             AS "fileName",
                 fc.chunk_index     AS "chunkIndex",
                 fc.content,
-                (1 - (fc.embedding <=> ${vec}))::float4 AS score
+                (1 - (fc.embedding <=> $2::vector))::float4 AS score
             FROM file_chunks fc
             JOIN files f ON f.id = fc.file_id
             WHERE
-                fc.org_id    = ${orgId}
+                fc.org_id    = $1
                 AND f.deleted_at IS NULL
                 ${fileFilterClause}
-                AND (1 - (fc.embedding <=> ${vec})) >= ${minScore}
-            ORDER BY fc.embedding <=> ${vec}
-            LIMIT ${limit}
-        `);
+                AND (1 - (fc.embedding <=> $2::vector)) >= $3
+            ORDER BY fc.embedding <=> $2::vector
+            LIMIT $4
+        `;
+
+        const result = await pool.query(rawSql, params);
 
         res.json({
-            data: rows.rows as Array<{
-                fileId: string;
-                fileName: string;
-                chunkIndex: number;
-                content: string;
-                score: number;
-            }>,
+            data:  result.rows,
             query: q,
             limit,
         });
     } catch (error: any) {
         console.error('Error in semantic-search:', error);
-        res.status(500).json({ error: 'Semantic search failed' });
+        res.status(500).json({ error: 'Semantic search failed', detail: error.message });
     }
 });
 
@@ -178,14 +135,12 @@ router.get('/semantic-search', requireScope('read'), async (req: ApiKeyRequest, 
 
 const askSchema = z.object({
     question: z.string().min(1).max(2000),
-    fileIds: z.array(z.string().uuid()).min(1).max(20),
-    topK: z.number().int().min(1).max(20).optional().default(8),
-    model: z.string().optional(),
+    fileIds:  z.array(z.string().uuid()).min(1).max(20),
+    topK:     z.number().int().min(1).max(20).optional().default(8),
+    model:    z.string().optional(),
     minScore: z.number().min(0).max(1).optional().default(0.25),
-    stream: z.boolean().optional().default(true),
+    stream:   z.boolean().optional().default(true),
 });
-
-type AskInput = z.infer<typeof askSchema>;
 
 /**
  * @swagger
@@ -193,23 +148,6 @@ type AskInput = z.infer<typeof askSchema>;
  *   post:
  *     tags: [Files]
  *     summary: Ask a question over one or more files (RAG)
- *     description: |
- *       Retrieves the most relevant chunks from the specified files using vector
- *       similarity, then streams an AI-generated answer grounded in that context
- *       using a locally-running Ollama model.
- *
- *       The response is a **Server-Sent Events (SSE)** stream. Each event contains
- *       a JSON object:
- *
- *       - `{ type: "chunk", text: "..." }` — incremental answer text
- *       - `{ type: "sources", sources: [...] }` — cited chunks (sent before the answer)
- *       - `{ type: "done" }` — stream complete
- *       - `{ type: "error", message: "..." }` — fatal error
- *
- *       Set `stream: false` to get a single JSON response instead.
- *
- *       Files must have `embeddingStatus = "completed"` to be included in retrieval.
- *       If none of the requested files have embeddings, a 422 is returned.
  *     security:
  *       - apiKey: []
  *     requestBody:
@@ -220,32 +158,16 @@ type AskInput = z.infer<typeof askSchema>;
  *             type: object
  *             required: [question, fileIds]
  *             properties:
- *               question:
- *                 type: string
- *                 maxLength: 2000
- *               fileIds:
- *                 type: array
- *                 items: { type: string, format: uuid }
- *                 minItems: 1
- *                 maxItems: 20
- *               topK:
- *                 type: integer
- *                 default: 8
- *               model:
- *                 type: string
- *                 default: llama3.2
- *               minScore:
- *                 type: number
- *                 default: 0.25
- *               stream:
- *                 type: boolean
- *                 default: true
+ *               question:  { type: string, maxLength: 2000 }
+ *               fileIds:   { type: array, items: { type: string, format: uuid } }
+ *               topK:      { type: integer, default: 8 }
+ *               model:     { type: string, default: llama3.2 }
+ *               minScore:  { type: number, default: 0.25 }
+ *               stream:    { type: boolean, default: true }
  *     x-scope: read
  *     responses:
  *       200:
- *         description: |
- *           SSE stream (Content-Type: text/event-stream) when stream=true,
- *           or JSON object when stream=false.
+ *         description: SSE stream (stream=true) or JSON (stream=false)
  *       400:
  *         $ref: '#/components/responses/BadRequest'
  *       401:
@@ -265,24 +187,18 @@ router.post('/ask', requireScope('read'), async (req: ApiKeyRequest, res: Respon
 
         const { question, fileIds, topK, stream } = parsed.data;
         const minScore = parsed.data.minScore;
-        const model = parsed.data.model ?? CHAT_MODEL;
+        const model    = parsed.data.model ?? CHAT_MODEL;
 
         if (!process.env.OLLAMA_URL) {
             res.status(400).json({ error: 'OLLAMA_URL must be configured to use the /ask endpoint' });
             return;
         }
 
-        // ── 1. Verify files belong to this org ────────────────────────────────────
+        // ── 1. Verify ownership + embedding status ────────────────────────────
         const ownedFiles = await db
             .select({ id: files.id, name: files.name, embeddingStatus: files.embeddingStatus })
             .from(files)
-            .where(
-                and(
-                    eq(files.orgId, orgId),
-                    isNull(files.deletedAt),
-                    inArray(files.id, fileIds),
-                ),
-            );
+            .where(and(eq(files.orgId, orgId), isNull(files.deletedAt), inArray(files.id, fileIds)));
 
         if (ownedFiles.length === 0) {
             res.status(404).json({ error: 'No matching files found' });
@@ -305,42 +221,45 @@ router.post('/ask', requireScope('read'), async (req: ApiKeyRequest, res: Respon
             return;
         }
 
-        // ── 2. Embed the question + retrieve relevant chunks ──────────────────────
-        const queryVec = await embedQuery(question);
-        const vec = pgVecRaw(queryVec);
+        // ── 2. Embed question + retrieve chunks via raw pool query ────────────
+        const queryVec      = await embedQuery(question);
+        const vectorLiteral = `[${queryVec.join(',')}]`;
 
-        // Inline the file ID array as a SQL literal
-        const fileIdsLiteral = sql.raw(
-            `ARRAY[${embeddedFileIds.map(id => `'${id}'`).join(',')}]::uuid[]`
-        );
-
-        const retrievedRows = await db.execute(sql`
+        const retrievalSql = `
             SELECT
                 fc.file_id         AS "fileId",
                 f.name             AS "fileName",
                 fc.chunk_index     AS "chunkIndex",
                 fc.content,
-                (1 - (fc.embedding <=> ${vec}))::float4 AS score
+                (1 - (fc.embedding <=> $2::vector))::float4 AS score
             FROM file_chunks fc
             JOIN files f ON f.id = fc.file_id
             WHERE
-                fc.org_id    = ${orgId}
-                AND fc.file_id = ANY(${fileIdsLiteral})
+                fc.org_id    = $1
+                AND fc.file_id = ANY($3::uuid[])
                 AND f.deleted_at IS NULL
-                AND (1 - (fc.embedding <=> ${vec})) >= ${minScore}
-            ORDER BY fc.embedding <=> ${vec}
-            LIMIT ${topK}
-        `);
+                AND (1 - (fc.embedding <=> $2::vector)) >= $4
+            ORDER BY fc.embedding <=> $2::vector
+            LIMIT $5
+        `;
 
-        const sources = retrievedRows.rows as Array<{
-            fileId: string;
-            fileName: string;
+        const retrievalResult = await pool.query(retrievalSql, [
+            orgId,
+            vectorLiteral,
+            embeddedFileIds,
+            minScore,
+            topK,
+        ]);
+
+        const sources = retrievalResult.rows as Array<{
+            fileId:     string;
+            fileName:   string;
             chunkIndex: number;
-            content: string;
-            score: number;
+            content:    string;
+            score:      number;
         }>;
 
-        // ── 3. Build the prompt ────────────────────────────────────────────────────
+        // ── 3. Build prompt ───────────────────────────────────────────────────
         const contextBlock = sources.length > 0
             ? sources
                 .map((s, i) =>
@@ -365,39 +284,30 @@ Rules:
             },
         ];
 
-        // ── 4a. Streaming response via Ollama ──────────────────────────────────────
+        // ── 4a. Streaming ─────────────────────────────────────────────────────
         if (stream) {
             res.setHeader('Content-Type', 'text/event-stream');
             res.setHeader('Cache-Control', 'no-cache');
             res.setHeader('X-Accel-Buffering', 'no');
             res.flushHeaders();
 
-            const sendEvent = (data: object) => {
-                res.write(`data: ${JSON.stringify(data)}\n\n`);
-            };
-
+            const sendEvent = (data: object) => res.write(`data: ${JSON.stringify(data)}\n\n`);
             sendEvent({ type: 'sources', sources });
 
             try {
                 const ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
-                    method: 'POST',
+                    method:  'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        model,
-                        messages,
-                        stream: true,
-                        options: { temperature: 0.2 },
-                    }),
+                    body:    JSON.stringify({ model, messages, stream: true, options: { temperature: 0.2 } }),
                 });
 
                 if (!ollamaRes.ok || !ollamaRes.body) {
-                    const errBody = await ollamaRes.text();
-                    throw new Error(`Ollama chat failed (${ollamaRes.status}): ${errBody}`);
+                    throw new Error(`Ollama chat failed (${ollamaRes.status}): ${await ollamaRes.text()}`);
                 }
 
-                const reader = ollamaRes.body.getReader();
+                const reader  = ollamaRes.body.getReader();
                 const decoder = new TextDecoder();
-                let buffer = '';
+                let buffer    = '';
 
                 while (true) {
                     const { done, value } = await reader.read();
@@ -410,34 +320,19 @@ Rules:
                     for (const line of lines) {
                         if (!line.trim()) continue;
                         try {
-                            const json = JSON.parse(line) as {
-                                message?: { content?: string };
-                                done?: boolean;
-                            };
-                            if (json.message?.content) {
-                                sendEvent({ type: 'chunk', text: json.message.content });
-                            }
-                            if (json.done) {
-                                sendEvent({ type: 'done' });
-                            }
-                        } catch {
-                            // Malformed JSON line — skip
-                        }
+                            const json = JSON.parse(line) as { message?: { content?: string }; done?: boolean };
+                            if (json.message?.content) sendEvent({ type: 'chunk', text: json.message.content });
+                            if (json.done)              sendEvent({ type: 'done' });
+                        } catch { /* malformed line */ }
                     }
                 }
 
+                // flush remaining buffer
                 if (buffer.trim()) {
                     try {
-                        const json = JSON.parse(buffer) as {
-                            message?: { content?: string };
-                            done?: boolean;
-                        };
-                        if (json.message?.content) {
-                            sendEvent({ type: 'chunk', text: json.message.content });
-                        }
-                    } catch {
-                        // Ignore
-                    }
+                        const json = JSON.parse(buffer) as { message?: { content?: string } };
+                        if (json.message?.content) sendEvent({ type: 'chunk', text: json.message.content });
+                    } catch { /* ignore */ }
                 }
 
                 sendEvent({ type: 'done' });
@@ -447,35 +342,26 @@ Rules:
             } finally {
                 res.end();
             }
-
             return;
         }
 
-        // ── 4b. Non-streaming response via Ollama ──────────────────────────────────
+        // ── 4b. Non-streaming ─────────────────────────────────────────────────
         const ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
-            method: 'POST',
+            method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                model,
-                messages,
-                stream: false,
-                options: { temperature: 0.2 },
-            }),
+            body:    JSON.stringify({ model, messages, stream: false, options: { temperature: 0.2 } }),
         });
 
         if (!ollamaRes.ok) {
-            const errBody = await ollamaRes.text();
-            throw new Error(`Ollama chat failed (${ollamaRes.status}): ${errBody}`);
+            throw new Error(`Ollama chat failed (${ollamaRes.status}): ${await ollamaRes.text()}`);
         }
 
-        const ollamaData = await ollamaRes.json() as {
-            message?: { content?: string };
-        };
-
+        const ollamaData = await ollamaRes.json() as { message?: { content?: string } };
         res.json({ answer: ollamaData.message?.content ?? '', sources });
+
     } catch (error: any) {
         console.error('Error in /ask:', error);
-        res.status(500).json({ error: 'Failed to process question' });
+        res.status(500).json({ error: 'Failed to process question', detail: error.message });
     }
 });
 
@@ -487,11 +373,6 @@ Rules:
  *   post:
  *     tags: [Files]
  *     summary: Trigger (or re-trigger) embedding for a file
- *     description: |
- *       Chunks the file's extracted text and embeds each chunk using the configured
- *       Ollama embedding model. Existing chunks are replaced.
- *
- *       The file must have already had text extracted (extractionStatus = "completed").
  *     security:
  *       - apiKey: []
  *     parameters:
@@ -503,23 +384,15 @@ Rules:
  *     responses:
  *       200:
  *         description: Embedding result
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 fileId:          { type: string }
- *                 embeddingStatus: { type: string }
- *                 chunksCreated:   { type: integer }
  *       400:
- *         description: No extracted text available or OLLAMA_URL not set
+ *         description: No extracted text or OLLAMA_URL not set
  *       404:
  *         $ref: '#/components/responses/NotFound'
  */
 router.post('/:id/embed', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
     try {
         const orgId = req.orgId!;
-        const id = req.params.id as string;
+        const id    = req.params.id as string;
 
         if (!process.env.OLLAMA_URL) {
             res.status(400).json({ error: 'OLLAMA_URL must be configured to use embeddings' });
@@ -527,11 +400,7 @@ router.post('/:id/embed', requireScope('write'), async (req: ApiKeyRequest, res:
         }
 
         const [file] = await db
-            .select({
-                id: files.id,
-                extractedText: files.extractedText,
-                embeddingStatus: files.embeddingStatus,
-            })
+            .select({ id: files.id, extractedText: files.extractedText, embeddingStatus: files.embeddingStatus })
             .from(files)
             .where(and(eq(files.id, id), eq(files.orgId, orgId), isNull(files.deletedAt)));
 
@@ -548,20 +417,20 @@ router.post('/:id/embed', requireScope('write'), async (req: ApiKeyRequest, res:
         }
 
         const result = await embedFile({
-            fileId: file.id,
+            fileId:        file.id,
             orgId,
             extractedText: file.extractedText,
-            replace: true,
+            replace:       true,
         });
 
         res.json({
-            fileId: file.id,
+            fileId:          file.id,
             embeddingStatus: result.skipped ? 'skipped' : 'completed',
-            chunksCreated: result.chunksCreated,
+            chunksCreated:   result.chunksCreated,
         });
     } catch (error: any) {
         console.error('Error embedding file:', error);
-        res.status(500).json({ error: 'Embedding failed' });
+        res.status(500).json({ error: 'Embedding failed', detail: error.message });
     }
 });
 

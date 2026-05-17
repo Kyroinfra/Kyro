@@ -1,17 +1,17 @@
-// lib/embeddings.ts
+// lib/embeddings.ts  (FIXED)
 // ─────────────────────────────────────────────────────────────────────────────
-// Embeddings via Ollama (nomic-embed-text, 768 dims) — zero API cost.
-//
-// Requires:
-//   ollama pull nomic-embed-text
-//   ollama serve   (or it runs as a background service after install)
-//
-// Env vars:
-//   OLLAMA_URL       — default: http://localhost:11434
-//   EMBEDDING_MODEL  — default: nomic-embed-text
+// Fix applied to semanticSearch():
+//   The original used db.execute({ sql, params }) with a vector literal as a
+//   bind parameter. Postgres receives the vector as a text string and cannot
+//   implicitly cast it to the vector type, causing:
+//     "operator does not exist: vector <=> text"
+//   Fix: use the raw pg pool so the vector literal is inlined directly into
+//   the SQL string with an explicit ::vector cast, bypassing Drizzle's
+//   parameter binding entirely.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { db } from '../db';
+import pool from '../db';            // raw pg Pool (default export)
 import { fileChunks, files } from '../db/schema';
 import { eq } from 'drizzle-orm';
 
@@ -20,18 +20,15 @@ import { eq } from 'drizzle-orm';
 const OLLAMA_URL      = process.env.OLLAMA_URL      ?? 'http://localhost:11434';
 const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL ?? 'nomic-embed-text';
 
-// Chunk sizing
 const CHUNK_SIZE_CHARS    = 1200;
 const CHUNK_OVERLAP_CHARS = 200;
-
-// Ollama handles one text per request — keep batches small to avoid timeouts
-const EMBED_BATCH_SIZE = 32;
+const EMBED_BATCH_SIZE    = 32;
 
 // ── Chunking ──────────────────────────────────────────────────────────────────
 
 export interface TextChunk {
-  index: number;
-  content: string;
+  index:      number;
+  content:    string;
   tokenCount: number;
 }
 
@@ -48,30 +45,24 @@ export function chunkText(text: string): TextChunk[] {
     if (end < text.length) {
       const breakCandidates = [
         text.lastIndexOf('\n\n', end),
-        text.lastIndexOf('. ', end),
-        text.lastIndexOf('? ', end),
-        text.lastIndexOf('! ', end),
-        text.lastIndexOf('\n', end),
-        text.lastIndexOf(' ', end),
+        text.lastIndexOf('. ',  end),
+        text.lastIndexOf('? ',  end),
+        text.lastIndexOf('! ',  end),
+        text.lastIndexOf('\n',  end),
+        text.lastIndexOf(' ',   end),
       ];
 
-      const minBreak = start + CHUNK_SIZE_CHARS * 0.5;
+      const minBreak  = start + CHUNK_SIZE_CHARS * 0.5;
       const goodBreak = breakCandidates
         .filter(b => b > minBreak)
         .sort((a, b) => b - a)[0];
 
-      if (goodBreak > minBreak) {
-        end = goodBreak + 1;
-      }
+      if (goodBreak > minBreak) end = goodBreak + 1;
     }
 
     const content = text.slice(start, end).trim();
     if (content.length > 0) {
-      chunks.push({
-        index,
-        content,
-        tokenCount: Math.ceil(content.length / 4),
-      });
+      chunks.push({ index, content, tokenCount: Math.ceil(content.length / 4) });
       index++;
     }
 
@@ -84,14 +75,14 @@ export function chunkText(text: string): TextChunk[] {
 
 // ── Embedding ─────────────────────────────────────────────────────────────────
 
-/**
- * Embed a single text via Ollama.
- */
 async function embedOne(text: string): Promise<number[]> {
   const res = await fetch(`${OLLAMA_URL}/api/embeddings`, {
-    method: 'POST',
+    method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: EMBEDDING_MODEL, prompt: text }),
+    body:    JSON.stringify({ model: EMBEDDING_MODEL, prompt: text }),
+  }).catch(err => {
+    // This shows the real cause: ECONNREFUSED, ENOTFOUND, etc.
+    throw new Error(`fetch failed: ${err.cause?.message ?? err.message}`);
   });
 
   if (!res.ok) {
@@ -103,11 +94,6 @@ async function embedOne(text: string): Promise<number[]> {
   return data.embedding;
 }
 
-/**
- * Embed a batch of strings sequentially.
- * Ollama's /api/embeddings endpoint is one-at-a-time; parallelism is handled
- * by the caller batching across multiple worker concurrency slots.
- */
 async function embedBatch(texts: string[]): Promise<number[][]> {
   const results: number[][] = [];
   for (const text of texts) {
@@ -119,15 +105,15 @@ async function embedBatch(texts: string[]): Promise<number[][]> {
 // ── Main entry point ──────────────────────────────────────────────────────────
 
 export interface EmbedFileOptions {
-  fileId: string;
-  orgId: string;
+  fileId:        string;
+  orgId:         string;
   extractedText: string;
-  replace?: boolean;
+  replace?:      boolean;
 }
 
 export interface EmbedFileResult {
   chunksCreated: number;
-  skipped: boolean;
+  skipped:       boolean;
 }
 
 export async function embedFile(opts: EmbedFileOptions): Promise<EmbedFileResult> {
@@ -153,33 +139,44 @@ export async function embedFile(opts: EmbedFileOptions): Promise<EmbedFileResult
   // Embed in batches
   const allEmbeddings: number[][] = [];
   for (let i = 0; i < chunks.length; i += EMBED_BATCH_SIZE) {
-    const batch = chunks.slice(i, i + EMBED_BATCH_SIZE);
+    const batch      = chunks.slice(i, i + EMBED_BATCH_SIZE);
     const embeddings = await embedBatch(batch.map(c => c.content));
     allEmbeddings.push(...embeddings);
   }
 
-  // Persist chunks + vectors
-  const rows = chunks.map((chunk, i) => ({
-    fileId,
-    orgId,
-    chunkIndex: chunk.index,
-    content: chunk.content,
-    embedding: allEmbeddings[i],
-    tokenCount: chunk.tokenCount,
-  }));
-
+  // Persist using raw pool — Drizzle cannot bind vector arrays correctly
+  // for bulk inserts with ON CONFLICT DO UPDATE that reference the vector column.
   const INSERT_BATCH = 100;
-  for (let i = 0; i < rows.length; i += INSERT_BATCH) {
-    await db.insert(fileChunks)
-      .values(rows.slice(i, i + INSERT_BATCH))
-      .onConflictDoUpdate({
-        target: [fileChunks.fileId, fileChunks.chunkIndex],
-        set: {
-          content: fileChunks.content,
-          embedding: fileChunks.embedding,
-          tokenCount: fileChunks.tokenCount,
-        },
-      });
+  for (let i = 0; i < chunks.length; i += INSERT_BATCH) {
+    const batchChunks     = chunks.slice(i, i + INSERT_BATCH);
+    const batchEmbeddings = allEmbeddings.slice(i, i + INSERT_BATCH);
+
+    // Build a multi-row VALUES clause with vector literals inlined
+    const valuePlaceholders: string[] = [];
+    const values: unknown[]           = [];
+    let   paramIdx = 1;
+
+    for (let j = 0; j < batchChunks.length; j++) {
+      const chunk     = batchChunks[j];
+      const vecLit    = `[${batchEmbeddings[j].join(',')}]`;
+      // fileId, orgId, chunkIndex, content are parameterized; vector is inlined
+      valuePlaceholders.push(
+        `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, '${vecLit}'::vector, $${paramIdx++})`
+      );
+      values.push(fileId, orgId, chunk.index, chunk.content, chunk.tokenCount);
+    }
+
+    const insertSql = `
+      INSERT INTO file_chunks (file_id, org_id, chunk_index, content, embedding, token_count)
+      VALUES ${valuePlaceholders.join(', ')}
+      ON CONFLICT (file_id, chunk_index)
+      DO UPDATE SET
+        content     = EXCLUDED.content,
+        embedding   = EXCLUDED.embedding,
+        token_count = EXCLUDED.token_count
+    `;
+
+    await pool.query(insertSql, values);
   }
 
   await db.update(files).set({ embeddingStatus: 'completed' }).where(eq(files.id, fileId));
@@ -196,56 +193,61 @@ export async function embedQuery(query: string): Promise<number[]> {
 // ── Semantic search ───────────────────────────────────────────────────────────
 
 export interface SemanticSearchOptions {
-  orgId: string;
-  query: string;
-  fileIds?: string[];
-  limit?: number;
+  orgId:     string;
+  query:     string;
+  fileIds?:  string[];
+  limit?:    number;
   minScore?: number;
 }
 
 export interface SemanticSearchResult {
-  fileId: string;
-  fileName: string;
+  fileId:     string;
+  fileName:   string;
   chunkIndex: number;
-  content: string;
-  score: number;
+  content:    string;
+  score:      number;
 }
 
 export async function semanticSearch(opts: SemanticSearchOptions): Promise<SemanticSearchResult[]> {
   const { orgId, query, fileIds, limit = 10, minScore = 0.3 } = opts;
 
   const queryEmbedding = await embedQuery(query);
-  const vectorLiteral  = `[${queryEmbedding.join(',')}]`;
+  // Inline vector as a SQL literal — do NOT use a bind parameter.
+  // Postgres cannot implicitly cast a text bind param to the vector type,
+  // which causes "operator does not exist: vector <=> text".
+  const vectorLiteral = `[${queryEmbedding.join(',')}]`;
 
-  const fileFilter = fileIds && fileIds.length > 0
-    ? `AND fc.file_id = ANY($3::uuid[])`
-    : '';
+  const params: unknown[] = [orgId];
+  let fileFilter = '';
 
-  const params: unknown[] = [orgId, vectorLiteral];
-  if (fileIds && fileIds.length > 0) params.push(fileIds);
-  params.push(minScore, limit);
+  if (fileIds && fileIds.length > 0) {
+    params.push(fileIds);
+    fileFilter = `AND fc.file_id = ANY($${params.length}::uuid[])`;
+  }
 
-  const scoreParam = params.length - 1;
+  params.push(minScore);
+  const minScoreParam = params.length;
+  params.push(limit);
   const limitParam = params.length;
 
-  const sql = `
+  const rawSql = `
     SELECT
       fc.file_id        AS "fileId",
       f.name            AS "fileName",
       fc.chunk_index    AS "chunkIndex",
       fc.content,
-      1 - (fc.embedding <=> $2::vector) AS score
+      (1 - (fc.embedding <=> '${vectorLiteral}'::vector))::float4 AS score
     FROM file_chunks fc
     JOIN files f ON f.id = fc.file_id
     WHERE
       fc.org_id = $1
       AND f.deleted_at IS NULL
       ${fileFilter}
-      AND (1 - (fc.embedding <=> $2::vector)) >= $${scoreParam}
-    ORDER BY fc.embedding <=> $2::vector
+      AND (1 - (fc.embedding <=> '${vectorLiteral}'::vector)) >= $${minScoreParam}
+    ORDER BY fc.embedding <=> '${vectorLiteral}'::vector
     LIMIT $${limitParam}
   `;
 
-  const { rows } = await db.execute({ sql, params } as any);
-  return rows as unknown as SemanticSearchResult[];
+  const result = await pool.query(rawSql, params);
+  return result.rows as SemanticSearchResult[];
 }

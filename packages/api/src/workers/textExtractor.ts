@@ -1,16 +1,18 @@
-// workers/textExtractor.ts  (full replacement)
+// workers/textExtractor.ts  (FIXED)
 // ─────────────────────────────────────────────────────────────────────────────
-// Changes vs. original:
-//   • After successful text extraction, calls embedFile() to chunk + embed the
-//     document and store vectors in file_chunks.
-//   • Embedding failures are non-fatal: the job still succeeds, and the file's
-//     embeddingStatus is set to 'failed' so operators can retry.
+// Fixes applied:
+//   1. OLLAMA_URL guard was inverted — it only skipped embedding in production
+//      without the URL. Fixed to skip whenever OLLAMA_URL is not set regardless
+//      of NODE_ENV, so dev environments don't silently fail trying to hit a
+//      non-existent Ollama server.
+//   2. attempts update uses a plain increment instead of db.$count() which
+//      was doing a COUNT(*) subquery instead of incrementing the column.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { Worker, UnrecoverableError } from 'bullmq';
 import { db } from '../db';
 import { files, textExtractionJobs } from '../db/schema';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { getFilePath } from '../lib/storage';
 import { extractText } from '../lib/extractors';
 import { embedFile } from '../lib/embeddings';
@@ -19,15 +21,14 @@ import { getBullMQRedis, getRedis } from '../db/redis';
 import fs from 'fs';
 
 interface TextExtractionJobData {
-  fileId: string;
+  fileId:     string;
   storageKey: string;
-  mimeType: string;
-  jobId: string;
-  orgId: string;
+  mimeType:   string;
+  jobId:      string;
+  orgId:      string;
 }
 
 // ── Startup recovery ──────────────────────────────────────────────────────────
-// Reset jobs that were left as 'processing' from a previous worker crash.
 
 async function recoverStuckJobs(): Promise<void> {
   try {
@@ -47,21 +48,20 @@ async function recoverStuckJobs(): Promise<void> {
 
 // ── Job processor ─────────────────────────────────────────────────────────────
 
-async function processTextExtractionJob(job: { data: TextExtractionJobData }): Promise<void> {
+async function processTextExtractionJob(job: { data: TextExtractionJobData; attemptsMade: number }): Promise<void> {
   const { fileId, storageKey, mimeType, jobId, orgId } = job.data;
 
-  // Guard: file must exist on disk
   const filePath = getFilePath(storageKey);
   if (!fs.existsSync(filePath)) {
     throw new UnrecoverableError(`File not found at path: ${filePath}`);
   }
 
-  // Mark job as processing
+  // Mark as processing — use sql`` increment, not db.$count() which is a COUNT subquery
   await db.update(textExtractionJobs)
     .set({
-      status: 'processing',
+      status:    'processing',
       startedAt: new Date(),
-      attempts: db.$count(textExtractionJobs, eq(textExtractionJobs.id, jobId)),
+      attempts:  sql`${textExtractionJobs.attempts} + 1`,
     })
     .where(eq(textExtractionJobs.id, jobId));
 
@@ -89,11 +89,11 @@ async function processTextExtractionJob(job: { data: TextExtractionJobData }): P
   console.log(`Worker: Text extraction completed for file ${fileId} (${extractedText.length} chars)`);
 
   // ── Step 2: Embed chunks ───────────────────────────────────────────────────
-  // Non-fatal: if OPENAI_API_KEY is missing or the call fails, we log and
-  // continue. The file's embeddingStatus will be left as 'pending' or 'failed'
-  // and can be retried via POST /v2/files/:id/embed.
-
-  if (!process.env.OLLAMA_URL && process.env.NODE_ENV === 'production') {
+  // FIX: skip whenever OLLAMA_URL is not set — not just in production.
+  // Previously `!process.env.OLLAMA_URL && process.env.NODE_ENV === 'production'`
+  // meant dev without Ollama would still try to call http://localhost:11434
+  // and silently fail, leaving embeddingStatus as 'failed'.
+  if (!process.env.OLLAMA_URL) {
     console.warn(`Worker: OLLAMA_URL not set — skipping embedding for file ${fileId}`);
     await db.update(files)
       .set({ embeddingStatus: 'skipped' })
@@ -109,7 +109,6 @@ async function processTextExtractionJob(job: { data: TextExtractionJobData }): P
       console.log(`Worker: Embedded ${result.chunksCreated} chunks for file ${fileId}`);
     }
   } catch (embedErr) {
-    // Don't fail the whole job — text extraction succeeded.
     console.error(`Worker: Embedding failed for file ${fileId}:`, embedErr);
     await db.update(files)
       .set({ embeddingStatus: 'failed' })
@@ -146,7 +145,7 @@ async function start() {
   worker.on('failed', async (job, error) => {
     if (!job) return;
     const maxAttempts = job.opts.attempts ?? 3;
-    const isFinal = job.attemptsMade >= maxAttempts;
+    const isFinal     = job.attemptsMade >= maxAttempts;
 
     console.error(
       `Worker: Job ${job.id} attempt ${job.attemptsMade}/${maxAttempts} failed:`,
