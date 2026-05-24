@@ -12,67 +12,8 @@ const createKeySchema = z.object({
   scopes: z.array(z.enum(['read', 'write', 'admin'])).default(['read']),
 });
 
-/**
- * @swagger
- * /keys:
- *   get:
- *     tags: [API Keys]
- *     summary: List API keys
- *     security:
- *       - bearerAuth: []
- *     x-scope: null
- *     x-body-description: null
- *     x-response-example: '[{"id":"550e8400-e29b-41d4-a716-446655440000","name":"Production Key","key_prefix":"kyr_abc123","scopes":["read","write"],"last_used_at":"2026-04-10T12:00:00Z","revoked_at":null,"created_at":"2026-04-10T12:00:00Z"}]'
- *     responses:
- *       200:
- *         description: List of API keys
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/ApiKey'
- *       401:
- *         $ref: '#/components/responses/Unauthorized'
- *   post:
- *     tags: [API Keys]
- *     summary: Create API key
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - name
- *             properties:
- *               name:
- *                 type: string
- *                 minLength: 1
- *                 maxLength: 255
- *                 description: Key name
- *               scopes:
- *                 type: array
- *                 items:
- *                   type: string
- *                   enum: [read, write, admin]
- *                 default: [read]
- *                 description: Key permissions
- *     x-scope: null
- *     x-body-description: '{ "name": "Production Key", "scopes": ["read", "write"] }'
- *     x-response-example: '{"id":"550e8400-e29b-41d4-a716-446655440000","name":"Production Key","key_prefix":"kyr_abc123","scopes":["read","write"],"key":"kyr_abc123xyz...","created_at":"2026-04-10T12:00:00Z"}'
- *     responses:
- *       201:
- *         description: API key created
- *       400:
- *         $ref: '#/components/responses/BadRequest'
- *       401:
- *         $ref: '#/components/responses/Unauthorized'
- *       403:
- *         $ref: '#/components/responses/Forbidden'
- */
+// POST / - create and returns a new API key 
+
 router.post('/', authMiddleware, requireRole('owner', 'admin'), async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
@@ -115,6 +56,8 @@ router.post('/', authMiddleware, requireRole('owner', 'admin'), async (req: Requ
   }
 });
 
+// GET / - get all keys
+
 router.get('/', authMiddleware, requireRole('owner', 'admin', 'member'), async (req: Request, res: Response) => {
   try {
     const orgId = req.user?.orgId;
@@ -148,34 +91,8 @@ router.get('/', authMiddleware, requireRole('owner', 'admin', 'member'), async (
   }
 });
 
-/**
- * @swagger
- * /keys/{id}:
- *   delete:
- *     tags: [API Keys]
- *     summary: Revoke API key
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - name: id
- *         in: path
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     x-scope: null
- *     x-body-description: null
- *     x-response-example: '{"message":"API key revoked","id":"550e8400-e29b-41d4-a716-446655440000"}'
- *     responses:
- *       200:
- *         description: Key revoked
- *       401:
- *         $ref: '#/components/responses/Unauthorized'
- *       403:
- *         $ref: '#/components/responses/Forbidden'
- *       404:
- *         $ref: '#/components/responses/NotFound'
- */
+// DELETE /:id - does not hard delete but set's revoked at 
+
 router.delete('/:id', authMiddleware, requireRole('owner', 'admin'), async (req: Request, res: Response) => {
   try {
     const orgId = req.user?.orgId;

@@ -2,7 +2,7 @@ import { Worker, UnrecoverableError } from 'bullmq';
 import { getBullMQRedis } from '../db/redis';
 import { db } from '../db';
 import { webhookDeliveries } from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { signPayload, WebhookPayload } from '../lib/webhook';
 
 interface DeliveryJobData {
@@ -56,7 +56,7 @@ async function deliver(job: { data: DeliveryJobData }): Promise<void> {
     .set({
       status: statusCode >= 200 && statusCode < 300 ? 'delivered' : 'failed',
       statusCode,
-      attempts: db.$count(webhookDeliveries, eq(webhookDeliveries.id, deliveryId)),
+      attempts: sql`${webhookDeliveries.attempts} + 1`,
       lastAttemptAt: new Date(),
     })
     .where(eq(webhookDeliveries.id, deliveryId));

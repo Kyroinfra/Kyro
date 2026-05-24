@@ -8,97 +8,9 @@ import { saveFile, deleteFile, getFilePath } from '../../lib/storage';
 
 const router = Router();
 
-/**
- * @swagger
- * /files:
- *   get:
- *     tags: [Files]
- *     summary: List files
- *     security:
- *       - apiKey: []
- *     parameters:
- *       - name: limit
- *         in: query
- *         schema:
- *           type: integer
- *           default: 100
- *           maximum: 100
- *         description: Number of files to return (max 100)
- *       - name: cursor
- *         in: query
- *         schema:
- *           type: string
- *         description: Pagination cursor from previous response's nextCursor
- *     x-scope: read
- *     x-body-description: null
- *     x-response-example: '{"data":[{"id":"550e8400-e29b-41d4-a716-446655440000","name":"document.pdf","mimeType":"application/pdf","sizeBytes":1024000,"createdAt":"2026-04-10T12:00:00Z"}],"pagination":{"limit":100,"hasMore":false,"nextCursor":null}}'
- *     responses:
- *       200:
- *         description: Paginated list of files
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 data:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/File'
- *                 pagination:
- *                   type: object
- *                   properties:
- *                     limit:
- *                       type: integer
- *                     hasMore:
- *                       type: boolean
- *                     nextCursor:
- *                       type: string
- *                       nullable: true
- *                       description: Pass this as the cursor param in your next request
- *       400:
- *         description: Invalid cursor
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
- *       401:
- *         $ref: '#/components/responses/Unauthorized'
- *       403:
- *         $ref: '#/components/responses/Forbidden'
- *   post:
- *     tags: [Files]
- *     summary: Upload file
- *     security:
- *       - apiKey: []
- *     requestBody:
- *       required: true
- *       content:
- *         multipart/form-data:
- *           schema:
- *             type: object
- *             required:
- *               - file
- *             properties:
- *               file:
- *                 type: string
- *                 format: binary
- *                 description: File to upload
- *     x-scope: write
- *     x-body-description: file — File (multipart/form-data)
- *     x-response-example: '{"id":"550e8400-e29b-41d4-a716-446655440000","name":"document.pdf","mimeType":"application/pdf","sizeBytes":1024000,"createdAt":"2026-04-10T12:00:00Z"}'
- *     responses:
- *       201:
- *         description: File uploaded
- *       400:
- *         $ref: '#/components/responses/BadRequest'
- *       401:
- *         $ref: '#/components/responses/Unauthorized'
- *       403:
- *         $ref: '#/components/responses/Forbidden'
- *       413:
- *         $ref: '#/components/responses/PayloadTooLarge'
- */
 router.use(apiKeyAuthMiddleware);
+
+// POST / - upload a file
 
 router.post('/', requireScope('write'), upload.single('file'), async (req: ApiKeyRequest, res: Response) => {
   try {
@@ -161,63 +73,8 @@ router.post('/', requireScope('write'), upload.single('file'), async (req: ApiKe
   }
 });
 
-/**
- * @swagger
- * /files/{id}:
- *   get:
- *     tags: [Files]
- *     summary: Download file
- *     security:
- *       - apiKey: []
- *     parameters:
- *       - name: id
- *         in: path
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     x-scope: read
- *     x-body-description: null
- *     x-response-example: 'Binary file data with appropriate Content-Type header.'
- *     responses:
- *       200:
- *         description: File content
- *         content:
- *           application/octet-stream:
- *             schema:
- *               type: string
- *               format: binary
- *       401:
- *         $ref: '#/components/responses/Unauthorized'
- *       403:
- *         $ref: '#/components/responses/Forbidden'
- *       404:
- *         $ref: '#/components/responses/NotFound'
- *   delete:
- *     tags: [Files]
- *     summary: Delete file
- *     security:
- *       - apiKey: []
- *     parameters:
- *       - name: id
- *         in: path
- *         required: true
- *         schema:
- *           type: string
- *         description: File UUID
- *     x-scope: write
- *     x-body-description: null
- *     x-response-example: '{"message":"File deleted","id":"550e8400-e29b-41d4-a716-446655440000"}'
- *     responses:
- *       200:
- *         description: File deleted
- *       401:
- *         $ref: '#/components/responses/Unauthorized'
- *       403:
- *         $ref: '#/components/responses/Forbidden'
- *       404:
- *         $ref: '#/components/responses/NotFound'
- */
+// GET / - get list of files
+
 router.get('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
   try {
     const orgId = req.orgId!;
@@ -272,6 +129,8 @@ router.get('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) 
   }
 });
 
+// GET /:id - download a file
+
 router.get('/:id', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
   try {
     const orgId = req.orgId!;
@@ -306,6 +165,8 @@ router.get('/:id', requireScope('read'), async (req: ApiKeyRequest, res: Respons
     res.status(500).json({ error: 'Failed to download file' });
   }
 });
+
+// DELETE /:id - delete a file
 
 router.delete('/:id', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
   try {

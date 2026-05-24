@@ -1,15 +1,3 @@
-// routes/v2/semantic.ts  (FIXED)
-// ─────────────────────────────────────────────────────────────────────────────
-// Fixes applied:
-//   1. Replaced sql`` + sql.raw() vector interpolation with raw pool.query()
-//      calls. Drizzle's sql tag re-encodes the value as a bind parameter,
-//      stripping the ::vector cast and breaking all <=> operations.
-//   2. File ID arrays are passed as proper PG array parameters, not inlined
-//      via sql.raw() (which was a SQL injection risk).
-//   3. db.execute() result handling made consistent (some Drizzle versions
-//      return the array directly, others wrap it in { rows }).
-// ─────────────────────────────────────────────────────────────────────────────
-
 import { Router, Response } from 'express';
 import { db } from '../../db';
 import pool from '../../db';           // raw pg Pool — default export
@@ -29,40 +17,6 @@ router.use((req, res, next) => {
 const OLLAMA_URL = process.env.OLLAMA_URL ?? 'http://localhost:11434';
 const CHAT_MODEL = process.env.CHAT_MODEL ?? 'llama3.2';
 
-// ── GET /semantic-search ───────────────────────────────────────────────────────
-
-/**
- * @swagger
- * /files/semantic-search:
- *   get:
- *     tags: [Files]
- *     summary: Semantic (vector) search over extracted file content
- *     security:
- *       - apiKey: []
- *     parameters:
- *       - name: q
- *         in: query
- *         required: true
- *         schema: { type: string }
- *       - name: limit
- *         in: query
- *         schema: { type: integer, default: 10, maximum: 50 }
- *       - name: min_score
- *         in: query
- *         schema: { type: number, default: 0.3 }
- *       - name: file_ids
- *         in: query
- *         schema: { type: string }
- *         description: Comma-separated UUIDs
- *     x-scope: read
- *     responses:
- *       200:
- *         description: Ranked list of matching chunks
- *       400:
- *         description: Missing query or OLLAMA_URL not configured
- *       401:
- *         $ref: '#/components/responses/Unauthorized'
- */
 router.get('/semantic-search', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
     try {
         const orgId = req.orgId!;
@@ -131,7 +85,7 @@ router.get('/semantic-search', requireScope('read'), async (req: ApiKeyRequest, 
     }
 });
 
-// ── POST /ask ──────────────────────────────────────────────────────────────────
+// POST /ask
 
 const askSchema = z.object({
     question: z.string().min(1).max(2000),
@@ -142,39 +96,6 @@ const askSchema = z.object({
     stream:   z.boolean().optional().default(true),
 });
 
-/**
- * @swagger
- * /files/ask:
- *   post:
- *     tags: [Files]
- *     summary: Ask a question over one or more files (RAG)
- *     security:
- *       - apiKey: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [question, fileIds]
- *             properties:
- *               question:  { type: string, maxLength: 2000 }
- *               fileIds:   { type: array, items: { type: string, format: uuid } }
- *               topK:      { type: integer, default: 8 }
- *               model:     { type: string, default: llama3.2 }
- *               minScore:  { type: number, default: 0.25 }
- *               stream:    { type: boolean, default: true }
- *     x-scope: read
- *     responses:
- *       200:
- *         description: SSE stream (stream=true) or JSON (stream=false)
- *       400:
- *         $ref: '#/components/responses/BadRequest'
- *       401:
- *         $ref: '#/components/responses/Unauthorized'
- *       422:
- *         description: None of the requested files have embeddings yet
- */
 router.post('/ask', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
     try {
         const orgId = req.orgId!;
@@ -365,30 +286,8 @@ Rules:
     }
 });
 
-// ── POST /files/:id/embed ──────────────────────────────────────────────────────
+// POST /files/:id/embed
 
-/**
- * @swagger
- * /files/{id}/embed:
- *   post:
- *     tags: [Files]
- *     summary: Trigger (or re-trigger) embedding for a file
- *     security:
- *       - apiKey: []
- *     parameters:
- *       - name: id
- *         in: path
- *         required: true
- *         schema: { type: string, format: uuid }
- *     x-scope: write
- *     responses:
- *       200:
- *         description: Embedding result
- *       400:
- *         description: No extracted text or OLLAMA_URL not set
- *       404:
- *         $ref: '#/components/responses/NotFound'
- */
 router.post('/:id/embed', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
     try {
         const orgId = req.orgId!;
