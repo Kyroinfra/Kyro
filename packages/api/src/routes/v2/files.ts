@@ -12,54 +12,8 @@ import fs from 'fs';
 
 const router = Router();
 
-// ─── POST /files ─────────────────────────────────────────────────────────────
+// POST /files
 
-/**
- * @swagger
- * /files:
- *   post:
- *     tags: [Files]
- *     summary: Upload file (v2 — includes auto text extraction)
- *     security:
- *       - apiKey: []
- *     requestBody:
- *       required: true
- *       content:
- *         multipart/form-data:
- *           schema:
- *             type: object
- *             required: [file]
- *             properties:
- *               file:
- *                 type: string
- *                 format: binary
- *     x-scope: write
- *     responses:
- *       201:
- *         description: File uploaded. extractionStatus is "queued", "completed", "skipped", or "failed".
- *         content:
- *           application/json:
- *             schema:
- *               allOf:
- *                 - $ref: '#/components/schemas/File'
- *                 - type: object
- *                   properties:
- *                     extractionStatus:
- *                       type: string
- *                       enum: [queued, completed, skipped, failed]
- *                     extractedText:
- *                       type: string
- *                       nullable: true
- *                       description: Present only when extraction ran synchronously
- *       400:
- *         $ref: '#/components/responses/BadRequest'
- *       401:
- *         $ref: '#/components/responses/Unauthorized'
- *       403:
- *         $ref: '#/components/responses/Forbidden'
- *       413:
- *         $ref: '#/components/responses/PayloadTooLarge'
- */
 router.post(
     '/',
     requireScope('write'),
@@ -181,30 +135,8 @@ router.post(
     },
 );
 
-// ─── GET /files ───────────────────────────────────────────────────────────────
+// GET /files
 
-/**
- * @swagger
- * /files:
- *   get:
- *     tags: [Files]
- *     summary: List files (v2 — includes extractionStatus per file)
- *     security:
- *       - apiKey: []
- *     parameters:
- *       - name: limit
- *         in: query
- *         schema: { type: integer, default: 100, maximum: 100 }
- *       - name: cursor
- *         in: query
- *         schema: { type: string }
- *     x-scope: read
- *     responses:
- *       200:
- *         description: Paginated list of files with extraction status
- *       401:
- *         $ref: '#/components/responses/Unauthorized'
- */
 router.get('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
     try {
         const orgId = req.orgId!;
@@ -285,63 +217,9 @@ router.get('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) 
     }
 });
 
-// ─── GET /files/search ────────────────────────────────────────────────────────
+// GET /files/search
 // IMPORTANT: must be registered BEFORE /:id so Express doesn't swallow it.
 
-/**
- * @swagger
- * /files/search:
- *   get:
- *     tags: [Files]
- *     summary: Full-text search over extracted file content
- *     security:
- *       - apiKey: []
- *     parameters:
- *       - name: q
- *         in: query
- *         required: true
- *         schema: { type: string }
- *         description: Search query (supports phrases with quotes, e.g. "invoice total")
- *       - name: limit
- *         in: query
- *         schema: { type: integer, default: 20, maximum: 100 }
- *       - name: cursor
- *         in: query
- *         schema: { type: string }
- *         description: Pagination cursor from previous response
- *     x-scope: read
- *     responses:
- *       200:
- *         description: Ranked search results
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 data:
- *                   type: array
- *                   items:
- *                     allOf:
- *                       - $ref: '#/components/schemas/File'
- *                       - type: object
- *                         properties:
- *                           rank:
- *                             type: number
- *                             description: Relevance score (higher = more relevant)
- *                           headline:
- *                             type: string
- *                             description: Snippet with matched terms highlighted in <mark> tags
- *                 pagination:
- *                   type: object
- *                   properties:
- *                     limit: { type: integer }
- *                     hasMore: { type: boolean }
- *                     nextCursor: { type: string, nullable: true }
- *       400:
- *         description: Missing or empty search query
- *       401:
- *         $ref: '#/components/responses/Unauthorized'
- */
 router.get('/search', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
     try {
         const orgId = req.orgId!;
@@ -427,43 +305,10 @@ router.get('/search', requireScope('read'), async (req: ApiKeyRequest, res: Resp
     }
 });
 
-// ─── GET /files/:id/text ──────────────────────────────────────────────────────
+// GET /files/:id/text
 // IMPORTANT: /:id/text and /:id/extract must be registered BEFORE /:id,
 // otherwise /:id matches first and Express never reaches the sub-path handlers.
 
-/**
- * @swagger
- * /files/{id}/text:
- *   get:
- *     tags: [Files]
- *     summary: Get extracted text for a file
- *     security:
- *       - apiKey: []
- *     parameters:
- *       - name: id
- *         in: path
- *         required: true
- *         schema: { type: string, format: uuid }
- *     x-scope: read
- *     responses:
- *       200:
- *         description: Extracted text or job status
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 fileId:
- *                   type: string
- *                 extractionStatus:
- *                   type: string
- *                   enum: [completed, pending, processing, failed, skipped]
- *                 extractedText:
- *                   type: string
- *                   nullable: true
- *       404:
- *         $ref: '#/components/responses/NotFound'
- */
 router.get('/:id/text', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
     try {
         const orgId = req.orgId!;
@@ -523,32 +368,8 @@ router.get('/:id/text', requireScope('read'), async (req: ApiKeyRequest, res: Re
     }
 });
 
-// ─── POST /files/:id/extract ──────────────────────────────────────────────────
+// POST /files/:id/extract
 
-/**
- * @swagger
- * /files/{id}/extract:
- *   post:
- *     tags: [Files]
- *     summary: Trigger text extraction for a file
- *     security:
- *       - apiKey: []
- *     parameters:
- *       - name: id
- *         in: path
- *         required: true
- *         schema: { type: string, format: uuid }
- *     x-scope: write
- *     responses:
- *       202:
- *         description: Extraction queued (async) or completed (sync fallback)
- *       400:
- *         description: File type not supported for extraction
- *       404:
- *         $ref: '#/components/responses/NotFound'
- *       409:
- *         description: Extraction already in progress
- */
 router.post('/:id/extract', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
     try {
         const orgId = req.orgId!;
@@ -658,8 +479,7 @@ router.post('/:id/extract', requireScope('write'), async (req: ApiKeyRequest, re
     }
 });
 
-// ─── GET /files/:id ───────────────────────────────────────────────────────────
-// Download file binary. Registered AFTER all named and sub-path routes.
+// GET /files/:id
 
 router.get('/:id', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
     try {
@@ -701,7 +521,7 @@ router.get('/:id', requireScope('read'), async (req: ApiKeyRequest, res: Respons
     }
 });
 
-// ─── DELETE /files/:id ────────────────────────────────────────────────────────
+// DELETE /files/:id
 
 router.delete('/:id', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
     try {

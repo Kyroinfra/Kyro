@@ -4,7 +4,7 @@ import authRouter    from '../v1/auth';
 import orgRouter     from '../v1/org';
 import keysRouter    from '../v1/keys';
 import filesRouter   from './files';
-import semanticRouter from './semantic';   // ← NEW
+import semanticRouter from './semantic';
 import usageRouter   from '../v1/usage';
 import webhookRouter from '../v1/webhook';
 import { usageLoggerMiddleware } from '../../middleware/usageLogger';

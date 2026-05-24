@@ -6,27 +6,8 @@ import { inviteSchema, InviteInput } from '../../validations/auth';
 
 const router = Router();
 
-/**
- * @swagger
- * /org:
- *   get:
- *     tags: [Organisation]
- *     summary: Get current organisation
- *     security:
- *       - bearerAuth: []
- *     x-scope: null
- *     x-body-description: null
- *     x-response-example: '{"id":"550e8400-e29b-41d4-a716-446655440000","name":"Acme Inc","slug":"acme-inc","plan":"free","createdAt":"2026-04-10T12:00:00Z"}'
- *     responses:
- *       200:
- *         description: Organisation details
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Organisation'
- *       401:
- *         $ref: '#/components/responses/Unauthorized'
- */
+// GET / - get org details
+
 router.get('/', authMiddleware, async (req: Request, res: Response) => {
   try {
     const orgs = await query<{
@@ -58,70 +39,8 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
   }
 });
 
-/**
- * @swagger
- * /org/members:
- *   get:
- *     tags: [Organisation]
- *     summary: List organisation members
- *     security:
- *       - bearerAuth: []
- *     x-scope: null
- *     x-body-description: null
- *     x-response-example: '[{"id":"550e8400-e29b-41d4-a716-446655440000","email":"admin@acme.com","role":"owner","createdAt":"2026-04-10T12:00:00Z"}]'
- *     responses:
- *       200:
- *         description: List of members
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/Member'
- *       401:
- *         $ref: '#/components/responses/Unauthorized'
- *   post:
- *     tags: [Organisation]
- *     summary: Invite new member
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - email
- *               - password
- *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *               password:
- *                 type: string
- *                 format: password
- *               role:
- *                 type: string
- *                 enum: [owner, admin, member]
- *                 default: member
- *     x-scope: null
- *     x-body-description: '{ "email": "user@acme.com", "password": "secure123", "role": "member" }'
- *     x-response-example: '{"id":"550e8400-e29b-41d4-a716-446655440000","email":"user@acme.com","role":"member"}'
- *     responses:
- *       201:
- *         description: Member invited
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Member'
- *       400:
- *         $ref: '#/components/responses/BadRequest'
- *       401:
- *         $ref: '#/components/responses/Unauthorized'
- *       403:
- *         $ref: '#/components/responses/Forbidden'
- */
+// GET /members - get org members
+
 router.get('/members', authMiddleware, async (req: Request, res: Response) => {
   try {
     const limit = Math.min(parseInt(req.query.limit as string || '50', 10), 100);
@@ -150,6 +69,8 @@ router.get('/members', authMiddleware, async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+// POST /members - invites/creates a member with a password 
 
 router.post('/members', authMiddleware, requireRole('owner'), async (req: Request, res: Response) => {
   try {
@@ -186,34 +107,8 @@ router.post('/members', authMiddleware, requireRole('owner'), async (req: Reques
   }
 });
 
-/**
- * @swagger
- * /org/members/{id}:
- *   delete:
- *     tags: [Organisation]
- *     summary: Remove member
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - name: id
- *         in: path
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     x-scope: null
- *     x-body-description: null
- *     x-response-example: '204 No Content'
- *     responses:
- *       204:
- *         description: Member removed
- *       401:
- *         $ref: '#/components/responses/Unauthorized'
- *       403:
- *         $ref: '#/components/responses/Forbidden'
- *       404:
- *         $ref: '#/components/responses/NotFound'
- */
+// DELETE /members/:id - delete a member
+
 router.delete('/members/:id', authMiddleware, requireRole('owner', 'admin'), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
