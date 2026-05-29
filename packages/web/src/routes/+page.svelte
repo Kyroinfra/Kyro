@@ -81,17 +81,17 @@
         {
             icon: "◇",
             title: "Ask Your Documents",
-            desc: "Upload a file, ask a question, get an answer with citations.Runs against your own Ollama instance.",
+            desc: "Upload a file, ask a question, get an answer with citations. Runs against your own Ollama instance.",
         },
         {
             icon: "↑",
             title: "Semantic Search",
-            desc: "   Vector similarity search across your entire knowledge base. No embedding APIs, no third-party calls.",
+            desc: "Vector similarity search across your entire knowledge base. No embedding APIs, no third-party calls.",
         },
         {
             icon: "▤",
             title: "Self-Hosted by Design",
-            desc: " Postgres + local storage + your own LLM. One Docker Compose. Your data physically never leaves your server.",
+            desc: "Postgres + local storage + your own LLM. One Docker Compose. Your data physically never leaves your server.",
         },
         {
             icon: "⊙",
@@ -106,7 +106,6 @@
 </svelte:head>
 
 <div class="landing">
-    <!-- TODO: Remove /v2/files from steps -->
     <!-- ── Header ── -->
     <header class="header">
         <a href="/" class="logo">
@@ -126,21 +125,9 @@
         <span class="status-text">{cfg.label}</span>
         {#if status === "connected" || status === "degraded"}
             <span class="sep">·</span>
-            <span
-                >db <span
-                    class="chip chip-{health.database === 'connected'
-                        ? 'ok'
-                        : 'err'}">{health.database}</span
-                ></span
-            >
+            <span>db <span class="chip chip-{health.database === 'connected' ? 'ok' : 'err'}">{health.database}</span></span>
             <span class="sep">·</span>
-            <span
-                >redis <span
-                    class="chip chip-{health.redis === 'connected'
-                        ? 'ok'
-                        : 'err'}">{health.redis}</span
-                ></span
-            >
+            <span>redis <span class="chip chip-{health.redis === 'connected' ? 'ok' : 'err'}">{health.redis}</span></span>
             <span class="sep">·</span>
             <span class="muted">up {formatUptime(health.uptime ?? 0)}</span>
         {/if}
@@ -152,20 +139,15 @@
             <div class="hero-inner">
                 <div class="terminal-line">
                     <span class="term-prompt">$</span>
-                    <span class="term-cmd"
-                        >kyro ask "what's the renewal date?" --files contracts/</span
-                    >
+                    <span class="term-cmd">kyro ask "what's the renewal date?" --files contracts/</span>
                     <span class="term-cursor"></span>
                 </div>
 
                 <h1 class="hero-title">
-                    <!-- The API platform<br /> -->
-                    <!-- teams <span class="accent">actually ship with.</span> -->
                     RAG without the data
                     <span class="accent">leak.</span>
                 </h1>
 
-                <!-- TODO: Codebases -->
                 <p class="hero-sub">
                     Upload PDFs, contracts, or codebases — then ask questions in
                     plain English. Everything runs on your infrastructure.
@@ -173,9 +155,7 @@
                 </p>
 
                 <div class="hero-cta">
-                    <a href="/register" class="cta-primary"
-                        >start building free →</a
-                    >
+                    <a href="/register" class="cta-primary">start building free →</a>
                     <a href="/docs" class="cta-ghost">read the docs</a>
                 </div>
 
@@ -200,50 +180,22 @@
                     <div class="code-dots">
                         <span></span><span></span><span></span>
                     </div>
-                    <span class="code-title">quickstart.ts</span>
+                    <span class="code-title">ask.ts</span>
                 </div>
-                <pre class="code-body"><span class="c-kw">import</span> <span
-                        class="c-brace">&#123;</span
-                    > KyroClient <span class="c-brace">&#125;</span> <span
-                        class="c-kw">from</span
-                    > <span class="c-str">"@kyro/sdk"</span><span class="c-dim"
-                        >;</span
-                    >
+                <pre class="code-body"><span class="c-comment">// Ask a question across your documents</span>
+<span class="c-kw">const</span> res <span class="c-dim">=</span> <span class="c-kw">await</span> <span class="c-fn">fetch</span><span class="c-brace">(</span><span class="c-str">"/api/v2/files/ask"</span><span class="c-dim">,</span> <span class="c-brace">{'{'}</span>
+  method<span class="c-dim">:</span> <span class="c-str">"POST"</span><span class="c-dim">,</span>
+  headers<span class="c-dim">:</span> <span class="c-brace">{'{'}</span> <span class="c-str">"X-API-Key"</span><span class="c-dim">:</span> process<span class="c-dim">.</span>env<span class="c-dim">.</span><span class="c-prop">KYRO_KEY</span> <span class="c-brace">{'}'}</span><span class="c-dim">,</span>
+  body<span class="c-dim">:</span> <span class="c-prop">JSON</span><span class="c-dim">.</span><span class="c-fn">stringify</span><span class="c-brace">({'{'}</span>
+    question<span class="c-dim">:</span> <span class="c-str">"What are the payment terms?"</span><span class="c-dim">,</span>
+    fileIds<span class="c-dim">:</span> <span class="c-brace">[</span><span class="c-str">"uuid-1"</span><span class="c-dim">,</span> <span class="c-str">"uuid-2"</span><span class="c-brace">],</span>
+  <span class="c-brace">{'}'}</span>)<span class="c-dim">,</span>
+<span class="c-brace">{'}'}</span>)<span class="c-dim">;</span>
 
-<span class="c-kw">const</span> client <span class="c-dim">=</span> <span
-                        class="c-kw">new</span
-                    > <span class="c-fn">KyroClient</span><span class="c-brace"
-                        >(&#123;</span
-                    >
-  apiKey<span class="c-dim">:</span> process<span class="c-dim">.</span>env<span
-                        class="c-dim">.</span
-                    ><span class="c-prop">KYRO_API_KEY</span><span class="c-dim"
-                        >,</span
-                    >
-<span class="c-brace">&#125;)</span><span class="c-dim">;</span>
-
-<span class="c-comment">// Upload a file</span>
-<span class="c-kw">const</span> file <span class="c-dim">=</span> <span
-                        class="c-kw">await</span
-                    > client<span class="c-dim">.</span>files<span class="c-dim"
-                        >.</span
-                    ><span class="c-fn">upload</span><span class="c-brace"
-                        >(&#123;</span
-                    >
-  name<span class="c-dim">:</span> <span class="c-str">"report.pdf"</span><span
-                        class="c-dim">,</span
-                    >
-  data<span class="c-dim">:</span> buffer<span class="c-dim">,</span>
-<span class="c-brace">&#125;)</span><span class="c-dim">;</span>
-
-<span class="c-comment">// Get a public URL</span>
-console<span class="c-dim">.</span><span class="c-fn">log</span><span
-                        class="c-brace">(</span
-                    >file<span class="c-dim">.</span><span class="c-prop"
-                        >url</span
-                    ><span class="c-brace">)</span><span class="c-dim">;</span>
-<span class="c-success">// → https://cdn.kyro.dev/org/abc/report.pdf</span
-                    ></pre>
+<span class="c-comment">// Streams back answer + citations</span>
+<span class="c-success">// {'{'} type: "sources", sources: [...] {'}'}</span>
+<span class="c-success">// {'{'} type: "chunk", text: "According to [1]..." {'}'}</span>
+<span class="c-success">// {'{'} type: "done" {'}'}</span></pre>
             </div>
         </section>
 
@@ -287,7 +239,8 @@ console<span class="c-dim">.</span><span class="c-fn">log</span><span
             <div class="cta-inner">
                 <div class="terminal-line terminal-sm">
                     <span class="term-prompt">$</span>
-                    <span class="term-cmd">npm install @kyro/sdk</span>
+                    <!-- <span class="term-cmd">npm install @kyro/sdk</span> -->
+                    <span class="term-cmd">/ask</span>
                     <span class="term-cursor"></span>
                 </div>
                 <h2 class="cta-title">Your knowledge base. Your rules.</h2>
@@ -295,9 +248,7 @@ console<span class="c-dim">.</span><span class="c-fn">log</span><span
                     Start with the free tier. Scale when you need to.
                 </p>
                 <div class="cta-btns">
-                    <a href="/register" class="cta-primary"
-                        >create your account</a
-                    >
+                    <a href="/register" class="cta-primary">create your account</a>
                     <a href="/docs" class="cta-ghost">explore the docs →</a>
                 </div>
             </div>
