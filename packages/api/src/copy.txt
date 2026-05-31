@@ -1,0 +1,4064 @@
+# Prompt:
+this is my codebase
+
+# File collection from: /home/nyxox/Documents/Projects/Kyro/packages/api/src
+# Generated: 2026-05-31 10:08:03
+------------------------------------------------------------
+
+## config/index.ts
+
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+interface Config {
+  port: number;
+  nodeEnv: string;
+  databaseUrl: string;
+  jwtSecret: string;
+  redisUrl: string;  // make it required, not optional
+}
+
+function getRequired(key: string): string {
+  const value = process.env[key];
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${key}`);
+  }
+  return value;
+}
+
+function getRequiredAsInt(key: string): number {
+  const value = getRequired(key);
+  const parsed = parseInt(value, 10);
+  if (isNaN(parsed)) {
+    throw new Error(`Invalid integer value for ${key}: ${value}`);
+  }
+  return parsed;
+}
+
+const config: Config = {
+  port: getRequiredAsInt('PORT'),
+  nodeEnv: getRequired('NODE_ENV'),
+  databaseUrl: getRequired('DATABASE_URL'),
+  jwtSecret: getRequired('JWT_SECRET'),
+  redisUrl: process.env.REDIS_URL || '',  // optional for dev without redis
+};
+
+export default config;
+------------------------------------------------------------
+
+## db/index.ts
+
+import { Pool } from 'pg';
+import { drizzle, NodePgDatabase } from 'drizzle-orm/node-postgres';
+import config from '../config';
+import * as schema from './schema';
+
+const pool = new Pool({
+  connectionString: config.databaseUrl,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
+
+pool.on('error', (err) => {
+  console.error('Unexpected error on idle client', err);
+});
+
+export const db: NodePgDatabase<typeof schema> = drizzle(pool);
+
+export async function query<T = any>(text: string, params?: any[]): Promise<T[]> {
+  const result = await pool.query(text, params);
+  return result.rows as T[];
+}
+
+export async function queryOne<T = any>(text: string, params?: any[]): Promise<T | null> {
+  const rows = await query<T>(text, params);
+  return rows[0] || null;
+}
+
+export async function getClient() {
+  return pool.connect();
+}
+
+export async function healthCheck(): Promise<boolean> {
+  try {
+    await pool.query('SELECT 1');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export default pool;
+------------------------------------------------------------
+
+## db/migrate.ts
+
+// db/migrate.ts
+import { drizzle } from 'drizzle-orm/node-postgres';
+import { migrate } from 'drizzle-orm/node-postgres/migrator';
+import { Pool } from 'pg';
+import config from '../config';
+
+export async function runMigrations() {
+  const pool = new Pool({
+    connectionString: config.databaseUrl,
+    max: 1,
+  });
+
+  const db = drizzle(pool);
+  console.log('Running migrations...');
+  await migrate(db, { migrationsFolder: './drizzle' });
+  console.log('Migrations completed successfully');
+  await pool.end();
+}
+
+// Add this — without it, `node dist/db/migrate.js` does nothing
+if (require.main === module) {
+  runMigrations()
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error('Migration failed:', err);
+      process.exit(1);
+    });
+}
+------------------------------------------------------------
+
+## db/redis.ts
+
+import Redis from 'ioredis';
+import config from '../config';
+
+let redis: Redis | null | undefined = undefined;
+let redisAvailable = false;
+
+export function getRedis(): Redis | null {
+  if (!redis) {
+    if (!config.redisUrl) {
+      return null;
+    }
+
+    redis = new Redis(config.redisUrl, {  // ← use URL directly
+      maxRetriesPerRequest: 3,
+      connectTimeout: 5000,
+      commandTimeout: 3000,
+      retryStrategy(times: number) {
+        if (times > 3) return null;
+        return Math.min(times * 500, 2000);
+      },
+    });
+
+    redis.on('error', (err: Error) => {
+      redisAvailable = false;
+      console.error('Redis connection error:', err.message); // will now show real error
+    });
+    redis.on('connect', () => {
+      redisAvailable = true;
+      console.log('Redis connected');
+    });
+    redis.on('ready', () => {
+      redisAvailable = true;
+    });
+    redis.on('close', () => {
+      redisAvailable = false;
+    });
+  }
+  return redis;
+}
+
+// Add this alongside getRedis()
+export function getBullMQRedis(): Redis {
+  const redisUrl = config.redisUrl;
+  if (!redisUrl) {
+    throw new Error('REDIS_URL is required for BullMQ');
+  }
+
+  return new Redis(redisUrl, {
+    maxRetriesPerRequest: null,  // required by BullMQ
+    enableReadyCheck: false,     // also required by BullMQ
+  });
+}
+
+// rest of file unchanged
+
+export function isRedisAvailable(): boolean {
+  return redisAvailable && redis?.status === 'ready';
+}
+
+export async function closeRedis(): Promise<void> {
+  if (redis) {
+    await redis.quit();
+    redis = null;
+    redisAvailable = false;
+  }
+}
+
+export async function healthCheck(): Promise<boolean> {
+  try {
+    const r = getRedis();
+    if (!r) return false;
+    const result = await Promise.race([
+      r.ping(),
+      new Promise<string>((_, reject) =>
+        setTimeout(() => reject(new Error('Redis health check timeout')), 3000)
+      ),
+    ]);
+    return result === 'PONG';
+  } catch {
+    return false;
+  }
+}
+------------------------------------------------------------
+
+## db/schema.ts
+
+// db/schema.ts  (full replacement — adds vector type + fileChunks table)
+
+import {
+  pgTable,
+  uuid,
+  varchar,
+  text,
+  timestamp,
+  bigint,
+  date,
+  index,
+  uniqueIndex,
+  serial,
+  integer,
+  boolean,
+  customType,
+} from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+
+// ── Custom column types ────────────────────────────────────────────────────────
+
+const tsvector = customType<{ data: string }>({
+  dataType() { return 'tsvector'; },
+});
+
+// pgvector — fixed at 768 dims (nomic-embed-text).
+// Change the number if you switch to a different model.
+const vector = customType<{ data: number[]; driverData: string }>({
+  dataType() { return 'vector(768)'; },
+  toDriver(value: number[]): string {
+    return `[${value.join(',')}]`;
+  },
+  fromDriver(value: string): number[] {
+    return value.replace(/^\[|\]$/g, '').split(',').map(Number);
+  },
+});
+
+// ── Tables ─────────────────────────────────────────────────────────────────────
+
+export const migrations = pgTable('_migrations', {
+  id:    serial('id').primaryKey(),
+  name:  varchar('name', { length: 255 }).notNull(),
+  runAt: timestamp('run_at').defaultNow(),
+});
+
+export const organisations = pgTable('organisations', {
+  id:           uuid('id').defaultRandom().primaryKey(),
+  name:         varchar('name', { length: 255 }).notNull(),
+  slug:         varchar('slug', { length: 100 }).notNull().unique(),
+  plan:         varchar('plan', { length: 50 }).default('free'),
+  storageLimit: bigint('storage_limit', { mode: 'number' }).default(1073741824),
+  createdAt:    timestamp('created_at').defaultNow(),
+});
+
+export const users = pgTable('users', {
+  id:           uuid('id').defaultRandom().primaryKey(),
+  orgId:        uuid('org_id').notNull().references(() => organisations.id, { onDelete: 'cascade' }),
+  email:        varchar('email', { length: 255 }).notNull().unique(),
+  passwordHash: text('password_hash').notNull(),
+  role:         varchar('role', { length: 50 }).default('member'),
+  createdAt:    timestamp('created_at').defaultNow(),
+}, (table) => ({
+  orgIdIdx: index('idx_users_org_id').on(table.orgId),
+  emailIdx: index('idx_users_email').on(table.email),
+}));
+
+export const apiKeys = pgTable('api_keys', {
+  id:          uuid('id').defaultRandom().primaryKey(),
+  orgId:       uuid('org_id').notNull().references(() => organisations.id, { onDelete: 'cascade' }),
+  userId:      uuid('user_id').notNull().references(() => users.id),
+  name:        varchar('name', { length: 255 }).notNull(),
+  keyHash:     text('key_hash').notNull().unique(),
+  keyPrefix:   varchar('key_prefix', { length: 20 }).notNull(),
+  scopes:      text('scopes').array().default(sql`ARRAY['read']::text[]`),
+  lastUsedAt:  timestamp('last_used_at'),
+  revokedAt:   timestamp('revoked_at'),
+  createdAt:   timestamp('created_at').defaultNow(),
+}, (table) => ({
+  keyHashIdx: index('idx_api_keys_hash').on(table.keyHash),
+}));
+
+export const files = pgTable('files', {
+  id:                uuid('id').defaultRandom().primaryKey(),
+  orgId:             uuid('org_id').notNull().references(() => organisations.id, { onDelete: 'cascade' }),
+  uploadedBy:        uuid('uploaded_by').notNull().references(() => users.id),
+  name:              varchar('name', { length: 500 }).notNull(),
+  storageKey:        text('storage_key').notNull(),
+  mimeType:          varchar('mime_type', { length: 255 }),
+  sizeBytes:         bigint('size_bytes', { mode: 'number' }).notNull(),
+  extractedText:     text('extracted_text'),
+  textSearchVector:  tsvector('text_search_vector'),
+  extractionJobId:   uuid('extraction_job_id'),
+  embeddingStatus:   varchar('embedding_status', { length: 50 }).default('pending'),  // pending | completed | failed | skipped
+  deletedAt:         timestamp('deleted_at'),
+  createdAt:         timestamp('created_at').defaultNow(),
+}, (table) => ({
+  orgIdIdx:          index('idx_files_org_id').on(table.orgId).where(sql`${table.deletedAt} IS NULL`),
+  extractionJobIdIdx: index('idx_files_extraction_job_id').on(table.extractionJobId),
+}));
+
+export const textExtractionJobs = pgTable('text_extraction_jobs', {
+  id:           uuid('id').defaultRandom().primaryKey(),
+  fileId:       uuid('file_id').notNull().references(() => files.id, { onDelete: 'cascade' }),
+  status:       varchar('status', { length: 50 }).notNull().default('pending'),
+  attempts:     integer('attempts').notNull().default(0),
+  maxAttempts:  integer('max_attempts').notNull().default(3),
+  error:        text('error'),
+  startedAt:    timestamp('started_at'),
+  completedAt:  timestamp('completed_at'),
+  createdAt:    timestamp('created_at').defaultNow(),
+}, (table) => ({
+  fileIdIdx: uniqueIndex('idx_text_jobs_file_id').on(table.fileId),
+  statusIdx: index('idx_text_jobs_status').on(table.status),
+}));
+
+// ── NEW: file_chunks ──────────────────────────────────────────────────────────
+// One row per text chunk. Populated after text extraction completes.
+export const fileChunks = pgTable('file_chunks', {
+  id:          uuid('id').defaultRandom().primaryKey(),
+  fileId:      uuid('file_id').notNull().references(() => files.id, { onDelete: 'cascade' }),
+  orgId:       uuid('org_id').notNull().references(() => organisations.id, { onDelete: 'cascade' }),
+  chunkIndex:  integer('chunk_index').notNull(),
+  content:     text('content').notNull(),
+  embedding:   vector('embedding'),       // null until embedding job runs
+  tokenCount:  integer('token_count'),
+  createdAt:   timestamp('created_at').defaultNow(),
+}, (table) => ({
+  orgIdIdx:    index('idx_file_chunks_org_id').on(table.orgId),
+  fileIdIdx:   index('idx_file_chunks_file_id').on(table.fileId),
+  uniqueChunk: uniqueIndex('idx_file_chunks_file_chunk').on(table.fileId, table.chunkIndex),
+}));
+
+export const usageLogs = pgTable('usage_logs', {
+  id:          uuid('id').defaultRandom().primaryKey(),
+  orgId:       uuid('org_id').notNull().references(() => organisations.id),
+  apiKeyId:    uuid('api_key_id').references(() => apiKeys.id),
+  endpoint:    varchar('endpoint', { length: 500 }),
+  method:      varchar('method', { length: 10 }),
+  statusCode:  integer('status_code'),
+  responseMs:  integer('response_ms'),
+  bytesIn:     bigint('bytes_in', { mode: 'number' }).default(0),
+  bytesOut:    bigint('bytes_out', { mode: 'number' }).default(0),
+  createdAt:   timestamp('created_at').defaultNow(),
+}, (table) => ({
+  orgIdIdx:     index('idx_usage_logs_org_id').on(table.orgId),
+  createdAtIdx: index('idx_usage_logs_created').on(table.createdAt),
+}));
+
+export const usageDaily = pgTable('usage_daily', {
+  id:             uuid('id').defaultRandom().primaryKey(),
+  orgId:          uuid('org_id').notNull().references(() => organisations.id),
+  date:           date('date').notNull(),
+  totalRequests:  bigint('total_requests', { mode: 'number' }).default(0),
+  totalBytesIn:   bigint('total_bytes_in', { mode: 'number' }).default(0),
+  totalBytesOut:  bigint('total_bytes_out', { mode: 'number' }).default(0),
+  storageBytes:   bigint('storage_bytes', { mode: 'number' }).default(0),
+}, (table) => ({
+  orgDateIdx: uniqueIndex('idx_usage_daily_org_date').on(table.orgId, table.date),
+}));
+
+export const webhooks = pgTable('webhooks', {
+  id:        uuid('id').defaultRandom().primaryKey(),
+  orgId:     uuid('org_id').notNull().references(() => organisations.id, { onDelete: 'cascade' }),
+  url:       text('url').notNull(),
+  secret:    text('secret').notNull(),
+  events:    text('events').array().notNull(),
+  enabled:   boolean('enabled').notNull().default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+  orgIdIdx: index('idx_webhooks_org_id').on(table.orgId),
+}));
+
+export const webhookDeliveries = pgTable('webhook_deliveries', {
+  id:            uuid('id').defaultRandom().primaryKey(),
+  webhookId:     uuid('webhook_id').notNull().references(() => webhooks.id, { onDelete: 'cascade' }),
+  event:         varchar('event', { length: 100 }).notNull(),
+  payload:       text('payload').notNull(),
+  status:        varchar('status', { length: 50 }).notNull().default('pending'),
+  statusCode:    integer('status_code'),
+  attempts:      integer('attempts').notNull().default(0),
+  lastAttemptAt: timestamp('last_attempt_at'),
+  createdAt:     timestamp('created_at').defaultNow(),
+}, (table) => ({
+  webhookIdIdx: index('idx_webhook_deliveries_webhook_id').on(table.webhookId),
+  statusIdx:    index('idx_webhook_deliveries_status').on(table.status),
+}));
+------------------------------------------------------------
+
+## index.ts
+
+import express from 'express';
+import cors from 'cors';
+import config from './config';
+import { requestLogger } from './middleware/requestLogger';
+import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import healthRouter from './routes/health';
+import v1Router from './routes/v1';
+import v2Router from './routes/v2';
+// import { runMigrations } from './db/migrate';
+
+const app = express();
+
+// Trust NGINX proxy only 
+app.set('trust proxy', 1);
+
+app.use(cors());
+app.use(express.json());
+app.use(requestLogger);
+app.use('/health', healthRouter);
+app.use('/api/v1', v1Router);
+app.use('/api/v2', v2Router);
+app.use(notFoundHandler);
+app.use(errorHandler);
+
+async function start() {
+  // try {
+  //   await runMigrations();
+  //   console.log('Database migrations completed');
+  // } catch (error) {
+  //   console.error('Failed to run migrations:', error);
+  //   process.exit(1);
+  // }
+
+  const server = app.listen(config.port, () => {
+    console.log(`[${config.nodeEnv}] Server running on port ${config.port}`);
+  });
+
+  process.on('SIGTERM', () => {
+    console.log('SIGTERM received, shutting down gracefully');
+    server.close(() => {
+      console.log('Server closed');
+      process.exit(0);
+    });
+  });
+}
+
+start();
+export default app;
+------------------------------------------------------------
+
+## lib/apiKey.ts
+
+import crypto from 'crypto';
+
+export interface ApiKeyResult {
+  raw: string;
+  hash: string;
+  prefix: string;
+}
+
+export function generateApiKey(): ApiKeyResult {
+  const raw = `kyro_live_${crypto.randomBytes(32).toString('hex')}`;
+  const hash = crypto.createHash('sha256').update(raw).digest('hex');
+  const prefix = raw.substring(0, 16);
+  return { raw, hash, prefix };
+}
+
+export function hashApiKey(rawKey: string): string {
+  return crypto.createHash('sha256').update(rawKey).digest('hex');
+}
+
+export function getKeyPrefix(rawKey: string): string {
+  return rawKey.substring(0, 16);
+}
+------------------------------------------------------------
+
+## lib/auth.ts
+
+import jwt from 'jsonwebtoken';
+import config from '../config';
+
+export interface JWTPayload {
+  userId: string;
+  orgId: string;
+  role: 'owner' | 'admin' | 'member';
+}
+
+export function signJWT(payload: JWTPayload): string {
+  return jwt.sign(payload, config.jwtSecret, {
+    expiresIn: '7d',
+  });
+}
+
+export function verifyJWT(token: string): JWTPayload {
+  return jwt.verify(token, config.jwtSecret) as JWTPayload;
+}
+------------------------------------------------------------
+
+## lib/embeddings.ts
+
+// lib/embeddings.ts  (FIXED)
+// ─────────────────────────────────────────────────────────────────────────────
+// Fix applied to semanticSearch():
+//   The original used db.execute({ sql, params }) with a vector literal as a
+//   bind parameter. Postgres receives the vector as a text string and cannot
+//   implicitly cast it to the vector type, causing:
+//     "operator does not exist: vector <=> text"
+//   Fix: use the raw pg pool so the vector literal is inlined directly into
+//   the SQL string with an explicit ::vector cast, bypassing Drizzle's
+//   parameter binding entirely.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { db } from '../db';
+import pool from '../db';            // raw pg Pool (default export)
+import { fileChunks, files } from '../db/schema';
+import { eq } from 'drizzle-orm';
+
+// ── Config ────────────────────────────────────────────────────────────────────
+
+const OLLAMA_URL      = process.env.OLLAMA_URL      ?? 'http://localhost:11434';
+const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL ?? 'nomic-embed-text';
+
+const CHUNK_SIZE_CHARS    = 1200;
+const CHUNK_OVERLAP_CHARS = 200;
+const EMBED_BATCH_SIZE    = 32;
+
+// ── Chunking ──────────────────────────────────────────────────────────────────
+
+export interface TextChunk {
+  index:      number;
+  content:    string;
+  tokenCount: number;
+}
+
+export function chunkText(text: string): TextChunk[] {
+  if (!text.trim()) return [];
+
+  const chunks: TextChunk[] = [];
+  let start = 0;
+  let index = 0;
+
+  while (start < text.length) {
+    let end = start + CHUNK_SIZE_CHARS;
+
+    if (end < text.length) {
+      const breakCandidates = [
+        text.lastIndexOf('\n\n', end),
+        text.lastIndexOf('. ',  end),
+        text.lastIndexOf('? ',  end),
+        text.lastIndexOf('! ',  end),
+        text.lastIndexOf('\n',  end),
+        text.lastIndexOf(' ',   end),
+      ];
+
+      const minBreak  = start + CHUNK_SIZE_CHARS * 0.5;
+      const goodBreak = breakCandidates
+        .filter(b => b > minBreak)
+        .sort((a, b) => b - a)[0];
+
+      if (goodBreak > minBreak) end = goodBreak + 1;
+    }
+
+    const content = text.slice(start, end).trim();
+    if (content.length > 0) {
+      chunks.push({ index, content, tokenCount: Math.ceil(content.length / 4) });
+      index++;
+    }
+
+    start = end - CHUNK_OVERLAP_CHARS;
+    if (start <= 0) break;
+  }
+
+  return chunks;
+}
+
+// ── Embedding ─────────────────────────────────────────────────────────────────
+
+async function embedOne(text: string): Promise<number[]> {
+  const res = await fetch(`${OLLAMA_URL}/api/embeddings`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ model: EMBEDDING_MODEL, prompt: text }),
+  }).catch(err => {
+    // This shows the real cause: ECONNREFUSED, ENOTFOUND, etc.
+    throw new Error(`fetch failed: ${err.cause?.message ?? err.message}`);
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Ollama embedding failed (${res.status}): ${body}`);
+  }
+
+  const data = await res.json() as { embedding: number[] };
+  return data.embedding;
+}
+
+async function embedBatch(texts: string[]): Promise<number[][]> {
+  const results: number[][] = [];
+  for (const text of texts) {
+    results.push(await embedOne(text));
+  }
+  return results;
+}
+
+// ── Main entry point ──────────────────────────────────────────────────────────
+
+export interface EmbedFileOptions {
+  fileId:        string;
+  orgId:         string;
+  extractedText: string;
+  replace?:      boolean;
+}
+
+export interface EmbedFileResult {
+  chunksCreated: number;
+  skipped:       boolean;
+}
+
+export async function embedFile(opts: EmbedFileOptions): Promise<EmbedFileResult> {
+  const { fileId, orgId, extractedText, replace = true } = opts;
+
+  if (!extractedText?.trim()) {
+    await db.update(files).set({ embeddingStatus: 'skipped' }).where(eq(files.id, fileId));
+    return { chunksCreated: 0, skipped: true };
+  }
+
+  if (replace) {
+    await db.delete(fileChunks).where(eq(fileChunks.fileId, fileId));
+  }
+
+  const chunks = chunkText(extractedText);
+  if (chunks.length === 0) {
+    await db.update(files).set({ embeddingStatus: 'skipped' }).where(eq(files.id, fileId));
+    return { chunksCreated: 0, skipped: true };
+  }
+
+  await db.update(files).set({ embeddingStatus: 'embedding' }).where(eq(files.id, fileId));
+
+  // Embed in batches
+  const allEmbeddings: number[][] = [];
+  for (let i = 0; i < chunks.length; i += EMBED_BATCH_SIZE) {
+    const batch      = chunks.slice(i, i + EMBED_BATCH_SIZE);
+    const embeddings = await embedBatch(batch.map(c => c.content));
+    allEmbeddings.push(...embeddings);
+  }
+
+  // Persist using raw pool — Drizzle cannot bind vector arrays correctly
+  // for bulk inserts with ON CONFLICT DO UPDATE that reference the vector column.
+  const INSERT_BATCH = 100;
+  for (let i = 0; i < chunks.length; i += INSERT_BATCH) {
+    const batchChunks     = chunks.slice(i, i + INSERT_BATCH);
+    const batchEmbeddings = allEmbeddings.slice(i, i + INSERT_BATCH);
+
+    // Build a multi-row VALUES clause with vector literals inlined
+    const valuePlaceholders: string[] = [];
+    const values: unknown[]           = [];
+    let   paramIdx = 1;
+
+    for (let j = 0; j < batchChunks.length; j++) {
+      const chunk     = batchChunks[j];
+      const vecLit    = `[${batchEmbeddings[j].join(',')}]`;
+      // fileId, orgId, chunkIndex, content are parameterized; vector is inlined
+      valuePlaceholders.push(
+        `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, '${vecLit}'::vector, $${paramIdx++})`
+      );
+      values.push(fileId, orgId, chunk.index, chunk.content, chunk.tokenCount);
+    }
+
+    const insertSql = `
+      INSERT INTO file_chunks (file_id, org_id, chunk_index, content, embedding, token_count)
+      VALUES ${valuePlaceholders.join(', ')}
+      ON CONFLICT (file_id, chunk_index)
+      DO UPDATE SET
+        content     = EXCLUDED.content,
+        embedding   = EXCLUDED.embedding,
+        token_count = EXCLUDED.token_count
+    `;
+
+    await pool.query(insertSql, values);
+  }
+
+  await db.update(files).set({ embeddingStatus: 'completed' }).where(eq(files.id, fileId));
+
+  return { chunksCreated: chunks.length, skipped: false };
+}
+
+// ── Query embedding ───────────────────────────────────────────────────────────
+
+export async function embedQuery(query: string): Promise<number[]> {
+  return embedOne(query);
+}
+
+// ── Semantic search ───────────────────────────────────────────────────────────
+
+export interface SemanticSearchOptions {
+  orgId:     string;
+  query:     string;
+  fileIds?:  string[];
+  limit?:    number;
+  minScore?: number;
+}
+
+export interface SemanticSearchResult {
+  fileId:     string;
+  fileName:   string;
+  chunkIndex: number;
+  content:    string;
+  score:      number;
+}
+
+export async function semanticSearch(opts: SemanticSearchOptions): Promise<SemanticSearchResult[]> {
+  const { orgId, query, fileIds, limit = 10, minScore = 0.3 } = opts;
+
+  const queryEmbedding = await embedQuery(query);
+  // Inline vector as a SQL literal — do NOT use a bind parameter.
+  // Postgres cannot implicitly cast a text bind param to the vector type,
+  // which causes "operator does not exist: vector <=> text".
+  const vectorLiteral = `[${queryEmbedding.join(',')}]`;
+
+  const params: unknown[] = [orgId];
+  let fileFilter = '';
+
+  if (fileIds && fileIds.length > 0) {
+    params.push(fileIds);
+    fileFilter = `AND fc.file_id = ANY($${params.length}::uuid[])`;
+  }
+
+  params.push(minScore);
+  const minScoreParam = params.length;
+  params.push(limit);
+  const limitParam = params.length;
+
+  const rawSql = `
+    SELECT
+      fc.file_id        AS "fileId",
+      f.name            AS "fileName",
+      fc.chunk_index    AS "chunkIndex",
+      fc.content,
+      (1 - (fc.embedding <=> '${vectorLiteral}'::vector))::float4 AS score
+    FROM file_chunks fc
+    JOIN files f ON f.id = fc.file_id
+    WHERE
+      fc.org_id = $1
+      AND f.deleted_at IS NULL
+      ${fileFilter}
+      AND (1 - (fc.embedding <=> '${vectorLiteral}'::vector)) >= $${minScoreParam}
+    ORDER BY fc.embedding <=> '${vectorLiteral}'::vector
+    LIMIT $${limitParam}
+  `;
+
+  const result = await pool.query(rawSql, params);
+  return result.rows as SemanticSearchResult[];
+}
+------------------------------------------------------------
+
+## lib/extractors/docx.ts
+
+import fs from 'fs';
+import mammoth from 'mammoth';
+
+export async function extractDocx(filePath: string): Promise<string> {
+  const result = await mammoth.extractRawText({ path: filePath });
+  return result.value;
+}
+------------------------------------------------------------
+
+## lib/extractors/index.ts
+
+import { extractPdf } from './pdf';
+import { extractDocx } from './docx';
+import { extractTxt } from './txt';
+import { UnrecoverableError } from 'bullmq';
+
+export const SUPPORTED_MIME_TYPES: Record<string, (filePath: string) => Promise<string>> = {
+  'application/pdf': extractPdf,
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': extractDocx,
+  'text/plain': extractTxt,
+};
+
+export const SUPPORTED_MIME_TYPES_LIST = Object.keys(SUPPORTED_MIME_TYPES);
+
+export async function extractText(mimeType: string, filePath: string): Promise<string> {
+  const extractor = SUPPORTED_MIME_TYPES[mimeType];
+
+  if (!extractor) {
+    throw new UnrecoverableError(
+      `Unsupported file type: ${mimeType}. Supported types: PDF, DOCX, TXT`
+    );
+  }
+
+  return extractor(filePath);
+}
+------------------------------------------------------------
+
+## lib/extractors/pdf.ts
+
+import fs from 'fs';
+import pdf from 'pdf-parse';
+
+export async function extractPdf(filePath: string): Promise<string> {
+  const dataBuffer = fs.readFileSync(filePath);
+  const data = await pdf(dataBuffer);
+  return data.text;
+}
+------------------------------------------------------------
+
+## lib/extractors/txt.ts
+
+import fs from 'fs';
+
+export async function extractTxt(filePath: string): Promise<string> {
+  return fs.readFileSync(filePath, 'utf-8');
+}
+------------------------------------------------------------
+
+## lib/openapi.ts
+
+import swaggerJsdoc from 'swagger-jsdoc';
+// import { OpenAPIV3_1 } from 'openapi-types';
+
+const options: swaggerJsdoc.Options = {
+  definition: {
+    openapi: '3.1.0',
+    info: {
+      title: 'Kyro API',
+      version: '1.0.0',
+      description: `Language-agnostic API platform for file storage and management.
+
+## Authentication
+Kyro supports two authentication methods:
+
+### Bearer Token (JWT)
+For dashboard/API management operations:
+\`Authorization: Bearer <jwt_token>\`
+
+### API Key
+For file operations:
+\`X-API-Key: kyro_live_<key>\`
+
+## Base URL
+- Production: \`https://api.kyro.io/api/v1\`
+- Development: \`http://localhost:3000/api/v1\`
+
+## Response Format
+
+### Success Response
+\`\`\`json
+{ "data": { ... } }
+\`\`\`
+
+### Error Response
+\`\`\`json
+{ "error": { "message": "...", "code": "...", "details": [...] } }
+\`\`\`
+
+## Rate Limiting
+- 100 requests per minute per API key
+- Returns \`429 Too Many Requests\` when exceeded`,
+      contact: {
+        name: 'Kyro Support',
+        url: 'https://kyro.io'
+      },
+      license: {
+        name: 'Proprietary'
+      }
+    },
+    servers: [
+      {
+        url: 'http://localhost:3000/api/v1',
+        description: 'Development'
+      },
+      {
+        url: 'https://api.kyro.io/api/v1',
+        description: 'Production'
+      }
+    ],
+    tags: [
+      { name: 'Authentication', description: 'User registration and login' },
+      { name: 'Organisation', description: 'Workspace management' },
+      { name: 'API Keys', description: 'API key lifecycle management' },
+      { name: 'Files', description: 'File upload, download, and management' },
+      { name: 'Usage', description: 'Usage analytics and reporting' },
+      { name: 'Health', description: 'Health check endpoints' }
+    ],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          description: 'JWT token obtained from `/auth/login` or `/auth/register`. Include in Authorization header: `Bearer <token>`'
+        },
+        apiKey: {
+          type: 'apiKey',
+          in: 'header',
+          name: 'X-API-Key',
+          description: 'API key with `kyro_live_` prefix. Obtained from `/keys` endpoint. Required for file operations.'
+        }
+      },
+      schemas: {
+        Error: {
+          type: 'object',
+          properties: {
+            error: {
+              type: 'object',
+              properties: {
+                message: { type: 'string', description: 'Human-readable error message' },
+                code: { type: 'string', description: 'Machine-readable error code' },
+                details: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      message: { type: 'string' },
+                      path: { type: 'string' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        User: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            email: { type: 'string', format: 'email' },
+            role: { type: 'string', enum: ['owner', 'admin', 'member'] },
+            orgId: { type: 'string', format: 'uuid' }
+          }
+        },
+        Organisation: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            name: { type: 'string' },
+            slug: { type: 'string' },
+            plan: { type: 'string', enum: ['free', 'pro', 'enterprise'], default: 'free' },
+            createdAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        ApiKey: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            name: { type: 'string' },
+            key_prefix: { type: 'string', description: 'First 16 characters of the key' },
+            scopes: { type: 'array', items: { type: 'string', enum: ['read', 'write', 'admin'] } },
+            last_used_at: { type: 'string', format: 'date-time', nullable: true },
+            revoked_at: { type: 'string', format: 'date-time', nullable: true },
+            created_at: { type: 'string', format: 'date-time' }
+          }
+        },
+        File: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            name: { type: 'string', description: 'Original filename' },
+            mimeType: { type: 'string', description: 'MIME type' },
+            sizeBytes: { type: 'integer', description: 'File size in bytes' },
+            createdAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        UsageStats: {
+          type: 'object',
+          properties: {
+            total_requests: { type: 'integer', description: 'Total API requests' },
+            total_bytes_in: { type: 'integer', description: 'Total bytes received' },
+            total_bytes_out: { type: 'integer', description: 'Total bytes sent' },
+            total_storage: { type: 'integer', description: 'Total storage used in bytes' },
+            active_api_keys: { type: 'integer', description: 'Number of active API keys' }
+          }
+        },
+        Member: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            email: { type: 'string', format: 'email' },
+            role: { type: 'string', enum: ['owner', 'admin', 'member'] },
+            createdAt: { type: 'string', format: 'date-time' }
+          }
+        }
+      },
+      responses: {
+        BadRequest: {
+          description: 'Invalid request body',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/Error' }
+            }
+          }
+        },
+        Unauthorized: {
+          description: 'Authentication required',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/Error' }
+            }
+          }
+        },
+        Forbidden: {
+          description: 'Insufficient permissions',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/Error' }
+            }
+          }
+        },
+        NotFound: {
+          description: 'Resource not found',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/Error' }
+            }
+          }
+        },
+        Conflict: {
+          description: 'Resource already exists',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/Error' }
+            }
+          }
+        },
+        PayloadTooLarge: {
+          description: 'File too large',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/Error' }
+            }
+          }
+        },
+        TooManyRequests: {
+          description: 'Rate limit exceeded',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  error: {
+                    type: 'object',
+                    properties: {
+                      message: { type: 'string' },
+                      retryAfter: { type: 'number' }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  apis: ['./src/routes/*.ts']
+};
+
+export const specs = swaggerJsdoc(options);
+
+export function generateSpec() {
+  return specs;
+}
+
+if (require.main === module) {
+  const fs = require('fs');
+  const path = require('path');
+
+  const outputPath = path.join(__dirname, '../../openapi.yaml');
+
+  let yamlOutput = '';
+
+  function convertToYaml(obj: any, indent: number = 0): string {
+    const spaces = '  '.repeat(indent);
+    let result = '';
+
+    if (Array.isArray(obj)) {
+      for (const item of obj) {
+        if (typeof item === 'object' && item !== null) {
+          result += convertToYaml(item, indent);
+        } else {
+          result += `${spaces}- ${item}\n`;
+        }
+      }
+    } else if (typeof obj === 'object' && obj !== null) {
+      for (const [key, value] of Object.entries(obj)) {
+        if (value === null || value === undefined) {
+          continue;
+        }
+        if (typeof value === 'object' && !Array.isArray(value)) {
+          result += `${spaces}${key}:\n${convertToYaml(value, indent + 1)}`;
+        } else if (Array.isArray(value)) {
+          result += `${spaces}${key}:\n`;
+          for (const item of value) {
+            if (typeof item === 'object') {
+              result += `${spaces}  - ${JSON.stringify(item).replace(/["{}]/g, '').replace(/,/g, '\n    ').replace(/:/g, ': ')}\n`;
+            } else {
+              result += `${spaces}  - ${value}\n`;
+            }
+          }
+        } else {
+          result += `${spaces}${key}: ${JSON.stringify(value)}\n`;
+        }
+      }
+    }
+    return result;
+  }
+
+  console.log('Generating OpenAPI spec...');
+  console.log(JSON.stringify(specs, null, 2));
+}
+------------------------------------------------------------
+
+## lib/password.ts
+
+import bcrypt from 'bcryptjs';
+
+const BCRYPT_ROUNDS = 12;
+
+export async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, BCRYPT_ROUNDS);
+}
+
+export async function verifyPassword(password: string, hash: string): Promise<boolean> {
+  return bcrypt.compare(password, hash);
+}
+------------------------------------------------------------
+
+## lib/queue.ts
+
+import { Queue, QueueOptions } from 'bullmq';
+import { getRedis, isRedisAvailable } from '../db/redis';
+import { getBullMQRedis } from '../db/redis';
+
+let queueInstance: Queue | null = null;
+
+function createQueue(): Queue | null {
+  if (!isRedisAvailable()) {
+    console.warn('Queue: Redis not available, queue will not be created');
+    return null;
+  }
+
+  const redisConnection = getBullMQRedis();
+  if (!redisConnection) {
+    return null;
+  }
+
+  const defaultQueueOptions: QueueOptions = {
+    connection: redisConnection,
+    defaultJobOptions: {
+      attempts: 3,
+      backoff: {
+        type: 'exponential',
+        delay: 5000,
+      },
+      removeOnComplete: {
+        count: 100,
+        age: 24 * 3600,
+      },
+      removeOnFail: {
+        count: 500,
+        age: 7 * 24 * 3600,
+      },
+    },
+  };
+
+  return new Queue('text-extraction', defaultQueueOptions);
+}
+
+export function getTextExtractionQueue(): Queue | null {
+  if (!queueInstance) {
+    queueInstance = createQueue();
+  }
+  return queueInstance;
+}
+
+export const textExtractionQueue = {
+  add: async (jobName: string, data: any) => {
+    const queue = getTextExtractionQueue();
+    if (!queue) {
+      console.warn('Queue: Cannot add job, queue not available');
+      return null;
+    }
+    return queue.add(jobName, data);
+  }
+};
+
+export const QUEUE_NAMES = {
+  TEXT_EXTRACTION: 'text-extraction',
+} as const;
+------------------------------------------------------------
+
+## lib/storage.ts
+
+import fs from 'fs';
+import path from 'path';
+import { randomUUID } from 'crypto';
+
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(process.cwd(), 'uploads');
+
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
+
+export function getUploadDir(): string {
+  return UPLOAD_DIR;
+}
+
+export function ensureOrgDirectory(orgId: string): string {
+  const orgDir = path.join(UPLOAD_DIR, orgId);
+  if (!fs.existsSync(orgDir)) {
+    fs.mkdirSync(orgDir, { recursive: true });
+  }
+  return orgDir;
+}
+
+export interface UploadedFile {
+  originalname: string;
+  buffer: Buffer;
+  mimetype?: string;
+  size: number;
+}
+
+export async function saveFile(orgId: string, file: UploadedFile): Promise<{ storageKey: string; fileId: string }> {
+  const fileId = randomUUID();
+  const ext = path.extname(file.originalname);
+  const storageKey = path.join(orgId, fileId + ext);
+  const fullPath = path.join(UPLOAD_DIR, storageKey);
+
+  ensureOrgDirectory(orgId);
+
+  await fs.promises.writeFile(fullPath, file.buffer);
+
+  return { storageKey, fileId };
+}
+
+export async function deleteFile(storageKey: string): Promise<void> {
+  const fullPath = path.join(UPLOAD_DIR, storageKey);
+  if (fs.existsSync(fullPath)) {
+    await fs.promises.unlink(fullPath);
+  }
+}
+
+export function getFilePath(storageKey: string): string {
+  return path.join(UPLOAD_DIR, storageKey);
+}
+
+export async function getFileStream(storageKey: string): Promise<NodeJS.ReadableStream> {
+  const fullPath = path.join(UPLOAD_DIR, storageKey);
+  return fs.createReadStream(fullPath);
+}
+------------------------------------------------------------
+
+## lib/webhookQueue.ts
+
+import { Queue } from 'bullmq';
+import { getBullMQRedis } from '../db/redis';
+import { isRedisAvailable } from '../db/redis';
+
+let queueInstance: Queue | null = null;
+
+export function getWebhookDeliveryQueue(): Queue | null {
+  if (!isRedisAvailable()) return null;
+
+  if (!queueInstance) {
+    queueInstance = new Queue('webhook-delivery', {
+      connection: getBullMQRedis(),
+      defaultJobOptions: {
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 10_000 }, // 10s, 20s, 40s, 80s, 160s
+        removeOnComplete: { count: 200, age: 7 * 24 * 3600 },
+        removeOnFail: { count: 500, age: 30 * 24 * 3600 },
+      },
+    });
+  }
+  return queueInstance;
+}
+
+export const WEBHOOK_QUEUE_NAME = 'webhook-delivery';
+------------------------------------------------------------
+
+## lib/webhook.ts
+
+import crypto from 'crypto';
+import { db } from '../db';
+import { webhooks, webhookDeliveries } from '../db/schema';
+import { eq, and } from 'drizzle-orm';
+import { getWebhookDeliveryQueue } from './webhookQueue';
+
+export type WebhookEvent =
+    | 'extraction.started'
+    | 'extraction.completed'
+    | 'extraction.failed';
+
+export interface WebhookPayload {
+    id: string;          // delivery ID — consumer uses this to deduplicate
+    event: WebhookEvent;
+    createdAt: string;
+    data: Record<string, unknown>;
+}
+
+export function signPayload(secret: string, body: string): string {
+    return 'sha256=' + crypto.createHmac('sha256', secret).update(body).digest('hex');
+}
+
+/**
+ * Enqueues a delivery job for every enabled webhook in the org that
+ * subscribes to the given event.
+ */
+export async function dispatchWebhookEvent(
+    orgId: string,
+    event: WebhookEvent,
+    data: Record<string, unknown>,
+): Promise<void> {
+    const queue = getWebhookDeliveryQueue();
+    if (!queue) {
+        console.warn(`Webhook dispatch skipped for ${event}: queue unavailable`);
+        return;
+    }
+
+    const targets = await db
+        .select({ id: webhooks.id, url: webhooks.url, secret: webhooks.secret, events: webhooks.events })
+        .from(webhooks)
+        .where(and(eq(webhooks.orgId, orgId), eq(webhooks.enabled, true)));
+
+    for (const webhook of targets) {
+        if (!webhook.events.includes(event)) continue;
+
+        const [delivery] = await db
+            .insert(webhookDeliveries)
+            .values({
+                webhookId: webhook.id,
+                event,
+                payload: JSON.stringify({ event, data }),
+                status: 'pending',
+            })
+            .returning({ id: webhookDeliveries.id });
+
+        await queue.add('deliver', {
+            deliveryId: delivery.id,
+            webhookId: webhook.id,
+            url: webhook.url,
+            secret: webhook.secret,
+            event,
+            data,
+        });
+    }
+}
+------------------------------------------------------------
+
+## middleware/apiKeyAuth.ts
+
+import { Request, Response, NextFunction } from 'express';
+import { query } from '../db';
+import { hashApiKey } from '../lib/apiKey';
+
+export interface ApiKeyRequest extends Request {
+  orgId?: string;
+  apiKeyId?: string;
+  apiKeyScopes?: string[];
+}
+
+export async function apiKeyAuthMiddleware(
+  req: ApiKeyRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  const rawKey = req.headers['x-api-key'] as string;
+
+  if (!rawKey) {
+    res.status(401).json({ error: 'API key required' });
+    return;
+  }
+
+  const hash = hashApiKey(rawKey);
+
+  try {
+    const result = await query<{
+      id: string;
+      org_id: string;
+      scopes: string[];
+    }>(
+      `SELECT id, org_id, scopes FROM api_keys 
+       WHERE key_hash = $1 AND revoked_at IS NULL`,
+      [hash]
+    );
+
+    if (result.length === 0) {
+      res.status(401).json({ error: 'Invalid API key' });
+      return;
+    }
+
+    const apiKey = result[0];
+    req.orgId = apiKey.org_id;
+    req.apiKeyId = apiKey.id;
+    req.apiKeyScopes = apiKey.scopes || ['read'];
+
+    await query(
+      'UPDATE api_keys SET last_used_at = NOW() WHERE id = $1',
+      [apiKey.id]
+    );
+
+    next();
+  } catch (error) {
+    console.error('API key validation error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+export function requireScope(scope: string) {
+  return (req: ApiKeyRequest, res: Response, next: NextFunction): void => {
+    if (!req.apiKeyScopes?.includes(scope) && !req.apiKeyScopes?.includes('admin')) {
+      res.status(403).json({ error: `Required scope: ${scope}` });
+      return;
+    }
+    next();
+  };
+}
+------------------------------------------------------------
+
+## middleware/auth.ts
+
+import { Request, Response, NextFunction } from 'express';
+import { verifyJWT, JWTPayload } from '../lib/auth';
+
+declare global {
+  namespace Express {
+    interface Request {
+      user?: JWTPayload;
+    }
+  }
+}
+
+export function authMiddleware(req: Request, res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  const token = authHeader.substring(7);
+
+  try {
+    const payload = verifyJWT(token);
+    req.user = payload;
+    next();
+  } catch (error) {
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+}
+
+export function requireRole(...roles: string[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+
+    next();
+  };
+}
+------------------------------------------------------------
+
+## middleware/errorHandler.ts
+
+import { Request, Response, NextFunction } from 'express';
+import config from '../config';
+
+export interface AppError extends Error {
+  statusCode?: number;
+  isOperational?: boolean;
+}
+
+export function errorHandler(
+  err: AppError,
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  const statusCode = err.statusCode || 500;
+  const message = err.message || 'Internal Server Error';
+
+  if (config.nodeEnv === 'development') {
+    console.error('Error:', {
+      message: err.message,
+      stack: err.stack,
+      statusCode,
+    });
+  } else {
+    console.error('Error:', { statusCode, message });
+  }
+
+  res.status(statusCode).json({
+    error: {
+      message,
+      ...(config.nodeEnv === 'development' && { stack: err.stack }),
+    },
+  });
+}
+
+export function notFoundHandler(req: Request, res: Response) {
+  res.status(404).json({
+    error: {
+      message: `Cannot ${req.method} ${req.path}`,
+      statusCode: 404,
+    },
+  });
+}
+
+export function createError(message: string, statusCode: number): AppError {
+  const error: AppError = new Error(message);
+  error.statusCode = statusCode;
+  error.isOperational = true;
+  return error;
+}
+------------------------------------------------------------
+
+## middleware/rateLimit.ts
+
+import { RateLimiterRedis, RateLimiterMemory, RateLimiterRes } from 'rate-limiter-flexible';
+import { getRedis, isRedisAvailable } from '../db/redis';
+import { Request, Response, NextFunction } from 'express';
+
+let rateLimiter: RateLimiterRedis | RateLimiterMemory | null = null;
+let useMemoryFallback = false;
+
+export function getRateLimiter(): RateLimiterRedis | RateLimiterMemory {
+  const redisAvailable = isRedisAvailable();
+
+  if (useMemoryFallback) {
+    if (!rateLimiter || rateLimiter instanceof RateLimiterRedis) {
+      rateLimiter = new RateLimiterMemory({
+        keyPrefix: 'rl:',
+        points: 100,
+        duration: 60,
+      });
+    }
+    return rateLimiter;
+  }
+
+  if (!redisAvailable) {
+    console.warn('Redis unavailable, using memory rate limiter');
+    useMemoryFallback = true;
+    rateLimiter = new RateLimiterMemory({
+      keyPrefix: 'rl:',
+      points: 100,
+      duration: 60,
+    });
+    return rateLimiter;
+  }
+
+  if (!rateLimiter) {
+    try {
+      const redis = getRedis();
+      rateLimiter = new RateLimiterRedis({
+        storeClient: redis,
+        keyPrefix: 'rl:',
+        points: 100,
+        duration: 60,
+        blockDuration: 0,
+      });
+    } catch (error) {
+      console.warn('Failed to create Redis rate limiter, using memory fallback');
+      useMemoryFallback = true;
+      rateLimiter = new RateLimiterMemory({
+        keyPrefix: 'rl:',
+        points: 100,
+        duration: 60,
+      });
+    }
+  }
+  return rateLimiter;
+}
+
+export function rateLimitMiddleware(req: Request, res: Response, next: NextFunction): void {
+  const key = (req as any).apiKeyId || req.ip || 'unknown';
+  const limiter = getRateLimiter();
+
+  limiter.consume(key)
+    .then(() => {
+      next();
+    })
+    .catch((rejRes: RateLimiterRes) => {
+      res.status(429).json({
+        error: 'Too many requests',
+        retryAfter: rejRes.msBeforeNext / 1000,
+      });
+    });
+}
+------------------------------------------------------------
+
+## middleware/requestLogger.ts
+
+import morgan from 'morgan';
+import config from '../config';
+
+const morganFormat = config.nodeEnv === 'production' ? 'combined' : 'dev';
+
+export const requestLogger = morgan(morganFormat);
+------------------------------------------------------------
+
+## middleware/upload.ts
+
+import multer from 'multer';
+import path from 'path';
+import { randomUUID } from 'crypto';
+import { Request } from 'express';
+
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(process.cwd(), 'uploads');
+
+const storage = multer.memoryStorage();
+
+const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  const allowedMimes = [
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'application/pdf',
+    'text/plain',
+    'text/csv',
+    'application/json',
+    'application/zip',
+    'application/x-zip-compressed',
+    'application/octet-stream',
+    'audio/mpeg',
+    'audio/wav',
+    'video/mp4',
+    'video/webp',
+  ];
+
+  if (allowedMimes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type'));
+  }
+};
+
+export const upload = multer({
+  storage,
+  limits: {
+    fileSize: 100 * 1024 * 1024,
+  },
+  fileFilter,
+});
+
+export function generateFileId(): string {
+  return randomUUID();
+}
+
+export { UPLOAD_DIR };
+------------------------------------------------------------
+
+## middleware/usageLogger.ts
+
+import { Request, Response, NextFunction } from 'express';
+import { query } from '../db';
+import { ApiKeyRequest } from '../middleware/apiKeyAuth';
+
+export function usageLoggerMiddleware(req: Request, res: Response, next: NextFunction): void {
+  const startTime = Date.now();
+  const originalSend = res.send;
+
+  res.send = function (body?: any): Response {
+    const responseTime = Date.now() - startTime;
+    const orgId = (req as ApiKeyRequest).orgId;
+    const apiKeyId = (req as ApiKeyRequest).apiKeyId;
+
+    setImmediate(async () => {
+      try {
+        const bytesIn = parseInt(req.headers['content-length'] as string || '0', 10);
+        const bytesOut = res.getHeader('Content-Length') ? parseInt(res.getHeader('Content-Length') as string, 10) : 0;
+
+        await query(
+          `INSERT INTO usage_logs (org_id, api_key_id, endpoint, method, status_code, response_ms, bytes_in, bytes_out)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [orgId, apiKeyId, req.originalUrl || req.url, req.method, res.statusCode, responseTime, bytesIn, bytesOut]
+        );
+      } catch (error) {
+        console.error('Failed to log usage:', error);
+      }
+    });
+
+    return originalSend.call(this, body);
+  };
+
+  next();
+}
+------------------------------------------------------------
+
+## routes/health.ts
+
+import { Router, Request, Response } from 'express';
+import config from '../config';
+import { healthCheck as dbHealthCheck } from '../db';
+import { healthCheck as redisHealthCheck } from '../db/redis';
+
+const router = Router();
+
+const startTime = Date.now();
+
+router.get('/', async (req: Request, res: Response) => {
+  const dbHealthy = await dbHealthCheck();
+  const redisConfigured = !!config.redisUrl;
+  const redisHealthy = redisConfigured ? await redisHealthCheck() : true;
+
+  const allHealthy = dbHealthy && (redisConfigured ? redisHealthy : true);
+  const status = allHealthy ? 'ok' : 'degraded';
+  const statusCode = allHealthy ? 200 : 503;
+
+  res.status(statusCode).json({
+    status,
+    uptime: Math.floor((Date.now() - startTime) / 1000),
+    test: "Kyro",
+    timestamp: new Date().toISOString(),
+    database: dbHealthy ? 'connected' : 'disconnected',
+    redis: redisConfigured ? (redisHealthy ? 'connected' : 'disconnected') : 'optional',
+  });
+});
+
+export default router;
+------------------------------------------------------------
+
+## routes/v1/auth.ts
+
+import { Router, Request, Response } from 'express';
+import { query, getClient } from '../../db';
+import { hashPassword, verifyPassword } from '../../lib/password';
+import { signJWT } from '../../lib/auth';
+import { authMiddleware } from '../../middleware/auth';
+import { registerSchema, loginSchema, RegisterInput, LoginInput } from '../../validations/auth';
+
+const router = Router();
+
+function generateSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .substring(0, 100);
+}
+
+async function findUniqueSlug(slug: string): Promise<string> {
+  const existing = await query<{ id: string }>(
+    'SELECT id FROM organisations WHERE slug = $1',
+    [slug]
+  );
+
+  if (existing.length === 0) {
+    return slug;
+  }
+
+  return `${slug}-${Date.now()}`;
+}
+// POST /register
+
+router.post('/register', async (req: Request, res: Response) => {
+  try {
+    const input = registerSchema.parse(req.body) as RegisterInput;
+
+    const existingUser = await query<{ id: string }>(
+      'SELECT id FROM users WHERE email = $1',
+      [input.email]
+    );
+
+    if (existingUser.length > 0) {
+      return res.status(400).json({ error: 'Email already registered' });
+    }
+
+    let slug = generateSlug(input.orgName);
+    slug = await findUniqueSlug(slug);
+
+    const passwordHash = await hashPassword(input.password);
+
+    const client = await getClient();
+
+    try {
+      await client.query('BEGIN');
+
+      const orgResult = await client.query(
+        `INSERT INTO organisations (name, slug) VALUES ($1, $2) RETURNING id`,
+        [input.orgName, slug]
+      );
+      const orgId = orgResult.rows[0].id;
+
+      const userResult = await client.query(
+        `INSERT INTO users (org_id, email, password_hash, role) VALUES ($1, $2, $3, 'owner') RETURNING id, email, role`,
+        [orgId, input.email, passwordHash]
+      );
+
+      await client.query('COMMIT');
+
+      const user = userResult.rows[0];
+      const token = signJWT({
+        userId: user.id,
+        orgId: orgId,
+        role: user.role,
+      });
+
+      res.status(201).json({
+        token,
+        user: {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          orgId: orgId,
+        },
+      });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: 'Invalid input', details: error.errors });
+    }
+    console.error('Registration error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /login
+
+router.post('/login', async (req: Request, res: Response) => {
+  try {
+    const input = loginSchema.parse(req.body) as LoginInput;
+
+    const users = await query<{
+      id: string;
+      org_id: string;
+      email: string;
+      password_hash: string;
+      role: string;
+    }>(
+      `SELECT u.id, u.org_id, u.email, u.password_hash, u.role 
+       FROM users u WHERE u.email = $1`,
+      [input.email]
+    );
+
+    if (users.length === 0) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const user = users[0];
+    const valid = await verifyPassword(input.password, user.password_hash);
+
+    if (!valid) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const token = signJWT({
+      userId: user.id,
+      orgId: user.org_id,
+      role: user.role as 'owner' | 'admin' | 'member',
+    });
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        orgId: user.org_id,
+      },
+    });
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: 'Invalid input', details: error.errors });
+    }
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /me
+
+router.get('/me', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const users = await query<{
+      id: string;
+      email: string;
+      role: string;
+      org_id: string;
+    }>(
+      `SELECT id, email, role, org_id FROM users WHERE id = $1`,
+      [req.user!.userId]
+    );
+
+    if (users.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = users[0];
+    res.json({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      orgId: user.org_id,
+    });
+  } catch (error) {
+    console.error('Get me error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+export default router;
+------------------------------------------------------------
+
+## routes/v1/files.ts
+
+import { Router, Response, Request } from 'express';
+import { db } from '../../db';
+import { apiKeys, organisations, files } from '../../db/schema';
+import { eq, and, isNull, sql } from 'drizzle-orm';
+import { apiKeyAuthMiddleware, ApiKeyRequest, requireScope } from '../../middleware/apiKeyAuth';
+import { upload } from '../../middleware/upload';
+import { saveFile, deleteFile, getFilePath } from '../../lib/storage';
+
+const router = Router();
+
+router.use(apiKeyAuthMiddleware);
+
+// POST / - upload a file
+
+router.post('/', requireScope('write'), upload.single('file'), async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const orgId = req.orgId!;
+    const apiKeyId = req.apiKeyId!;
+
+    if (!req.file) {
+      res.status(400).json({ error: 'No file uploaded' });
+      return;
+    }
+
+    const keyResult = await db.select({ userId: apiKeys.userId })
+      .from(apiKeys)
+      .where(eq(apiKeys.id, apiKeyId));
+    const userId = keyResult[0]?.userId;
+
+    const orgResult = await db.select({ storageLimit: organisations.storageLimit })
+      .from(organisations)
+      .where(eq(organisations.id, orgId));
+    const storageLimit = orgResult[0]?.storageLimit || 1073741824;
+
+    const usageResult = await db.select({
+      used: sql`COALESCE(SUM(${files.sizeBytes}), 0)`.mapWith(Number)
+    })
+      .from(files)
+      .where(and(eq(files.orgId, orgId), isNull(files.deletedAt)));
+    const usedStorage = usageResult[0]?.used || 0;
+
+    if (usedStorage + req.file.size > storageLimit) {
+      res.status(403).json({ error: 'Storage quota exceeded' });
+      return;
+    }
+
+    const { storageKey } = await saveFile(orgId, {
+      originalname: req.file.originalname,
+      buffer: req.file.buffer,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+    });
+
+    const result = await db.insert(files).values({
+      orgId,
+      uploadedBy: userId!,
+      name: req.file.originalname,
+      storageKey,
+      mimeType: req.file.mimetype,
+      sizeBytes: req.file.size,
+    }).returning({
+      id: files.id,
+      name: files.name,
+      mimeType: files.mimeType,
+      sizeBytes: files.sizeBytes,
+      createdAt: files.createdAt,
+    });
+
+    res.status(201).json(result[0]);
+  } catch (error) {
+    console.error('Error uploading file:', error);
+    res.status(500).json({ error: 'Failed to upload file' });
+  }
+});
+
+// GET / - get list of files
+
+router.get('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const orgId = req.orgId!;
+    const limit = Math.min(parseInt(req.query.limit as string || '100', 10), 100);
+    const cursor = req.query.cursor as string | undefined;
+
+    // Cursor is base64-encoded JSON: { createdAt: string, id: string }
+    let cursorCondition = sql`TRUE`;
+    if (cursor) {
+      try {
+        const { createdAt, id } = JSON.parse(Buffer.from(cursor, 'base64url').toString());
+        cursorCondition = sql`(${files.createdAt}, ${files.id}) < (${new Date(createdAt)}, ${id}::uuid)`;
+      } catch {
+        res.status(400).json({ error: 'Invalid cursor' });
+        return;
+      }
+    }
+
+    const result = await db.select({
+      id: files.id,
+      name: files.name,
+      mimeType: files.mimeType,
+      sizeBytes: files.sizeBytes,
+      createdAt: files.createdAt,
+    })
+      .from(files)
+      .where(and(eq(files.orgId, orgId), isNull(files.deletedAt), cursorCondition))
+      .orderBy(sql`${files.createdAt} DESC, ${files.id} DESC`)
+      .limit(limit + 1); // fetch one extra to detect if there's a next page
+
+    const hasMore = result.length > limit;
+    const items = hasMore ? result.slice(0, limit) : result;
+
+    const nextCursor = hasMore
+      ? Buffer.from(JSON.stringify({
+          createdAt: items[items.length - 1].createdAt,
+          id: items[items.length - 1].id,
+        })).toString('base64url')
+      : null;
+
+    res.json({
+      data: items,
+      pagination: {
+        limit,
+        hasMore,
+        nextCursor,
+      },
+    });
+  } catch (error) {
+    console.error('Error listing files:', error);
+    res.status(500).json({ error: 'Failed to list files' });
+  }
+});
+
+// GET /:id - download a file
+
+router.get('/:id', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const orgId = req.orgId!;
+    const { id } = req.params;
+
+    const fileResult = await db.select({
+      id: files.id,
+      name: files.name,
+      storageKey: files.storageKey,
+      mimeType: files.mimeType,
+      sizeBytes: files.sizeBytes,
+    })
+      .from(files)
+      .where(and(eq(files.id, id as string), eq(files.orgId, orgId), isNull(files.deletedAt)));
+
+    if (fileResult.length === 0) {
+      res.status(404).json({ error: 'File not found' });
+      return;
+    }
+
+    const file = fileResult[0];
+    const filePath = getFilePath(file.storageKey);
+
+    res.setHeader('Content-Type', file.mimeType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
+    res.setHeader('Content-Length', file.sizeBytes);
+
+    const stream = require('fs').createReadStream(filePath);
+    stream.pipe(res);
+  } catch (error) {
+    console.error('Error downloading file:', error);
+    res.status(500).json({ error: 'Failed to download file' });
+  }
+});
+
+// DELETE /:id - delete a file
+
+router.delete('/:id', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
+  try {
+    const orgId = req.orgId!;
+    const { id } = req.params;
+
+    const fileResult = await db.select({ storageKey: files.storageKey })
+      .from(files)
+      .where(and(eq(files.id, id as string), eq(files.orgId, orgId), isNull(files.deletedAt)));
+
+    if (fileResult.length === 0) {
+      res.status(404).json({ error: 'File not found' });
+      return;
+    }
+
+    await db.update(files)
+      .set({ deletedAt: new Date() })
+      .where(eq(files.id, id as string));
+
+    await deleteFile(fileResult[0].storageKey);
+
+    res.json({ message: 'File deleted', id });
+  } catch (error) {
+    console.error('Error deleting file:', error);
+    res.status(500).json({ error: 'Failed to delete file' });
+  }
+});
+
+export default router;
+------------------------------------------------------------
+
+## routes/v1/index.ts
+
+import { Router } from 'express';
+import authRouter from './auth';
+import orgRouter from './org';
+import keysRouter from './keys';
+import filesRouter from './files';
+import usageRouter from './usage';
+import webhookRouter from './webhook'
+import { usageLoggerMiddleware } from '../../middleware/usageLogger';
+import { rateLimitMiddleware } from '../../middleware/rateLimit';
+
+const v1Router = Router();
+
+v1Router.use('/auth', authRouter);
+v1Router.use('/org', orgRouter);
+v1Router.use('/keys', keysRouter);
+v1Router.use('/files', rateLimitMiddleware, usageLoggerMiddleware, filesRouter);
+v1Router.use('/usage', usageRouter);
+v1Router.use('/webhooks', webhookRouter);  
+
+export default v1Router;
+------------------------------------------------------------
+
+## routes/v1/keys.ts
+
+import { Router, Response, Request } from 'express';
+import { query } from '../../db';
+import { generateApiKey } from '../../lib/apiKey';
+import { authMiddleware } from '../../middleware/auth';
+import { requireRole } from '../../middleware/auth';
+import { z } from 'zod';
+
+const router = Router();
+
+const createKeySchema = z.object({
+  name: z.string().min(1).max(255),
+  scopes: z.array(z.enum(['read', 'write', 'admin'])).default(['read']),
+});
+
+// POST / - create and returns a new API key 
+
+router.post('/', authMiddleware, requireRole('owner', 'admin'), async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    const orgId = req.user?.orgId;
+
+    if (!userId || !orgId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const parseResult = createKeySchema.safeParse(req.body);
+    if (!parseResult.success) {
+      res.status(400).json({ error: 'Invalid input', details: parseResult.error.errors });
+      return;
+    }
+
+    const { name, scopes } = parseResult.data;
+    const { raw, hash, prefix } = generateApiKey();
+
+    const result = await query<{
+      id: string;
+      name: string;
+      key_prefix: string;
+      scopes: string[];
+      created_at: Date;
+    }>(
+      `INSERT INTO api_keys (org_id, user_id, name, key_hash, key_prefix, scopes)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, name, key_prefix, scopes, created_at`,
+      [orgId, userId, name, hash, prefix, scopes]
+    );
+
+    res.status(201).json({
+      ...result[0],
+      key: raw,
+    });
+  } catch (error) {
+    console.error('Error creating API key:', error);
+    res.status(500).json({ error: 'Failed to create API key' });
+  }
+});
+
+// GET / - get all keys
+
+router.get('/', authMiddleware, requireRole('owner', 'admin', 'member'), async (req: Request, res: Response) => {
+  try {
+    const orgId = req.user?.orgId;
+    if (!orgId) { res.status(401).json({ error: 'Unauthorized' }); return; }
+
+    const limit = Math.min(parseInt(req.query.limit as string || '50', 10), 100);
+    const offset = Math.max(parseInt(req.query.offset as string || '0', 10), 0);
+
+    const [rows, countRows] = await Promise.all([
+      query<{ id: string; name: string; key_prefix: string; scopes: string[]; last_used_at: Date | null; revoked_at: Date | null; created_at: Date }>(
+        `SELECT id, name, key_prefix, scopes, last_used_at, revoked_at, created_at
+         FROM api_keys WHERE org_id = $1
+         ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
+        [orgId, limit, offset]
+      ),
+      query<{ count: string }>(`SELECT COUNT(*) as count FROM api_keys WHERE org_id = $1`, [orgId]),
+    ]);
+
+    res.json({
+      data: rows,
+      pagination: {
+        total: parseInt(countRows[0]?.count || '0', 10),
+        limit,
+        offset,
+        hasMore: offset + rows.length < parseInt(countRows[0]?.count || '0', 10),
+      },
+    });
+  } catch (error) {
+    console.error('Error listing API keys:', error);
+    res.status(500).json({ error: 'Failed to list API keys' });
+  }
+});
+
+// DELETE /:id - does not hard delete but set's revoked at 
+
+router.delete('/:id', authMiddleware, requireRole('owner', 'admin'), async (req: Request, res: Response) => {
+  try {
+    const orgId = req.user?.orgId;
+    const { id } = req.params;
+
+    if (!orgId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const result = await query<{ id: string }>(
+      `UPDATE api_keys SET revoked_at = NOW()
+       WHERE id = $1 AND org_id = $2 AND revoked_at IS NULL
+       RETURNING id`,
+      [id, orgId]
+    );
+
+    if (result.length === 0) {
+      res.status(404).json({ error: 'API key not found or already revoked' });
+      return;
+    }
+
+    res.json({ message: 'API key revoked', id });
+  } catch (error) {
+    console.error('Error revoking API key:', error);
+    res.status(500).json({ error: 'Failed to revoke API key' });
+  }
+});
+
+export default router;
+------------------------------------------------------------
+
+## routes/v1/org.ts
+
+import { Router, Request, Response } from 'express';
+import { query, getClient } from '../../db';
+import { hashPassword } from '../../lib/password';
+import { authMiddleware, requireRole } from '../../middleware/auth';
+import { inviteSchema, InviteInput } from '../../validations/auth';
+
+const router = Router();
+
+// GET / - get org details
+
+router.get('/', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const orgs = await query<{
+      id: string;
+      name: string;
+      slug: string;
+      plan: string;
+      created_at: string;
+    }>(
+      `SELECT id, name, slug, plan, created_at FROM organisations WHERE id = $1`,
+      [req.user!.orgId]
+    );
+
+    if (orgs.length === 0) {
+      return res.status(404).json({ error: 'Organisation not found' });
+    }
+
+    const org = orgs[0];
+    res.json({
+      id: org.id,
+      name: org.name,
+      slug: org.slug,
+      plan: org.plan,
+      createdAt: org.created_at,
+    });
+  } catch (error) {
+    console.error('Get org error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /members - get org members
+
+router.get('/members', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string || '50', 10), 100);
+    const offset = Math.max(parseInt(req.query.offset as string || '0', 10), 0);
+
+    const [rows, countRows] = await Promise.all([
+      query<{ id: string; email: string; role: string; created_at: string }>(
+        `SELECT id, email, role, created_at FROM users
+         WHERE org_id = $1 ORDER BY created_at LIMIT $2 OFFSET $3`,
+        [req.user!.orgId, limit, offset]
+      ),
+      query<{ count: string }>(`SELECT COUNT(*) as count FROM users WHERE org_id = $1`, [req.user!.orgId]),
+    ]);
+
+    res.json({
+      data: rows.map(u => ({ id: u.id, email: u.email, role: u.role, createdAt: u.created_at })),
+      pagination: {
+        total: parseInt(countRows[0]?.count || '0', 10),
+        limit,
+        offset,
+        hasMore: offset + rows.length < parseInt(countRows[0]?.count || '0', 10),
+      },
+    });
+  } catch (error) {
+    console.error('Get members error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /members - invites/creates a member with a password 
+
+router.post('/members', authMiddleware, requireRole('owner'), async (req: Request, res: Response) => {
+  try {
+    const input = inviteSchema.parse(req.body) as InviteInput;
+
+    const existing = await query<{ id: string }>(
+      'SELECT id FROM users WHERE email = $1',
+      [input.email]
+    );
+
+    if (existing.length > 0) {
+      return res.status(400).json({ error: 'Email already in use' });
+    }
+
+    const passwordHash = await hashPassword(input.password);
+
+    const result = await query<{ id: string; email: string; role: string }>(
+      `INSERT INTO users (org_id, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, email, role`,
+      [req.user!.orgId, input.email, passwordHash, input.role]
+    );
+
+    const user = result[0];
+    res.status(201).json({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+    });
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: 'Invalid input', details: error.errors });
+    }
+    console.error('Invite member error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /members/:id - delete a member
+
+router.delete('/members/:id', authMiddleware, requireRole('owner', 'admin'), async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const members = await query<{ id: string; role: string }>(
+      'SELECT id, role FROM users WHERE id = $1 AND org_id = $2',
+      [id, req.user!.orgId]
+    );
+
+    if (members.length === 0) {
+      return res.status(404).json({ error: 'Member not found' });
+    }
+
+    const member = members[0];
+
+    if (member.role === 'owner') {
+      return res.status(403).json({ error: 'Cannot remove owner' });
+    }
+
+    if (req.user!.role === 'admin' && member.role === 'admin') {
+      return res.status(403).json({ error: 'Cannot remove admin' });
+    }
+
+    await query('DELETE FROM users WHERE id = $1', [id]);
+
+    res.status(204).send();
+  } catch (error) {
+    console.error('Remove member error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+export default router;
+------------------------------------------------------------
+
+## routes/v1/usage.ts
+
+import { Router, Response, Request } from 'express';
+import { query } from '../../db';
+import { authMiddleware } from '../../middleware/auth';
+
+const router = Router();
+
+// GET / - get usage data
+
+router.get('/', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const orgId = req.user?.orgId;
+
+    if (!orgId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    // FIX 3: Actually read and apply start_date / end_date query params,
+    // consistent with how /usage/daily handles them.
+    const { start_date, end_date } = req.query;
+
+    let dateFilter = '';
+    const usageParams: any[] = [orgId];
+
+    if (start_date && end_date) {
+      dateFilter = 'AND created_at >= $2 AND created_at <= $3';
+      usageParams.push(start_date, end_date);
+    } else if (start_date) {
+      dateFilter = 'AND created_at >= $2';
+      usageParams.push(start_date);
+    } else if (end_date) {
+      dateFilter = 'AND created_at <= $2';
+      usageParams.push(end_date);
+    }
+
+    const usageResult = await query<{
+      total_requests: string;
+      total_bytes_in: string;
+      total_bytes_out: string;
+    }>(
+      `SELECT 
+        COUNT(*) as total_requests,
+        COALESCE(SUM(bytes_in), 0) as total_bytes_in,
+        COALESCE(SUM(bytes_out), 0) as total_bytes_out
+       FROM usage_logs
+       WHERE org_id = $1 ${dateFilter}`,
+      usageParams
+    );
+
+    // Storage and API key counts are not time-scoped — they reflect current state
+    const storageResult = await query<{ total_storage: string }>(
+      `SELECT COALESCE(SUM(size_bytes), 0) as total_storage
+       FROM files
+       WHERE org_id = $1 AND deleted_at IS NULL`,
+      [orgId]
+    );
+
+    const apiKeysResult = await query<{ active_keys: string }>(
+      `SELECT COUNT(*) as active_keys
+       FROM api_keys
+       WHERE org_id = $1 AND revoked_at IS NULL`,
+      [orgId]
+    );
+
+    res.json({
+      total_requests: parseInt(usageResult[0]?.total_requests || '0', 10),
+      total_bytes_in: parseInt(usageResult[0]?.total_bytes_in || '0', 10),
+      total_bytes_out: parseInt(usageResult[0]?.total_bytes_out || '0', 10),
+      total_storage: parseInt(storageResult[0]?.total_storage || '0', 10),
+      active_api_keys: parseInt(apiKeysResult[0]?.active_keys || '0', 10),
+    });
+  } catch (error) {
+    console.error('Error getting usage:', error);
+    res.status(500).json({ error: 'Failed to get usage' });
+  }
+});
+
+// GET /daily - get daily usage data
+
+router.get('/daily', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const orgId = req.user?.orgId;
+    const { start_date, end_date } = req.query;
+
+    if (!orgId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    let dateFilter = '';
+    const params: any[] = [orgId];
+
+    if (start_date && end_date) {
+      dateFilter = 'AND created_at >= $2 AND created_at <= $3';
+      params.push(start_date, end_date);
+    } else {
+      const defaultStart = new Date();
+      defaultStart.setDate(defaultStart.getDate() - 30);
+      dateFilter = 'AND created_at >= $2';
+      params.push(defaultStart);
+    }
+
+    const result = await query(
+      `SELECT 
+        DATE(created_at) as date,
+        COUNT(*) as requests,
+        COALESCE(SUM(bytes_in), 0) as bytes_in,
+        COALESCE(SUM(bytes_out), 0) as bytes_out
+       FROM usage_logs
+       WHERE org_id = $1 ${dateFilter}
+       GROUP BY DATE(created_at)
+       ORDER BY date DESC`,
+      params
+    );
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error getting daily usage:', error);
+    res.status(500).json({ error: 'Failed to get daily usage' });
+  }
+});
+
+export default router;
+------------------------------------------------------------
+
+## routes/v1/webhook.ts
+
+import { Router, Request, Response } from 'express';
+import { db } from '../../db';
+import { webhooks, webhookDeliveries } from '../../db/schema';
+import { eq, and, desc } from 'drizzle-orm';
+import { authMiddleware, requireRole } from '../../middleware/auth';
+import crypto from 'crypto';
+import { z } from 'zod';
+
+const router = Router();
+
+const createWebhookSchema = z.object({
+    url: z.string().url(),
+    events: z.array(z.enum(['extraction.started', 'extraction.completed', 'extraction.failed'])).min(1),
+});
+
+const updateWebhookSchema = createWebhookSchema.partial().extend({
+    enabled: z.boolean().optional(),
+});
+
+// List webhooks
+router.get('/', authMiddleware, async (req: Request, res: Response) => {
+    const rows = await db
+        .select({ id: webhooks.id, url: webhooks.url, events: webhooks.events, enabled: webhooks.enabled, createdAt: webhooks.createdAt })
+        .from(webhooks)
+        .where(eq(webhooks.orgId, req.user!.orgId))
+        .orderBy(desc(webhooks.createdAt));
+    res.json(rows);
+});
+
+// Create webhook
+router.post('/', authMiddleware, requireRole('owner', 'admin'), async (req: Request, res: Response) => {
+    const parsed = createWebhookSchema.safeParse(req.body);
+    if (!parsed.success) {
+        res.status(400).json({ error: 'Invalid input', details: parsed.error.errors });
+        return;
+    }
+
+    const secret = crypto.randomBytes(32).toString('hex');
+    const [row] = await db
+        .insert(webhooks)
+        .values({ orgId: req.user!.orgId, url: parsed.data.url, events: parsed.data.events, secret })
+        .returning({ id: webhooks.id, url: webhooks.url, events: webhooks.events, enabled: webhooks.enabled, createdAt: webhooks.createdAt, secret: webhooks.secret });
+
+    // Secret is returned only on creation — not exposed in list/get
+    res.status(201).json(row);
+});
+
+// Update webhook
+router.patch('/:id', authMiddleware, requireRole('owner', 'admin'), async (req: Request, res: Response) => {
+    const parsed = updateWebhookSchema.safeParse(req.body);
+    if (!parsed.success) {
+        res.status(400).json({ error: 'Invalid input', details: parsed.error.errors });
+        return;
+    }
+
+    const id = req.params.id as string;
+    const [row] = await db
+        .update(webhooks)
+        .set(parsed.data)
+        .where(and(eq(webhooks.id, id), eq(webhooks.orgId, req.user!.orgId)))
+        .returning({ id: webhooks.id, url: webhooks.url, events: webhooks.events, enabled: webhooks.enabled });
+
+    if (!row) { res.status(404).json({ error: 'Webhook not found' }); return; }
+    res.json(row);
+});
+
+// Delete webhook
+router.delete('/:id', authMiddleware, requireRole('owner', 'admin'), async (req: Request, res: Response) => {
+    const id = req.params.id as string;
+    const [row] = await db
+        .delete(webhooks)
+        .where(and(eq(webhooks.id, id), eq(webhooks.orgId, req.user!.orgId)))
+        .returning({ id: webhooks.id });
+
+    if (!row) { res.status(404).json({ error: 'Webhook not found' }); return; }
+    res.status(204).send();
+});
+
+// Delivery history for a webhook
+router.get('/:id/deliveries', authMiddleware, async (req: Request, res: Response) => {
+    // Verify ownership first
+    const id = req.params.id as string;
+    const [hook] = await db.select({ id: webhooks.id }).from(webhooks)
+        .where(and(eq(webhooks.id, id), eq(webhooks.orgId, req.user!.orgId)));
+    if (!hook) { res.status(404).json({ error: 'Webhook not found' }); return; }
+
+    const rows = await db
+        .select({ id: webhookDeliveries.id, event: webhookDeliveries.event, status: webhookDeliveries.status, statusCode: webhookDeliveries.statusCode, attempts: webhookDeliveries.attempts, lastAttemptAt: webhookDeliveries.lastAttemptAt, createdAt: webhookDeliveries.createdAt })
+        .from(webhookDeliveries)
+        .where(eq(webhookDeliveries.webhookId, id))
+        .orderBy(desc(webhookDeliveries.createdAt))
+        .limit(50);
+    res.json(rows);
+});
+
+export default router;
+------------------------------------------------------------
+
+## routes/v2/files.ts
+
+import { Router, Response } from 'express';
+import { db } from '../../db';
+import { apiKeys, organisations, files, textExtractionJobs } from '../../db/schema';
+import { eq, and, isNull, inArray, sql } from 'drizzle-orm';
+import { apiKeyAuthMiddleware, ApiKeyRequest, requireScope } from '../../middleware/apiKeyAuth';
+import { upload } from '../../middleware/upload';
+import { saveFile, deleteFile, getFilePath } from '../../lib/storage';
+import { textExtractionQueue } from '../../lib/queue';
+import { extractText, SUPPORTED_MIME_TYPES_LIST } from '../../lib/extractors';
+import { isRedisAvailable } from '../../db/redis';
+import fs from 'fs';
+
+const router = Router();
+
+// POST /files
+
+router.post(
+    '/',
+    requireScope('write'),
+    upload.single('file'),
+    async (req: ApiKeyRequest, res: Response) => {
+        try {
+            const orgId = req.orgId!;
+            const apiKeyId = req.apiKeyId!;
+
+            if (!req.file) {
+                res.status(400).json({ error: 'No file uploaded' });
+                return;
+            }
+
+            const keyResult = await db
+                .select({ userId: apiKeys.userId })
+                .from(apiKeys)
+                .where(eq(apiKeys.id, apiKeyId));
+            const userId = keyResult[0]?.userId;
+
+            const orgResult = await db
+                .select({ storageLimit: organisations.storageLimit })
+                .from(organisations)
+                .where(eq(organisations.id, orgId));
+            const storageLimit = orgResult[0]?.storageLimit ?? 1073741824;
+
+            const usageResult = await db
+                .select({ used: sql`COALESCE(SUM(${files.sizeBytes}), 0)`.mapWith(Number) })
+                .from(files)
+                .where(and(eq(files.orgId, orgId), isNull(files.deletedAt)));
+            const usedStorage = usageResult[0]?.used ?? 0;
+
+            if (usedStorage + req.file.size > storageLimit) {
+                res.status(403).json({ error: 'Storage quota exceeded' });
+                return;
+            }
+
+            const { storageKey } = await saveFile(orgId, {
+                originalname: req.file.originalname,
+                buffer: req.file.buffer,
+                mimetype: req.file.mimetype,
+                size: req.file.size,
+            });
+
+            const [fileRecord] = await db
+                .insert(files)
+                .values({
+                    orgId,
+                    uploadedBy: userId!,
+                    name: req.file.originalname,
+                    storageKey,
+                    mimeType: req.file.mimetype,
+                    sizeBytes: req.file.size,
+                })
+                .returning({
+                    id: files.id,
+                    name: files.name,
+                    mimeType: files.mimeType,
+                    sizeBytes: files.sizeBytes,
+                    createdAt: files.createdAt,
+                });
+
+            const isExtractable = SUPPORTED_MIME_TYPES_LIST.includes(req.file.mimetype ?? '');
+
+            if (!isExtractable) {
+                res.status(201).json({ ...fileRecord, extractionStatus: 'skipped' });
+                return;
+            }
+
+            if (isRedisAvailable()) {
+                const job = await db.transaction(async (tx) => {
+                    const [newJob] = await tx
+                        .insert(textExtractionJobs)
+                        .values({ fileId: fileRecord.id, status: 'pending' })
+                        .returning({ id: textExtractionJobs.id });
+
+                    await tx
+                        .update(files)
+                        .set({ extractionJobId: newJob.id })
+                        .where(eq(files.id, fileRecord.id));
+
+                    return newJob;
+                });
+
+                await textExtractionQueue.add('extract', {
+                    fileId: fileRecord.id,
+                    storageKey,
+                    mimeType: req.file.mimetype,
+                    jobId: job.id,
+                    orgId,
+                });
+
+                res.status(201).json({ ...fileRecord, extractionStatus: 'pending' });
+                return;
+            }
+
+            try {
+                const filePath = getFilePath(storageKey);
+                const extractedText = await extractText(req.file.mimetype ?? '', filePath);
+
+                await db
+                    .update(files)
+                    .set({ extractedText })
+                    .where(eq(files.id, fileRecord.id));
+
+                res.status(201).json({
+                    ...fileRecord,
+                    extractionStatus: 'completed',
+                    extractedText,
+                });
+            } catch (extractErr) {
+                console.error('Synchronous extraction failed:', extractErr);
+                res.status(201).json({ ...fileRecord, extractionStatus: 'failed' });
+            }
+        } catch (error) {
+            console.error('Error uploading file (v2):', error);
+            res.status(500).json({ error: 'Failed to upload file' });
+        }
+    },
+);
+
+// GET /files
+
+router.get('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
+    try {
+        const orgId = req.orgId!;
+        const limit = Math.min(parseInt((req.query.limit as string) || '100', 10), 100);
+        const cursor = req.query.cursor as string | undefined;
+
+        let cursorCondition = sql`TRUE`;
+        if (cursor) {
+            try {
+                const { createdAt, id } = JSON.parse(Buffer.from(cursor, 'base64url').toString());
+                cursorCondition = sql`(${files.createdAt}, ${files.id}) < (${new Date(createdAt)}, ${id}::uuid)`;
+            } catch {
+                res.status(400).json({ error: 'Invalid cursor' });
+                return;
+            }
+        }
+
+        const result = await db
+            .select({
+                id: files.id,
+                name: files.name,
+                mimeType: files.mimeType,
+                sizeBytes: files.sizeBytes,
+                createdAt: files.createdAt,
+                extractionJobId: files.extractionJobId,
+                extractedText: files.extractedText,
+            })
+            .from(files)
+            .where(and(eq(files.orgId, orgId), isNull(files.deletedAt), cursorCondition))
+            .orderBy(sql`${files.createdAt} DESC, ${files.id} DESC`)
+            .limit(limit + 1);
+
+        const hasMore = result.length > limit;
+        const items = hasMore ? result.slice(0, limit) : result;
+
+        const jobIds = items
+            .map((f) => f.extractionJobId)
+            .filter(Boolean) as string[];
+
+        const jobStatusMap: Record<string, string> = {};
+        if (jobIds.length > 0) {
+            const jobRows = await db
+                .select({ id: textExtractionJobs.id, status: textExtractionJobs.status })
+                .from(textExtractionJobs)
+                .where(inArray(textExtractionJobs.id, jobIds));
+            for (const row of jobRows) {
+                jobStatusMap[row.id] = row.status;
+            }
+        }
+
+        const data = items.map(({ extractionJobId, extractedText, ...f }) => {
+            let extractionStatus: string;
+            if (extractionJobId) {
+                extractionStatus = jobStatusMap[extractionJobId] ?? 'pending';
+            } else if (extractedText) {
+                extractionStatus = 'completed';
+            } else if (SUPPORTED_MIME_TYPES_LIST.includes(f.mimeType ?? '')) {
+                extractionStatus = 'failed';
+            } else {
+                extractionStatus = 'skipped';
+            }
+            return { ...f, extractionStatus };
+        });
+
+        const nextCursor = hasMore
+            ? Buffer.from(
+                JSON.stringify({
+                    createdAt: items[items.length - 1].createdAt,
+                    id: items[items.length - 1].id,
+                }),
+            ).toString('base64url')
+            : null;
+
+        res.json({ data, pagination: { limit, hasMore, nextCursor } });
+    } catch (error) {
+        console.error('Error listing files (v2):', error);
+        res.status(500).json({ error: 'Failed to list files' });
+    }
+});
+
+// GET /files/search
+// IMPORTANT: must be registered BEFORE /:id so Express doesn't swallow it.
+
+router.get('/search', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
+    try {
+        const orgId = req.orgId!;
+        const q = (req.query.q as string | undefined)?.trim();
+
+        if (!q) {
+            res.status(400).json({ error: 'Query parameter "q" is required' });
+            return;
+        }
+
+        const limit = Math.min(parseInt((req.query.limit as string) || '20', 10), 100);
+        const cursor = req.query.cursor as string | undefined;
+
+        const tsQuery = sql`websearch_to_tsquery('english', ${q})`;
+
+        let cursorCondition = sql`TRUE`;
+        if (cursor) {
+            try {
+                const { rank, id } = JSON.parse(Buffer.from(cursor, 'base64url').toString());
+                cursorCondition = sql`
+          (ts_rank(${files.textSearchVector}, ${tsQuery}), ${files.id})
+          < (${rank}::float4, ${id}::uuid)
+        `;
+            } catch {
+                res.status(400).json({ error: 'Invalid cursor' });
+                return;
+            }
+        }
+
+        const rows = await db.execute(sql`
+      SELECT
+        f.id,
+        f.name,
+        f.mime_type   AS "mimeType",
+        f.size_bytes  AS "sizeBytes",
+        f.created_at  AS "createdAt",
+        ts_rank(f.text_search_vector, ${tsQuery})                    AS rank,
+        ts_headline(
+          'english',
+          f.extracted_text,
+          ${tsQuery},
+          'StartSel=<mark>, StopSel=</mark>, MaxWords=35, MinWords=15, ShortWord=3, HighlightAll=false, MaxFragments=2, FragmentDelimiter=" … "'
+        )                                                             AS headline
+      FROM files f
+      WHERE
+        f.org_id    = ${orgId}
+        AND f.deleted_at IS NULL
+        AND f.text_search_vector @@ ${tsQuery}
+        AND ${cursorCondition}
+      ORDER BY rank DESC, f.id DESC
+      LIMIT ${limit + 1}
+    `);
+
+        const results = rows.rows as Array<{
+            id: string;
+            name: string;
+            mimeType: string;
+            sizeBytes: number;
+            createdAt: Date;
+            rank: number;
+            headline: string;
+        }>;
+
+        const hasMore = results.length > limit;
+        const items = hasMore ? results.slice(0, limit) : results;
+
+        const nextCursor = hasMore
+            ? Buffer.from(
+                JSON.stringify({
+                    rank: items[items.length - 1].rank,
+                    id: items[items.length - 1].id,
+                }),
+            ).toString('base64url')
+            : null;
+
+        res.json({
+            data: items,
+            pagination: { limit, hasMore, nextCursor },
+        });
+    } catch (error) {
+        console.error('Error searching files (v2):', error);
+        res.status(500).json({ error: 'Failed to search files' });
+    }
+});
+
+// GET /files/:id/text
+// IMPORTANT: /:id/text and /:id/extract must be registered BEFORE /:id,
+// otherwise /:id matches first and Express never reaches the sub-path handlers.
+
+router.get('/:id/text', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
+    try {
+        const orgId = req.orgId!;
+        const id = req.params.id as string;
+
+        const [file] = await db
+            .select({
+                id: files.id,
+                mimeType: files.mimeType,
+                extractedText: files.extractedText,
+                extractionJobId: files.extractionJobId,
+            })
+            .from(files)
+            .where(and(eq(files.id, id), eq(files.orgId, orgId), isNull(files.deletedAt)));
+
+        if (!file) {
+            res.status(404).json({ error: 'File not found' });
+            return;
+        }
+
+        if (file.extractedText) {
+            res.json({
+                fileId: file.id,
+                extractionStatus: 'completed',
+                extractedText: file.extractedText,
+            });
+            return;
+        }
+
+        if (!file.extractionJobId) {
+            const isExtractable = SUPPORTED_MIME_TYPES_LIST.includes(file.mimeType ?? '');
+            res.json({
+                fileId: file.id,
+                extractionStatus: isExtractable ? 'failed' : 'skipped',
+                extractedText: null,
+            });
+            return;
+        }
+
+        const [job] = await db
+            .select({
+                status: textExtractionJobs.status,
+                error: textExtractionJobs.error,
+            })
+            .from(textExtractionJobs)
+            .where(eq(textExtractionJobs.id, file.extractionJobId));
+
+        res.json({
+            fileId: file.id,
+            extractionStatus: job?.status ?? 'pending',
+            extractedText: null,
+            ...(job?.status === 'failed' && { error: job.error }),
+        });
+    } catch (error) {
+        console.error('Error fetching extracted text (v2):', error);
+        res.status(500).json({ error: 'Failed to fetch extracted text' });
+    }
+});
+
+// POST /files/:id/extract
+
+router.post('/:id/extract', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
+    try {
+        const orgId = req.orgId!;
+        const id = req.params.id as string;
+
+        const [file] = await db
+            .select({
+                id: files.id,
+                storageKey: files.storageKey,
+                mimeType: files.mimeType,
+                extractionJobId: files.extractionJobId,
+            })
+            .from(files)
+            .where(and(eq(files.id, id), eq(files.orgId, orgId), isNull(files.deletedAt)));
+
+        if (!file) {
+            res.status(404).json({ error: 'File not found' });
+            return;
+        }
+
+        if (!SUPPORTED_MIME_TYPES_LIST.includes(file.mimeType ?? '')) {
+            res.status(400).json({
+                error: 'File type not supported for extraction',
+                supportedTypes: SUPPORTED_MIME_TYPES_LIST,
+            });
+            return;
+        }
+
+        if (file.extractionJobId) {
+            const [existing] = await db
+                .select({ status: textExtractionJobs.status })
+                .from(textExtractionJobs)
+                .where(eq(textExtractionJobs.id, file.extractionJobId));
+
+            if (existing && ['pending', 'processing'].includes(existing.status)) {
+                res.status(409).json({
+                    error: 'Extraction already in progress',
+                    extractionStatus: existing.status,
+                });
+                return;
+            }
+        }
+
+        if (isRedisAvailable()) {
+            const job = await db.transaction(async (tx) => {
+                const [newJob] = await tx
+                    .insert(textExtractionJobs)
+                    .values({ fileId: file.id, status: 'pending' })
+                    .onConflictDoUpdate({
+                        target: textExtractionJobs.fileId,
+                        set: {
+                            status: 'pending',
+                            attempts: 0,
+                            error: null,
+                            startedAt: null,
+                            completedAt: null,
+                            createdAt: new Date(),
+                        },
+                    })
+                    .returning({ id: textExtractionJobs.id });
+
+                await tx
+                    .update(files)
+                    .set({ extractionJobId: newJob.id })
+                    .where(eq(files.id, file.id));
+
+                return newJob;
+            });
+
+            await textExtractionQueue.add('extract', {
+                fileId: file.id,
+                storageKey: file.storageKey,
+                mimeType: file.mimeType,
+                jobId: job.id,
+                orgId,
+            });
+
+            res.status(202).json({
+                fileId: file.id,
+                extractionStatus: 'pending',
+                message: 'Extraction queued. Poll GET /files/:id/text for status.',
+            });
+            return;
+        }
+
+        try {
+            const filePath = getFilePath(file.storageKey);
+            const extractedText = await extractText(file.mimeType ?? '', filePath);
+
+            await db
+                .update(files)
+                .set({ extractedText })
+                .where(eq(files.id, file.id));
+
+            res.json({
+                fileId: file.id,
+                extractionStatus: 'completed',
+                extractedText,
+            });
+        } catch (extractErr) {
+            console.error('Synchronous extraction failed:', extractErr);
+            res.status(500).json({ error: 'Extraction failed', extractionStatus: 'failed' });
+        }
+    } catch (error) {
+        console.error('Error triggering extraction (v2):', error);
+        res.status(500).json({ error: 'Failed to trigger extraction' });
+    }
+});
+
+// GET /files/:id
+
+router.get('/:id', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
+    try {
+        const orgId = req.orgId!;
+        const id = req.params.id as string;
+
+        const [file] = await db
+            .select({
+                id: files.id,
+                name: files.name,
+                storageKey: files.storageKey,
+                mimeType: files.mimeType,
+                sizeBytes: files.sizeBytes,
+            })
+            .from(files)
+            .where(and(eq(files.id, id), eq(files.orgId, orgId), isNull(files.deletedAt)));
+
+        if (!file) {
+            res.status(404).json({ error: 'File not found' });
+            return;
+        }
+
+        const filePath = getFilePath(file.storageKey);
+
+        if (!fs.existsSync(filePath)) {
+            console.error(`File record ${id} exists in DB but not on disk: ${filePath}`);
+            res.status(404).json({ error: 'File data not found' });
+            return;
+        }
+
+        res.setHeader('Content-Type', file.mimeType ?? 'application/octet-stream');
+        res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
+        res.setHeader('Content-Length', file.sizeBytes);
+
+        fs.createReadStream(filePath).pipe(res);
+    } catch (error) {
+        console.error('Error downloading file (v2):', error);
+        res.status(500).json({ error: 'Failed to download file' });
+    }
+});
+
+// DELETE /files/:id
+
+router.delete('/:id', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
+    try {
+        const orgId = req.orgId!;
+        const id = req.params.id as string;
+
+        const [file] = await db
+            .select({ storageKey: files.storageKey })
+            .from(files)
+            .where(and(eq(files.id, id), eq(files.orgId, orgId), isNull(files.deletedAt)));
+
+        if (!file) {
+            res.status(404).json({ error: 'File not found' });
+            return;
+        }
+
+        await db.update(files).set({ deletedAt: new Date() }).where(eq(files.id, id));
+        await deleteFile(file.storageKey);
+
+        res.json({ message: 'File deleted', id });
+    } catch (error) {
+        console.error('Error deleting file (v2):', error);
+        res.status(500).json({ error: 'Failed to delete file' });
+    }
+});
+
+export default router;
+------------------------------------------------------------
+
+## routes/v2/index.ts
+
+// routes/v2/index.ts  (full replacement)
+import { Router } from 'express';
+import authRouter    from '../v1/auth';
+import orgRouter     from '../v1/org';
+import keysRouter    from '../v1/keys';
+import filesRouter   from './files';
+import semanticRouter from './semantic';
+import usageRouter   from '../v1/usage';
+import webhookRouter from '../v1/webhook';
+import { usageLoggerMiddleware } from '../../middleware/usageLogger';
+import { apiKeyAuthMiddleware } from '../../middleware/apiKeyAuth';
+import { rateLimitMiddleware }   from '../../middleware/rateLimit';
+
+const v2Router = Router();
+
+v2Router.use('/auth',     authRouter);
+v2Router.use('/org',      orgRouter);
+v2Router.use('/keys',     keysRouter);
+v2Router.use('/usage',    usageRouter);
+v2Router.use('/webhooks', webhookRouter);
+
+
+v2Router.use((req, res, next) => {
+  console.log('v2Router hit:', req.method, req.path);
+  next();
+});
+// semantic router MUST be mounted before filesRouter so that
+// /files/semantic-search and /files/ask don't get swallowed by /files/:id
+v2Router.use(
+  '/files',
+  apiKeyAuthMiddleware,
+  rateLimitMiddleware,
+  usageLoggerMiddleware,
+  semanticRouter,  // handles /semantic-search, /ask, /:id/embed
+  filesRouter,     // handles CRUD + /search + /:id/text + /:id/extract
+);
+
+export default v2Router;
+------------------------------------------------------------
+
+## routes/v2/semantic.ts
+
+import { Router, Response } from 'express';
+import { db } from '../../db';
+import pool from '../../db';           // raw pg Pool — default export
+import { files, fileChunks } from '../../db/schema';
+import { eq, and, isNull, inArray } from 'drizzle-orm';
+import { ApiKeyRequest, requireScope } from '../../middleware/apiKeyAuth';
+import { embedQuery, embedFile } from '../../lib/embeddings';
+import { z } from 'zod';
+
+const router = Router();
+
+router.use((req, res, next) => {
+    console.log('semanticRouter hit:', req.method, req.path);
+    next();
+});
+
+const OLLAMA_URL = process.env.OLLAMA_URL ?? 'http://localhost:11434';
+const CHAT_MODEL = process.env.CHAT_MODEL ?? 'llama3.2';
+
+router.get('/semantic-search', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
+    try {
+        const orgId = req.orgId!;
+        const q = (req.query.q as string | undefined)?.trim();
+
+        if (!q) {
+            res.status(400).json({ error: 'Query parameter "q" is required' });
+            return;
+        }
+
+        if (!process.env.OLLAMA_URL) {
+            res.status(400).json({ error: 'OLLAMA_URL must be configured for semantic search' });
+            return;
+        }
+
+        const limit    = Math.min(parseInt((req.query.limit    as string) || '10',  10), 50);
+        const minScore = parseFloat((req.query.min_score as string) || '0.3');
+
+        let fileIdFilter: string[] | undefined;
+        if (req.query.file_ids) {
+            fileIdFilter = (req.query.file_ids as string)
+                .split(',').map(s => s.trim()).filter(Boolean);
+            if (fileIdFilter.length === 0) fileIdFilter = undefined;
+        }
+
+        const queryVec     = await embedQuery(q);
+        const vectorLiteral = `[${queryVec.join(',')}]`;
+
+        // Build query using raw pool — Drizzle's sql tag breaks ::vector casts
+        const params: unknown[] = [orgId, vectorLiteral, minScore, limit];
+        const fileFilterClause = fileIdFilter && fileIdFilter.length > 0
+            ? `AND fc.file_id = ANY($5::uuid[])`
+            : '';
+        if (fileIdFilter && fileIdFilter.length > 0) {
+            params.push(fileIdFilter);
+        }
+
+        const rawSql = `
+            SELECT
+                fc.file_id         AS "fileId",
+                f.name             AS "fileName",
+                fc.chunk_index     AS "chunkIndex",
+                fc.content,
+                (1 - (fc.embedding <=> $2::vector))::float4 AS score
+            FROM file_chunks fc
+            JOIN files f ON f.id = fc.file_id
+            WHERE
+                fc.org_id    = $1
+                AND f.deleted_at IS NULL
+                ${fileFilterClause}
+                AND (1 - (fc.embedding <=> $2::vector)) >= $3
+            ORDER BY fc.embedding <=> $2::vector
+            LIMIT $4
+        `;
+
+        const result = await pool.query(rawSql, params);
+
+        res.json({
+            data:  result.rows,
+            query: q,
+            limit,
+        });
+    } catch (error: any) {
+        console.error('Error in semantic-search:', error);
+        res.status(500).json({ error: 'Semantic search failed', detail: error.message });
+    }
+});
+
+// POST /ask
+
+const askSchema = z.object({
+    question: z.string().min(1).max(2000),
+    fileIds:  z.array(z.string().uuid()).min(1).max(20),
+    topK:     z.number().int().min(1).max(20).optional().default(8),
+    model:    z.string().optional(),
+    minScore: z.number().min(0).max(1).optional().default(0.25),
+    stream:   z.boolean().optional().default(true),
+});
+
+router.post('/ask', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
+    try {
+        const orgId = req.orgId!;
+
+        const parsed = askSchema.safeParse(req.body);
+        if (!parsed.success) {
+            res.status(400).json({ error: 'Invalid input', details: parsed.error.errors });
+            return;
+        }
+
+        const { question, fileIds, topK, stream } = parsed.data;
+        const minScore = parsed.data.minScore;
+        const model    = parsed.data.model ?? CHAT_MODEL;
+
+        if (!process.env.OLLAMA_URL) {
+            res.status(400).json({ error: 'OLLAMA_URL must be configured to use the /ask endpoint' });
+            return;
+        }
+
+        // ── 1. Verify ownership + embedding status ────────────────────────────
+        const ownedFiles = await db
+            .select({ id: files.id, name: files.name, embeddingStatus: files.embeddingStatus })
+            .from(files)
+            .where(and(eq(files.orgId, orgId), isNull(files.deletedAt), inArray(files.id, fileIds)));
+
+        if (ownedFiles.length === 0) {
+            res.status(404).json({ error: 'No matching files found' });
+            return;
+        }
+
+        const embeddedFileIds = ownedFiles
+            .filter(f => f.embeddingStatus === 'completed')
+            .map(f => f.id);
+
+        if (embeddedFileIds.length === 0) {
+            res.status(422).json({
+                error: 'None of the requested files have embeddings yet. Upload files via /v2/files and wait for embeddingStatus to become "completed", or trigger manually via POST /files/:id/embed.',
+                fileStatuses: ownedFiles.map(f => ({
+                    id: f.id,
+                    name: f.name,
+                    embeddingStatus: f.embeddingStatus,
+                })),
+            });
+            return;
+        }
+
+        // ── 2. Embed question + retrieve chunks via raw pool query ────────────
+        const queryVec      = await embedQuery(question);
+        const vectorLiteral = `[${queryVec.join(',')}]`;
+
+        const retrievalSql = `
+            SELECT
+                fc.file_id         AS "fileId",
+                f.name             AS "fileName",
+                fc.chunk_index     AS "chunkIndex",
+                fc.content,
+                (1 - (fc.embedding <=> $2::vector))::float4 AS score
+            FROM file_chunks fc
+            JOIN files f ON f.id = fc.file_id
+            WHERE
+                fc.org_id    = $1
+                AND fc.file_id = ANY($3::uuid[])
+                AND f.deleted_at IS NULL
+                AND (1 - (fc.embedding <=> $2::vector)) >= $4
+            ORDER BY fc.embedding <=> $2::vector
+            LIMIT $5
+        `;
+
+        const retrievalResult = await pool.query(retrievalSql, [
+            orgId,
+            vectorLiteral,
+            embeddedFileIds,
+            minScore,
+            topK,
+        ]);
+
+        const sources = retrievalResult.rows as Array<{
+            fileId:     string;
+            fileName:   string;
+            chunkIndex: number;
+            content:    string;
+            score:      number;
+        }>;
+
+        // ── 3. Build prompt ───────────────────────────────────────────────────
+        const contextBlock = sources.length > 0
+            ? sources
+                .map((s, i) =>
+                    `[${i + 1}] File: "${s.fileName}" (chunk ${s.chunkIndex}, score ${s.score.toFixed(3)})\n${s.content}`,
+                )
+                .join('\n\n---\n\n')
+            : '(No relevant document context was found for this question.)';
+
+        const systemPrompt = `You are a precise document analyst. Answer the user's question using ONLY the provided document context.
+
+Rules:
+- Cite sources using [1], [2], etc. referencing the chunk numbers in the context.
+- If the answer cannot be determined from the context, say so clearly — do not hallucinate.
+- Be concise but complete. Include numbers, dates, or specific details when they appear in the context.
+- If asked to aggregate (e.g. "total across all invoices"), work through the math explicitly.`;
+
+        const messages = [
+            { role: 'system', content: systemPrompt },
+            {
+                role: 'user',
+                content: `Document context:\n\n${contextBlock}\n\n---\n\nQuestion: ${question}`,
+            },
+        ];
+
+        // ── 4a. Streaming ─────────────────────────────────────────────────────
+        if (stream) {
+            res.setHeader('Content-Type', 'text/event-stream');
+            res.setHeader('Cache-Control', 'no-cache');
+            res.setHeader('X-Accel-Buffering', 'no');
+            res.flushHeaders();
+
+            const sendEvent = (data: object) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+            sendEvent({ type: 'sources', sources });
+
+            try {
+                const ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ model, messages, stream: true, options: { temperature: 0.2 } }),
+                });
+
+                if (!ollamaRes.ok || !ollamaRes.body) {
+                    throw new Error(`Ollama chat failed (${ollamaRes.status}): ${await ollamaRes.text()}`);
+                }
+
+                const reader  = ollamaRes.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer    = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() ?? '';
+
+                    for (const line of lines) {
+                        if (!line.trim()) continue;
+                        try {
+                            const json = JSON.parse(line) as { message?: { content?: string }; done?: boolean };
+                            if (json.message?.content) sendEvent({ type: 'chunk', text: json.message.content });
+                            if (json.done)              sendEvent({ type: 'done' });
+                        } catch { /* malformed line */ }
+                    }
+                }
+
+                // flush remaining buffer
+                if (buffer.trim()) {
+                    try {
+                        const json = JSON.parse(buffer) as { message?: { content?: string } };
+                        if (json.message?.content) sendEvent({ type: 'chunk', text: json.message.content });
+                    } catch { /* ignore */ }
+                }
+
+                sendEvent({ type: 'done' });
+            } catch (llmErr: any) {
+                console.error('Ollama streaming error:', llmErr);
+                sendEvent({ type: 'error', message: llmErr.message ?? 'LLM request failed' });
+            } finally {
+                res.end();
+            }
+            return;
+        }
+
+        // ── 4b. Non-streaming ─────────────────────────────────────────────────
+        const ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ model, messages, stream: false, options: { temperature: 0.2 } }),
+        });
+
+        if (!ollamaRes.ok) {
+            throw new Error(`Ollama chat failed (${ollamaRes.status}): ${await ollamaRes.text()}`);
+        }
+
+        const ollamaData = await ollamaRes.json() as { message?: { content?: string } };
+        res.json({ answer: ollamaData.message?.content ?? '', sources });
+
+    } catch (error: any) {
+        console.error('Error in /ask:', error);
+        res.status(500).json({ error: 'Failed to process question', detail: error.message });
+    }
+});
+
+// POST /files/:id/embed
+
+router.post('/:id/embed', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
+    try {
+        const orgId = req.orgId!;
+        const id    = req.params.id as string;
+
+        if (!process.env.OLLAMA_URL) {
+            res.status(400).json({ error: 'OLLAMA_URL must be configured to use embeddings' });
+            return;
+        }
+
+        const [file] = await db
+            .select({ id: files.id, extractedText: files.extractedText, embeddingStatus: files.embeddingStatus })
+            .from(files)
+            .where(and(eq(files.id, id), eq(files.orgId, orgId), isNull(files.deletedAt)));
+
+        if (!file) {
+            res.status(404).json({ error: 'File not found' });
+            return;
+        }
+
+        if (!file.extractedText) {
+            res.status(400).json({
+                error: 'No extracted text available. Run text extraction first via POST /files/:id/extract.',
+            });
+            return;
+        }
+
+        const result = await embedFile({
+            fileId:        file.id,
+            orgId,
+            extractedText: file.extractedText,
+            replace:       true,
+        });
+
+        res.json({
+            fileId:          file.id,
+            embeddingStatus: result.skipped ? 'skipped' : 'completed',
+            chunksCreated:   result.chunksCreated,
+        });
+    } catch (error: any) {
+        console.error('Error embedding file:', error);
+        res.status(500).json({ error: 'Embedding failed', detail: error.message });
+    }
+});
+
+export default router;
+------------------------------------------------------------
+
+## scripts/generate-openapi.ts
+
+import swaggerJsdoc from 'swagger-jsdoc';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as yaml from 'yaml';
+
+const options: swaggerJsdoc.Options = {
+  definition: {
+    openapi: '3.1.0',
+    info: {
+      title: 'Kyro API',
+      version: '1.0.0',
+      description: 'Language-agnostic API platform for file storage and management.',
+      contact: { name: 'Kyro Support', url: 'https://kyro.io' },
+      license: { name: 'Proprietary' }
+    },
+    servers: [
+      { url: 'http://localhost:3000/api/v1', description: 'Development' },
+      { url: 'https://api.kyro.io/api/v1', description: 'Production' }
+    ],
+    tags: [
+      { name: 'Authentication', description: 'User registration and login' },
+      { name: 'Organisation', description: 'Workspace management' },
+      { name: 'API Keys', description: 'API key lifecycle management' },
+      { name: 'Files', description: 'File upload, download, and management' },
+      { name: 'Usage', description: 'Usage analytics and reporting' },
+      { name: 'Health', description: 'Health check endpoints' }
+    ],
+    components: {
+      securitySchemes: {
+        bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+        apiKey: { type: 'apiKey', in: 'header', name: 'X-API-Key' }
+      },
+      schemas: {
+        Error: {
+          type: 'object',
+          properties: {
+            error: {
+              type: 'object',
+              properties: {
+                message: { type: 'string' },
+                code: { type: 'string' },
+                details: { type: 'array', items: { type: 'object' } }
+              }
+            }
+          }
+        },
+        User: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            email: { type: 'string', format: 'email' },
+            role: { type: 'string', enum: ['owner', 'admin', 'member'] },
+            orgId: { type: 'string', format: 'uuid' }
+          }
+        },
+        Organisation: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            name: { type: 'string' },
+            slug: { type: 'string' },
+            plan: { type: 'string', enum: ['free', 'pro', 'enterprise'] },
+            createdAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        ApiKey: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            name: { type: 'string' },
+            key_prefix: { type: 'string' },
+            scopes: { type: 'array', items: { type: 'string' } },
+            last_used_at: { type: 'string', format: 'date-time', nullable: true },
+            revoked_at: { type: 'string', format: 'date-time', nullable: true },
+            created_at: { type: 'string', format: 'date-time' }
+          }
+        },
+        File: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            name: { type: 'string' },
+            mimeType: { type: 'string' },
+            sizeBytes: { type: 'integer' },
+            createdAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        UsageStats: {
+          type: 'object',
+          properties: {
+            total_requests: { type: 'integer' },
+            total_bytes_in: { type: 'integer' },
+            total_bytes_out: { type: 'integer' },
+            total_storage: { type: 'integer' },
+            active_api_keys: { type: 'integer' }
+          }
+        },
+        Member: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            email: { type: 'string', format: 'email' },
+            role: { type: 'string', enum: ['owner', 'admin', 'member'] },
+            createdAt: { type: 'string', format: 'date-time' }
+          }
+        }
+      },
+      responses: {
+        BadRequest: { description: 'Invalid request body', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        Unauthorized: { description: 'Authentication required', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        Forbidden: { description: 'Insufficient permissions', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        NotFound: { description: 'Resource not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        Conflict: { description: 'Resource already exists', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        PayloadTooLarge: { description: 'File too large', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        TooManyRequests: { description: 'Rate limit exceeded', content: { 'application/json': { schema: { type: 'object', properties: { error: { type: 'object', properties: { message: { type: 'string' }, retryAfter: { type: 'number' } } } } } } } }
+      }
+    }
+  },
+  apis: ['./src/routes/*.ts']
+};
+
+const specs = swaggerJsdoc(options) as {
+  paths?: Record<string, unknown>;
+  openapi: string;
+  info: { title: string; version: string; description?: string };
+  servers?: Array<{ url: string; description?: string }>;
+  tags?: Array<{ name: string; description?: string }>;
+  components?: Record<string, unknown>;
+};
+
+const outputDir = path.join(__dirname, '../../../shared/openapi/');
+const jsonPath = path.join(outputDir, 'openapi-generated.json');
+const yamlPath = path.join(outputDir, 'openapi-generated.yaml');
+
+fs.writeFileSync(jsonPath, JSON.stringify(specs, null, 2));
+fs.writeFileSync(yamlPath, yaml.stringify(specs));
+
+const pathsCount = Object.keys(specs.paths || {}).length;
+
+console.log(`✅ OpenAPI spec generated:`);
+console.log(`   - JSON: ${jsonPath}`);
+console.log(`   - YAML: ${yamlPath}`);
+console.log(`   - Paths: ${pathsCount}`);
+------------------------------------------------------------
+
+## validations/auth.ts
+
+import { z } from 'zod';
+
+export const registerSchema = z.object({
+  orgName: z.string().min(1).max(255),
+  email: z.string().email(),
+  password: z.string().min(8).max(100),
+});
+
+export const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string(),
+});
+
+export const inviteSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8).max(100),
+  role: z.enum(['admin', 'member']).default('member'),
+});
+
+export type RegisterInput = z.infer<typeof registerSchema>;
+export type LoginInput = z.infer<typeof loginSchema>;
+export type InviteInput = z.infer<typeof inviteSchema>;
+------------------------------------------------------------
+
+## workers/textExtractor.ts
+
+// workers/textExtractor.ts  (FIXED)
+// ─────────────────────────────────────────────────────────────────────────────
+// Fixes applied:
+//   1. OLLAMA_URL guard was inverted — it only skipped embedding in production
+//      without the URL. Fixed to skip whenever OLLAMA_URL is not set regardless
+//      of NODE_ENV, so dev environments don't silently fail trying to hit a
+//      non-existent Ollama server.
+//   2. attempts update uses a plain increment instead of db.$count() which
+//      was doing a COUNT(*) subquery instead of incrementing the column.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { Worker, UnrecoverableError } from 'bullmq';
+import { db } from '../db';
+import { files, textExtractionJobs } from '../db/schema';
+import { eq, inArray, sql } from 'drizzle-orm';
+import { getFilePath } from '../lib/storage';
+import { extractText } from '../lib/extractors';
+import { embedFile } from '../lib/embeddings';
+import { dispatchWebhookEvent } from '../lib/webhook';
+import { getBullMQRedis, getRedis } from '../db/redis';
+import fs from 'fs';
+
+interface TextExtractionJobData {
+  fileId:     string;
+  storageKey: string;
+  mimeType:   string;
+  jobId:      string;
+  orgId:      string;
+}
+
+// ── Startup recovery ──────────────────────────────────────────────────────────
+
+async function recoverStuckJobs(): Promise<void> {
+  try {
+    const stuck = await db
+      .update(textExtractionJobs)
+      .set({ status: 'pending', startedAt: null })
+      .where(inArray(textExtractionJobs.status, ['processing']))
+      .returning({ id: textExtractionJobs.id });
+
+    if (stuck.length > 0) {
+      console.log(`Worker: Reset ${stuck.length} stuck 'processing' job(s) to 'pending'`);
+    }
+  } catch (err) {
+    console.error('Worker: Failed to recover stuck jobs:', err);
+  }
+}
+
+// ── Job processor ─────────────────────────────────────────────────────────────
+
+async function processTextExtractionJob(job: { data: TextExtractionJobData; attemptsMade: number }): Promise<void> {
+  const { fileId, storageKey, mimeType, jobId, orgId } = job.data;
+
+  const filePath = getFilePath(storageKey);
+  if (!fs.existsSync(filePath)) {
+    throw new UnrecoverableError(`File not found at path: ${filePath}`);
+  }
+
+  // Mark as processing — use sql`` increment, not db.$count() which is a COUNT subquery
+  await db.update(textExtractionJobs)
+    .set({
+      status:    'processing',
+      startedAt: new Date(),
+      attempts:  sql`${textExtractionJobs.attempts} + 1`,
+    })
+    .where(eq(textExtractionJobs.id, jobId));
+
+  await dispatchWebhookEvent(orgId, 'extraction.started', { fileId, jobId });
+
+  // ── Step 1: Extract text ───────────────────────────────────────────────────
+  const extractedText = await extractText(mimeType, filePath);
+
+  await db.transaction(async (tx) => {
+    await tx.update(files)
+      .set({ extractedText })
+      .where(eq(files.id, fileId));
+
+    await tx.update(textExtractionJobs)
+      .set({ status: 'completed', completedAt: new Date() })
+      .where(eq(textExtractionJobs.id, jobId));
+  });
+
+  await dispatchWebhookEvent(orgId, 'extraction.completed', {
+    fileId,
+    jobId,
+    extractedTextLength: extractedText.length,
+  });
+
+  console.log(`Worker: Text extraction completed for file ${fileId} (${extractedText.length} chars)`);
+
+  // ── Step 2: Embed chunks ───────────────────────────────────────────────────
+  // FIX: skip whenever OLLAMA_URL is not set — not just in production.
+  // Previously `!process.env.OLLAMA_URL && process.env.NODE_ENV === 'production'`
+  // meant dev without Ollama would still try to call http://localhost:11434
+  // and silently fail, leaving embeddingStatus as 'failed'.
+  if (!process.env.OLLAMA_URL) {
+    console.warn(`Worker: OLLAMA_URL not set — skipping embedding for file ${fileId}`);
+    await db.update(files)
+      .set({ embeddingStatus: 'skipped' })
+      .where(eq(files.id, fileId));
+    return;
+  }
+
+  try {
+    const result = await embedFile({ fileId, orgId, extractedText });
+    if (result.skipped) {
+      console.log(`Worker: Embedding skipped for file ${fileId} (no text)`);
+    } else {
+      console.log(`Worker: Embedded ${result.chunksCreated} chunks for file ${fileId}`);
+    }
+  } catch (embedErr) {
+    console.error(`Worker: Embedding failed for file ${fileId}:`, embedErr);
+    await db.update(files)
+      .set({ embeddingStatus: 'failed' })
+      .where(eq(files.id, fileId));
+  }
+}
+
+// ── Worker bootstrap ──────────────────────────────────────────────────────────
+
+async function start() {
+  getRedis();
+
+  const redisConnection = getBullMQRedis();
+  if (!redisConnection) {
+    console.error('Worker: Redis not available, exiting');
+    process.exit(1);
+  }
+
+  await recoverStuckJobs();
+
+  const worker = new Worker<TextExtractionJobData>(
+    'text-extraction',
+    async (job) => { await processTextExtractionJob(job); },
+    {
+      connection: redisConnection,
+      concurrency: 3,
+    },
+  );
+
+  worker.on('completed', (job) => {
+    console.log(`Worker: Job ${job.id} completed`);
+  });
+
+  worker.on('failed', async (job, error) => {
+    if (!job) return;
+    const maxAttempts = job.opts.attempts ?? 3;
+    const isFinal     = job.attemptsMade >= maxAttempts;
+
+    console.error(
+      `Worker: Job ${job.id} attempt ${job.attemptsMade}/${maxAttempts} failed:`,
+      error.message,
+    );
+
+    if (isFinal) {
+      const { jobId, orgId, fileId } = job.data as TextExtractionJobData;
+      try {
+        await db.update(textExtractionJobs)
+          .set({ status: 'failed', error: error.message, completedAt: new Date() })
+          .where(eq(textExtractionJobs.id, jobId));
+
+        await dispatchWebhookEvent(orgId, 'extraction.failed', {
+          fileId,
+          jobId,
+          error: error.message,
+        });
+      } catch (dbErr) {
+        console.error('Worker: Failed to mark job as failed in DB:', dbErr);
+      }
+    }
+  });
+
+  worker.on('error', (error) => {
+    console.error('Worker: Worker error:', error);
+  });
+
+  console.log('Worker: Text extraction worker started (with embedding)');
+
+  async function shutdown(signal: string) {
+    console.log(`Worker: ${signal} received, shutting down`);
+    await worker.close();
+    process.exit(0);
+  }
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT',  () => shutdown('SIGINT'));
+}
+
+start();
+------------------------------------------------------------
+
+## workers/webhookDelivery.ts
+
+import { Worker, UnrecoverableError } from 'bullmq';
+import { getBullMQRedis } from '../db/redis';
+import { db } from '../db';
+import { webhookDeliveries } from '../db/schema';
+import { eq, sql } from 'drizzle-orm';
+import { signPayload, WebhookPayload } from '../lib/webhook';
+
+interface DeliveryJobData {
+  deliveryId: string;
+  webhookId: string;
+  url: string;
+  secret: string;
+  event: string;
+  data: Record<string, unknown>;
+}
+
+const TIMEOUT_MS = 10_000;
+
+async function deliver(job: { data: DeliveryJobData }): Promise<void> {
+  const { deliveryId, url, secret, event, data } = job.data;
+
+  const payload: WebhookPayload = {
+    id: deliveryId,
+    event: event as WebhookPayload['event'],
+    createdAt: new Date().toISOString(),
+    data,
+  };
+
+  const body = JSON.stringify(payload);
+  const signature = signPayload(secret, body);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  let statusCode: number;
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Kyro-Signature': signature,
+        'X-Kyro-Event': event,
+        'User-Agent': 'Kyro-Webhooks/1.0',
+      },
+      body,
+      signal: controller.signal,
+    });
+    statusCode = response.status;
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  // Mark delivery attempt in DB
+  await db
+    .update(webhookDeliveries)
+    .set({
+      status: statusCode >= 200 && statusCode < 300 ? 'delivered' : 'failed',
+      statusCode,
+      attempts: sql`${webhookDeliveries.attempts} + 1`,
+      lastAttemptAt: new Date(),
+    })
+    .where(eq(webhookDeliveries.id, deliveryId));
+
+  // Non-2xx = retriable failure (BullMQ will retry per backoff config)
+  if (statusCode < 200 || statusCode >= 300) {
+    throw new Error(`Webhook endpoint returned ${statusCode}`);
+  }
+}
+
+async function start() {
+  const connection = getBullMQRedis();
+
+  const worker = new Worker<DeliveryJobData>('webhook-delivery', deliver, {
+    connection,
+    concurrency: 10,
+  });
+
+  worker.on('completed', (job) => {
+    console.log(`Webhook: delivery ${job.data.deliveryId} succeeded`);
+  });
+
+  worker.on('failed', async (job, error) => {
+    if (!job) return;
+    const isFinal = job.attemptsMade >= (job.opts.attempts ?? 5);
+    console.error(
+      `Webhook: delivery ${job.data.deliveryId} attempt ${job.attemptsMade} failed: ${error.message}`,
+    );
+    if (isFinal) {
+      await db
+        .update(webhookDeliveries)
+        .set({ status: 'exhausted' })
+        .where(eq(webhookDeliveries.id, job.data.deliveryId))
+        .catch((e) => console.error('Webhook: failed to mark delivery exhausted:', e));
+    }
+  });
+
+  worker.on('error', (e) => console.error('Webhook worker error:', e));
+
+  console.log('Webhook delivery worker started');
+
+  const shutdown = async (sig: string) => {
+    console.log(`Webhook worker: ${sig}, shutting down`);
+    await worker.close();
+    process.exit(0);
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+}
+
+start();
+------------------------------------------------------------
+
