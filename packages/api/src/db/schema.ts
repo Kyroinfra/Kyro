@@ -14,6 +14,7 @@ import {
   integer,
   boolean,
   customType,
+  primaryKey,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
@@ -183,4 +184,38 @@ export const webhookDeliveries = pgTable('webhook_deliveries', {
 }, (table) => ({
   webhookIdIdx: index('idx_webhook_deliveries_webhook_id').on(table.webhookId),
   statusIdx:    index('idx_webhook_deliveries_status').on(table.status),
+}));
+
+// ── collections ───────────────────────────────────────────────────────────────
+// A named group of files within an org. Think: matter, project, product area.
+
+export const collections = pgTable('collections', {
+  id:          uuid('id').defaultRandom().primaryKey(),
+  orgId:       uuid('org_id').notNull().references(() => organisations.id, { onDelete: 'cascade' }),
+  createdBy:   uuid('created_by').notNull().references(() => users.id),
+  name:        varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  // slug is org-scoped — two orgs can have the same slug
+  slug:        varchar('slug', { length: 100 }).notNull(),
+  createdAt:   timestamp('created_at').defaultNow(),
+  updatedAt:   timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  orgIdIdx:        index('idx_collections_org_id').on(table.orgId),
+  orgSlugUniq:     uniqueIndex('idx_collections_org_slug').on(table.orgId, table.slug),
+}));
+
+// ── collection_files ──────────────────────────────────────────────────────────
+// Join table. A file can belong to multiple collections (useful for research
+// reuse — the same paper cited across multiple projects).
+// `addedBy` is recorded for audit purposes.
+
+export const collectionFiles = pgTable('collection_files', {
+  collectionId: uuid('collection_id').notNull().references(() => collections.id, { onDelete: 'cascade' }),
+  fileId:       uuid('file_id').notNull().references(() => files.id, { onDelete: 'cascade' }),
+  addedBy:      uuid('added_by').notNull().references(() => users.id),
+  addedAt:      timestamp('added_at').defaultNow(),
+}, (table) => ({
+  pk:              primaryKey({ columns: [table.collectionId, table.fileId] }),
+  fileIdIdx:       index('idx_collection_files_file_id').on(table.fileId),
+  collectionIdIdx: index('idx_collection_files_collection_id').on(table.collectionId),
 }));
