@@ -1,8 +1,8 @@
 # Prompt:
-this is my codebase
+the current codebase
 
 # File collection from: /home/nyxox/Documents/Projects/Kyro/packages/api/src
-# Generated: 2026-05-31 10:08:03
+# Generated: 2026-05-31 11:47:39
 ------------------------------------------------------------
 
 ## config/index.ts
@@ -229,6 +229,7 @@ import {
   integer,
   boolean,
   customType,
+  primaryKey,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
@@ -398,6 +399,40 @@ export const webhookDeliveries = pgTable('webhook_deliveries', {
 }, (table) => ({
   webhookIdIdx: index('idx_webhook_deliveries_webhook_id').on(table.webhookId),
   statusIdx:    index('idx_webhook_deliveries_status').on(table.status),
+}));
+
+// ── collections ───────────────────────────────────────────────────────────────
+// A named group of files within an org. Think: matter, project, product area.
+
+export const collections = pgTable('collections', {
+  id:          uuid('id').defaultRandom().primaryKey(),
+  orgId:       uuid('org_id').notNull().references(() => organisations.id, { onDelete: 'cascade' }),
+  createdBy:   uuid('created_by').notNull().references(() => users.id),
+  name:        varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  // slug is org-scoped — two orgs can have the same slug
+  slug:        varchar('slug', { length: 100 }).notNull(),
+  createdAt:   timestamp('created_at').defaultNow(),
+  updatedAt:   timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  orgIdIdx:        index('idx_collections_org_id').on(table.orgId),
+  orgSlugUniq:     uniqueIndex('idx_collections_org_slug').on(table.orgId, table.slug),
+}));
+
+// ── collection_files ──────────────────────────────────────────────────────────
+// Join table. A file can belong to multiple collections (useful for research
+// reuse — the same paper cited across multiple projects).
+// `addedBy` is recorded for audit purposes.
+
+export const collectionFiles = pgTable('collection_files', {
+  collectionId: uuid('collection_id').notNull().references(() => collections.id, { onDelete: 'cascade' }),
+  fileId:       uuid('file_id').notNull().references(() => files.id, { onDelete: 'cascade' }),
+  addedBy:      uuid('added_by').notNull().references(() => users.id),
+  addedAt:      timestamp('added_at').defaultNow(),
+}, (table) => ({
+  pk:              primaryKey({ columns: [table.collectionId, table.fileId] }),
+  fileIdIdx:       index('idx_collection_files_file_id').on(table.fileId),
+  collectionIdIdx: index('idx_collection_files_collection_id').on(table.collectionId),
 }));
 ------------------------------------------------------------
 
@@ -2645,6 +2680,425 @@ router.get('/:id/deliveries', authMiddleware, async (req: Request, res: Response
 export default router;
 ------------------------------------------------------------
 
+## routes/v2/collections.ts
+
+// routes/v2/collections.ts
+// Mount at: v2Router.use('/collections', authMiddleware, collectionsRouter)
+// Note: collection management uses JWT auth (owner of the collection),
+//       not API key auth. The /ask and /semantic-search endpoints use
+//       collectionId as a filter — those remain API-key authenticated.
+
+import { Router, Request, Response } from 'express';
+import { db } from '../../db';
+import { collections, collectionFiles, files } from '../../db/schema';
+import { eq, and, sql, count } from 'drizzle-orm';
+import { authMiddleware } from '../../middleware/auth';
+import { z } from 'zod';
+
+const router = Router();
+
+// All collection management requires JWT auth
+router.use(authMiddleware);
+
+// ── Validation ─────────────────────────────────────────────────────────────────
+
+const createCollectionSchema = z.object({
+  name:        z.string().min(1).max(255),
+  description: z.string().max(2000).optional(),
+});
+
+const updateCollectionSchema = createCollectionSchema.partial();
+
+const addFilesSchema = z.object({
+  fileIds: z.array(z.string().uuid()).min(1).max(100),
+});
+
+function toSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .substring(0, 100);
+}
+
+async function uniqueSlug(orgId: string, base: string, excludeId?: string): Promise<string> {
+  const existing = await db
+    .select({ slug: collections.slug })
+    .from(collections)
+    .where(eq(collections.orgId, orgId));
+
+  const taken = new Set(existing.filter(r => r.slug !== undefined ? r : null).map(r => r.slug));
+  let slug = base;
+  let i = 2;
+  while (taken.has(slug)) slug = `${base}-${i++}`;
+  return slug;
+}
+
+// ── GET / — list collections ───────────────────────────────────────────────────
+
+router.get('/', async (req: Request, res: Response) => {
+  try {
+    const orgId = req.user!.orgId;
+
+    // Return collections with a file count and embedding readiness summary
+    const rows = await db.execute(sql`
+      SELECT
+        c.id,
+        c.name,
+        c.description,
+        c.slug,
+        c.created_at   AS "createdAt",
+        c.updated_at   AS "updatedAt",
+        COUNT(cf.file_id)::int                                          AS "fileCount",
+        COUNT(CASE WHEN f.embedding_status = 'completed' THEN 1 END)::int AS "embeddedCount",
+        COUNT(CASE WHEN f.embedding_status = 'pending'   THEN 1 END)::int AS "pendingCount",
+        COUNT(CASE WHEN f.embedding_status = 'failed'    THEN 1 END)::int AS "failedCount"
+      FROM collections c
+      LEFT JOIN collection_files cf ON cf.collection_id = c.id
+      LEFT JOIN files f ON f.id = cf.file_id AND f.deleted_at IS NULL
+      WHERE c.org_id = ${orgId}
+      GROUP BY c.id
+      ORDER BY c.created_at DESC
+    `);
+
+    res.json(rows.rows);
+  } catch (error) {
+    console.error('Error listing collections:', error);
+    res.status(500).json({ error: 'Failed to list collections' });
+  }
+});
+
+// ── POST / — create collection ─────────────────────────────────────────────────
+
+router.post('/', async (req: Request, res: Response) => {
+  try {
+    const orgId = req.user!.orgId;
+    const userId = req.user!.userId;
+
+    const parsed = createCollectionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Invalid input', details: parsed.error.errors });
+      return;
+    }
+
+    const { name, description } = parsed.data;
+    const slug = await uniqueSlug(orgId, toSlug(name));
+
+    const [collection] = await db
+      .insert(collections)
+      .values({ orgId, createdBy: userId, name, description, slug })
+      .returning({
+        id:          collections.id,
+        name:        collections.name,
+        description: collections.description,
+        slug:        collections.slug,
+        createdAt:   collections.createdAt,
+      });
+
+    res.status(201).json(collection);
+  } catch (error) {
+    console.error('Error creating collection:', error);
+    res.status(500).json({ error: 'Failed to create collection' });
+  }
+});
+
+// ── GET /:id — get collection with status summary ──────────────────────────────
+
+router.get('/:id', async (req: Request, res: Response) => {
+  try {
+    const orgId = req.user!.orgId;
+    const id = req.params.id as string;
+
+    const rows = await db.execute(sql`
+      SELECT
+        c.id,
+        c.name,
+        c.description,
+        c.slug,
+        c.created_at   AS "createdAt",
+        c.updated_at   AS "updatedAt",
+        COUNT(cf.file_id)::int                                          AS "fileCount",
+        COUNT(CASE WHEN f.embedding_status = 'completed' THEN 1 END)::int AS "embeddedCount",
+        COUNT(CASE WHEN f.embedding_status = 'pending'   THEN 1 END)::int AS "pendingCount",
+        COUNT(CASE WHEN f.embedding_status = 'failed'    THEN 1 END)::int AS "failedCount",
+        COUNT(CASE WHEN f.embedding_status = 'skipped'   THEN 1 END)::int AS "skippedCount",
+        -- ready = all files with text are embedded (skipped files don't block readiness)
+        (
+          COUNT(cf.file_id) > 0 AND
+          COUNT(CASE WHEN f.embedding_status IN ('pending', 'embedding', 'failed') THEN 1 END) = 0
+        ) AS "queryReady"
+      FROM collections c
+      LEFT JOIN collection_files cf ON cf.collection_id = c.id
+      LEFT JOIN files f ON f.id = cf.file_id AND f.deleted_at IS NULL
+      WHERE c.id = ${id} AND c.org_id = ${orgId}
+      GROUP BY c.id
+    `);
+
+    if (rows.rows.length === 0) {
+      res.status(404).json({ error: 'Collection not found' });
+      return;
+    }
+
+    res.json(rows.rows[0]);
+  } catch (error) {
+    console.error('Error getting collection:', error);
+    res.status(500).json({ error: 'Failed to get collection' });
+  }
+});
+
+// ── PATCH /:id — update collection name/description ───────────────────────────
+
+router.patch('/:id', async (req: Request, res: Response) => {
+  try {
+    const orgId = req.user!.orgId;
+    const id = req.params.id as string;
+
+    const parsed = updateCollectionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Invalid input', details: parsed.error.errors });
+      return;
+    }
+
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    if (parsed.data.name !== undefined) {
+      updates.name = parsed.data.name;
+      updates.slug = await uniqueSlug(orgId, toSlug(parsed.data.name), id);
+    }
+    if (parsed.data.description !== undefined) {
+      updates.description = parsed.data.description;
+    }
+
+    const [updated] = await db
+      .update(collections)
+      .set(updates)
+      .where(and(eq(collections.id, id), eq(collections.orgId, orgId)))
+      .returning({
+        id:          collections.id,
+        name:        collections.name,
+        description: collections.description,
+        slug:        collections.slug,
+        updatedAt:   collections.updatedAt,
+      });
+
+    if (!updated) {
+      res.status(404).json({ error: 'Collection not found' });
+      return;
+    }
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Error updating collection:', error);
+    res.status(500).json({ error: 'Failed to update collection' });
+  }
+});
+
+// ── DELETE /:id — delete collection (does NOT delete files) ───────────────────
+
+router.delete('/:id', async (req: Request, res: Response) => {
+  try {
+    const orgId = req.user!.orgId;
+    const id = req.params.id as string;
+
+    const [deleted] = await db
+      .delete(collections)
+      .where(and(eq(collections.id, id), eq(collections.orgId, orgId)))
+      .returning({ id: collections.id });
+
+    if (!deleted) {
+      res.status(404).json({ error: 'Collection not found' });
+      return;
+    }
+
+    // collectionFiles rows cascade-delete automatically via FK
+    res.status(204).send();
+  } catch (error) {
+    console.error('Error deleting collection:', error);
+    res.status(500).json({ error: 'Failed to delete collection' });
+  }
+});
+
+// ── GET /:id/files — list files in collection ──────────────────────────────────
+
+router.get('/:id/files', async (req: Request, res: Response) => {
+  try {
+    const orgId = req.user!.orgId;
+    const id = req.params.id as string;
+
+    // Verify collection belongs to org first
+    const [collection] = await db
+      .select({ id: collections.id })
+      .from(collections)
+      .where(and(eq(collections.id, id), eq(collections.orgId, orgId)));
+
+    if (!collection) {
+      res.status(404).json({ error: 'Collection not found' });
+      return;
+    }
+
+    const limit = Math.min(parseInt(req.query.limit as string || '100', 10), 100);
+    const offset = Math.max(parseInt(req.query.offset as string || '0', 10), 0);
+
+    const rows = await db.execute(sql`
+      SELECT
+        f.id,
+        f.name,
+        f.mime_type         AS "mimeType",
+        f.size_bytes        AS "sizeBytes",
+        f.embedding_status  AS "embeddingStatus",
+        f.created_at        AS "createdAt",
+        cf.added_at         AS "addedAt"
+      FROM collection_files cf
+      JOIN files f ON f.id = cf.file_id
+      WHERE
+        cf.collection_id = ${id}
+        AND f.deleted_at IS NULL
+      ORDER BY cf.added_at DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `);
+
+    const countResult = await db.execute(sql`
+      SELECT COUNT(*)::int AS total
+      FROM collection_files cf
+      JOIN files f ON f.id = cf.file_id
+      WHERE cf.collection_id = ${id} AND f.deleted_at IS NULL
+    `);
+    const countRow = countResult.rows[0];
+
+    res.json({
+      data: rows.rows,
+      pagination: {
+        total: (countRow as any)?.total ?? 0,
+        limit,
+        offset,
+        hasMore: offset + rows.rows.length < ((countRow as any)?.total ?? 0),
+      },
+    });
+  } catch (error) {
+    console.error('Error listing collection files:', error);
+    res.status(500).json({ error: 'Failed to list collection files' });
+  }
+});
+
+// ── POST /:id/files — add files to collection ──────────────────────────────────
+
+router.post('/:id/files', async (req: Request, res: Response) => {
+  try {
+    const orgId = req.user!.orgId;
+    const userId = req.user!.userId;
+    const id = req.params.id as string;
+
+    const parsed = addFilesSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Invalid input', details: parsed.error.errors });
+      return;
+    }
+
+    // Verify collection ownership
+    const [collection] = await db
+      .select({ id: collections.id })
+      .from(collections)
+      .where(and(eq(collections.id, id), eq(collections.orgId, orgId)));
+
+    if (!collection) {
+      res.status(404).json({ error: 'Collection not found' });
+      return;
+    }
+
+    // Verify all files belong to this org and are not deleted
+    const ownedFiles = await db
+      .select({ id: files.id })
+      .from(files)
+      .where(
+        and(
+          eq(files.orgId, orgId),
+          sql`${files.id} = ANY(${parsed.data.fileIds}::uuid[])`,
+          sql`${files.deletedAt} IS NULL`,
+        )
+      );
+
+    const ownedIds = new Set(ownedFiles.map(f => f.id));
+    const unowned = parsed.data.fileIds.filter(fid => !ownedIds.has(fid));
+
+    if (unowned.length > 0) {
+      res.status(400).json({
+        error: 'Some files not found or do not belong to your organisation',
+        invalidFileIds: unowned,
+      });
+      return;
+    }
+
+    // Insert — ignore conflicts (file already in collection is fine)
+    await db
+      .insert(collectionFiles)
+      .values(
+        parsed.data.fileIds.map(fileId => ({
+          collectionId: id,
+          fileId,
+          addedBy: userId,
+        }))
+      )
+      .onConflictDoNothing();
+
+    await db
+      .update(collections)
+      .set({ updatedAt: new Date() })
+      .where(eq(collections.id, id));
+
+    res.status(200).json({ added: ownedIds.size, collectionId: id });
+  } catch (error) {
+    console.error('Error adding files to collection:', error);
+    res.status(500).json({ error: 'Failed to add files to collection' });
+  }
+});
+
+// ── DELETE /:id/files/:fileId — remove a single file from collection ───────────
+
+router.delete('/:id/files/:fileId', async (req: Request, res: Response) => {
+  try {
+    const orgId = req.user!.orgId;
+    const { id, fileId } = req.params as { id: string; fileId: string };
+
+    // Verify collection ownership
+    const [collection] = await db
+      .select({ id: collections.id })
+      .from(collections)
+      .where(and(eq(collections.id, id), eq(collections.orgId, orgId)));
+
+    if (!collection) {
+      res.status(404).json({ error: 'Collection not found' });
+      return;
+    }
+
+    const [removed] = await db
+      .delete(collectionFiles)
+      .where(
+        and(
+          eq(collectionFiles.collectionId, id),
+          eq(collectionFiles.fileId, fileId),
+        )
+      )
+      .returning({ fileId: collectionFiles.fileId });
+
+    if (!removed) {
+      res.status(404).json({ error: 'File not in this collection' });
+      return;
+    }
+
+    await db
+      .update(collections)
+      .set({ updatedAt: new Date() })
+      .where(eq(collections.id, id));
+
+    res.status(204).send();
+  } catch (error) {
+    console.error('Error removing file from collection:', error);
+    res.status(500).json({ error: 'Failed to remove file from collection' });
+  }
+});
+
+export default router;
+------------------------------------------------------------
+
 ## routes/v2/files.ts
 
 import { Router, Response } from 'express';
@@ -3211,9 +3665,11 @@ import filesRouter   from './files';
 import semanticRouter from './semantic';
 import usageRouter   from '../v1/usage';
 import webhookRouter from '../v1/webhook';
+import collectionsRouter  from './collections';
 import { usageLoggerMiddleware } from '../../middleware/usageLogger';
 import { apiKeyAuthMiddleware } from '../../middleware/apiKeyAuth';
 import { rateLimitMiddleware }   from '../../middleware/rateLimit';
+import { authMiddleware } from '../../middleware/auth';
 
 const v2Router = Router();
 
@@ -3222,6 +3678,7 @@ v2Router.use('/org',      orgRouter);
 v2Router.use('/keys',     keysRouter);
 v2Router.use('/usage',    usageRouter);
 v2Router.use('/webhooks', webhookRouter);
+v2Router.use('/collections', collectionsRouter)
 
 
 v2Router.use((req, res, next) => {
@@ -3247,6 +3704,7 @@ export default v2Router;
 import { Router, Response } from 'express';
 import { db } from '../../db';
 import pool from '../../db';           // raw pg Pool — default export
+import { collections, collectionFiles } from "../../db/schema"
 import { files, fileChunks } from '../../db/schema';
 import { eq, and, isNull, inArray } from 'drizzle-orm';
 import { ApiKeyRequest, requireScope } from '../../middleware/apiKeyAuth';
@@ -3263,6 +3721,26 @@ router.use((req, res, next) => {
 const OLLAMA_URL = process.env.OLLAMA_URL ?? 'http://localhost:11434';
 const CHAT_MODEL = process.env.CHAT_MODEL ?? 'llama3.2';
 
+async function resolveCollectionToFileIds(
+    collectionId: string,
+    orgId: string,
+): Promise<string[] | null> {
+    // Returns null if the collection doesn't exist or belongs to another org
+    const [col] = await db
+        .select({ id: collections.id })
+        .from(collections)
+        .where(and(eq(collections.id, collectionId), eq(collections.orgId, orgId)));
+
+    if (!col) return null;
+
+    const rows = await db
+        .select({ fileId: collectionFiles.fileId })
+        .from(collectionFiles)
+        .where(eq(collectionFiles.collectionId, collectionId));
+
+    return rows.map(r => r.fileId);
+}
+
 router.get('/semantic-search', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
     try {
         const orgId = req.orgId!;
@@ -3278,18 +3756,57 @@ router.get('/semantic-search', requireScope('read'), async (req: ApiKeyRequest, 
             return;
         }
 
-        const limit    = Math.min(parseInt((req.query.limit    as string) || '10',  10), 50);
+        const limit = Math.min(parseInt((req.query.limit as string) || '10', 10), 50);
         const minScore = parseFloat((req.query.min_score as string) || '0.3');
 
-        let fileIdFilter: string[] | undefined;
-        if (req.query.file_ids) {
-            fileIdFilter = (req.query.file_ids as string)
-                .split(',').map(s => s.trim()).filter(Boolean);
-            if (fileIdFilter.length === 0) fileIdFilter = undefined;
+        // let fileIdFilter: string[] | undefined;
+        // if (req.query.file_ids) {
+        //     fileIdFilter = (req.query.file_ids as string)
+        //         .split(',').map(s => s.trim()).filter(Boolean);
+        //     if (fileIdFilter.length === 0) fileIdFilter = undefined;
+        // }
+
+
+        async function resolveFileIdFilter(
+            req: ApiKeyRequest,
+            orgId: string,
+        ): Promise<{ fileIds: string[] | undefined; error?: string }> {
+            const hasCollectionId = !!req.query.collection_id;
+            const hasFileIds = !!req.query.file_ids;
+
+            if (hasCollectionId && hasFileIds) {
+                return { fileIds: undefined, error: 'Provide either collection_id or file_ids, not both' };
+            }
+
+            if (hasCollectionId) {
+                const ids = await resolveCollectionToFileIds(req.query.collection_id as string, orgId);
+                if (ids === null) {
+                    return { fileIds: undefined, error: 'Collection not found' };
+                }
+                if (ids.length === 0) {
+                    return { fileIds: undefined, error: 'Collection has no files' };
+                }
+                return { fileIds: ids };
+            }
+
+            if (hasFileIds) {
+                const ids = (req.query.file_ids as string)
+                    .split(',').map(s => s.trim()).filter(Boolean);
+                return { fileIds: ids.length > 0 ? ids : undefined };
+            }
+
+            return { fileIds: undefined }; // search across entire org
         }
 
-        const queryVec     = await embedQuery(q);
+        const queryVec = await embedQuery(q);
         const vectorLiteral = `[${queryVec.join(',')}]`;
+
+
+        const { fileIds: fileIdFilter, error: filterError } = await resolveFileIdFilter(req, orgId);
+        if (filterError) {
+            res.status(400).json({ error: filterError });
+            return;
+        }
 
         // Build query using raw pool — Drizzle's sql tag breaks ::vector casts
         const params: unknown[] = [orgId, vectorLiteral, minScore, limit];
@@ -3321,7 +3838,7 @@ router.get('/semantic-search', requireScope('read'), async (req: ApiKeyRequest, 
         const result = await pool.query(rawSql, params);
 
         res.json({
-            data:  result.rows,
+            data: result.rows,
             query: q,
             limit,
         });
@@ -3333,14 +3850,30 @@ router.get('/semantic-search', requireScope('read'), async (req: ApiKeyRequest, 
 
 // POST /ask
 
+// const askSchema = z.object({
+//     question: z.string().min(1).max(2000),
+//     fileIds: z.array(z.string().uuid()).min(1).max(20),
+//     topK: z.number().int().min(1).max(20).optional().default(8),
+//     model: z.string().optional(),
+//     minScore: z.number().min(0).max(1).optional().default(0.25),
+//     stream: z.boolean().optional().default(true),
+// });
+
 const askSchema = z.object({
     question: z.string().min(1).max(2000),
-    fileIds:  z.array(z.string().uuid()).min(1).max(20),
-    topK:     z.number().int().min(1).max(20).optional().default(8),
-    model:    z.string().optional(),
+    fileIds: z.array(z.string().uuid()).max(20).optional(),
+    collectionId: z.string().uuid().optional(),
+    topK: z.number().int().min(1).max(20).optional().default(8),
+    model: z.string().optional(),
     minScore: z.number().min(0).max(1).optional().default(0.25),
-    stream:   z.boolean().optional().default(true),
-});
+    stream: z.boolean().optional().default(true),
+}).refine(
+    data => data.fileIds || data.collectionId,
+    { message: 'Either fileIds or collectionId is required' }
+).refine(
+    data => !(data.fileIds && data.collectionId),
+    { message: 'Provide either fileIds or collectionId, not both' }
+);
 
 router.post('/ask', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
     try {
@@ -3352,20 +3885,60 @@ router.post('/ask', requireScope('read'), async (req: ApiKeyRequest, res: Respon
             return;
         }
 
-        const { question, fileIds, topK, stream } = parsed.data;
+
+
+        async function resolveAskFileIds(
+            data: z.infer<typeof askSchema>,
+            orgId: string,
+        ): Promise<{ fileIds: string[]; error?: string; status?: number }> {
+            if (data.collectionId) {
+                const ids = await resolveCollectionToFileIds(data.collectionId, orgId);
+                if (ids === null) {
+                    return { fileIds: [], error: 'Collection not found', status: 404 };
+                }
+                if (ids.length === 0) {
+                    return { fileIds: [], error: 'Collection has no files', status: 422 };
+                }
+                return { fileIds: ids };
+            }
+
+            // fileIds guaranteed by zod refine
+            return { fileIds: data.fileIds! };
+        }
+
+        const { question, topK, stream } = parsed.data;
         const minScore = parsed.data.minScore;
-        const model    = parsed.data.model ?? CHAT_MODEL;
+        const model = parsed.data.model ?? CHAT_MODEL;
 
         if (!process.env.OLLAMA_URL) {
             res.status(400).json({ error: 'OLLAMA_URL must be configured to use the /ask endpoint' });
             return;
         }
 
+
+        const { fileIds: resolvedFileIds, error: resolveError, status: resolveStatus } =
+            await resolveAskFileIds(parsed.data, orgId);
+        if (resolveError) {
+            res.status(resolveStatus ?? 400).json({ error: resolveError });
+            return;
+        }
+
+
         // ── 1. Verify ownership + embedding status ────────────────────────────
+
         const ownedFiles = await db
             .select({ id: files.id, name: files.name, embeddingStatus: files.embeddingStatus })
             .from(files)
-            .where(and(eq(files.orgId, orgId), isNull(files.deletedAt), inArray(files.id, fileIds)));
+            .where(and(
+                eq(files.orgId, orgId),
+                isNull(files.deletedAt),
+                inArray(files.id, resolvedFileIds),   // ← was: fileIds, now resolvedFileIds
+            ));
+
+        // const ownedFiles = await db
+        //     .select({ id: files.id, name: files.name, embeddingStatus: files.embeddingStatus })
+        //     .from(files)
+        //     .where(and(eq(files.orgId, orgId), isNull(files.deletedAt), inArray(files.id, fileIds)));
 
         if (ownedFiles.length === 0) {
             res.status(404).json({ error: 'No matching files found' });
@@ -3389,7 +3962,7 @@ router.post('/ask', requireScope('read'), async (req: ApiKeyRequest, res: Respon
         }
 
         // ── 2. Embed question + retrieve chunks via raw pool query ────────────
-        const queryVec      = await embedQuery(question);
+        const queryVec = await embedQuery(question);
         const vectorLiteral = `[${queryVec.join(',')}]`;
 
         const retrievalSql = `
@@ -3419,11 +3992,11 @@ router.post('/ask', requireScope('read'), async (req: ApiKeyRequest, res: Respon
         ]);
 
         const sources = retrievalResult.rows as Array<{
-            fileId:     string;
-            fileName:   string;
+            fileId: string;
+            fileName: string;
             chunkIndex: number;
-            content:    string;
-            score:      number;
+            content: string;
+            score: number;
         }>;
 
         // ── 3. Build prompt ───────────────────────────────────────────────────
@@ -3463,18 +4036,18 @@ Rules:
 
             try {
                 const ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
-                    method:  'POST',
+                    method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body:    JSON.stringify({ model, messages, stream: true, options: { temperature: 0.2 } }),
+                    body: JSON.stringify({ model, messages, stream: true, options: { temperature: 0.2 } }),
                 });
 
                 if (!ollamaRes.ok || !ollamaRes.body) {
                     throw new Error(`Ollama chat failed (${ollamaRes.status}): ${await ollamaRes.text()}`);
                 }
 
-                const reader  = ollamaRes.body.getReader();
+                const reader = ollamaRes.body.getReader();
                 const decoder = new TextDecoder();
-                let buffer    = '';
+                let buffer = '';
 
                 while (true) {
                     const { done, value } = await reader.read();
@@ -3489,7 +4062,7 @@ Rules:
                         try {
                             const json = JSON.parse(line) as { message?: { content?: string }; done?: boolean };
                             if (json.message?.content) sendEvent({ type: 'chunk', text: json.message.content });
-                            if (json.done)              sendEvent({ type: 'done' });
+                            if (json.done) sendEvent({ type: 'done' });
                         } catch { /* malformed line */ }
                     }
                 }
@@ -3514,9 +4087,9 @@ Rules:
 
         // ── 4b. Non-streaming ─────────────────────────────────────────────────
         const ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
-            method:  'POST',
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ model, messages, stream: false, options: { temperature: 0.2 } }),
+            body: JSON.stringify({ model, messages, stream: false, options: { temperature: 0.2 } }),
         });
 
         if (!ollamaRes.ok) {
@@ -3537,7 +4110,7 @@ Rules:
 router.post('/:id/embed', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
     try {
         const orgId = req.orgId!;
-        const id    = req.params.id as string;
+        const id = req.params.id as string;
 
         if (!process.env.OLLAMA_URL) {
             res.status(400).json({ error: 'OLLAMA_URL must be configured to use embeddings' });
@@ -3562,16 +4135,16 @@ router.post('/:id/embed', requireScope('write'), async (req: ApiKeyRequest, res:
         }
 
         const result = await embedFile({
-            fileId:        file.id,
+            fileId: file.id,
             orgId,
             extractedText: file.extractedText,
-            replace:       true,
+            replace: true,
         });
 
         res.json({
-            fileId:          file.id,
+            fileId: file.id,
             embeddingStatus: result.skipped ? 'skipped' : 'completed',
-            chunksCreated:   result.chunksCreated,
+            chunksCreated: result.chunksCreated,
         });
     } catch (error: any) {
         console.error('Error embedding file:', error);
