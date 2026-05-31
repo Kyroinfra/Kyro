@@ -1,8 +1,8 @@
 # Prompt:
-the current codebase
+this is backend codebase
 
 # File collection from: /home/nyxox/Documents/Projects/Kyro/packages/api/src
-# Generated: 2026-05-31 11:47:39
+# Generated: 2026-05-31 12:07:04
 ------------------------------------------------------------
 
 ## config/index.ts

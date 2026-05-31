@@ -4,6 +4,7 @@
   "scripts": {
     "generate:openapi": "pnpm --filter kyro-api generate:openapi",
     "dev:api": "pnpm --filter kyro-api dev",
-    "dev:web": "pnpm --filter kyro-web dev"
+    "dev:web": "pnpm --filter kyro-web dev",
+    "db:generate": "pnpm --filter kyro-api db:generate"
   }
 }
