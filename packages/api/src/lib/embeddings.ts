@@ -1,19 +1,22 @@
-// lib/embeddings.ts  (FIXED)
+// lib/embeddings.ts
 // ─────────────────────────────────────────────────────────────────────────────
-// Fix applied to semanticSearch():
-//   The original used db.execute({ sql, params }) with a vector literal as a
-//   bind parameter. Postgres receives the vector as a text string and cannot
-//   implicitly cast it to the vector type, causing:
-//     "operator does not exist: vector <=> text"
-//   Fix: use the raw pg pool so the vector literal is inlined directly into
-//   the SQL string with an explicit ::vector cast, bypassing Drizzle's
-//   parameter binding entirely.
+// Changes from original:
+//   • embedFile() now dispatches embedding.started / embedding.completed /
+//     embedding.failed / embedding.skipped webhooks.
+//   • After settling, it calls dispatchCollectionEmbeddingEvents() so that
+//     collection.embedding_completed / collection.embedding_failed fire once
+//     every file in the collection has a final status.
+//   • semanticSearch() and chunkText() are unchanged.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { db } from '../db';
 import pool from '../db';            // raw pg Pool (default export)
 import { fileChunks, files } from '../db/schema';
 import { eq } from 'drizzle-orm';
+import {
+  dispatchWebhookEvent,
+  dispatchCollectionEmbeddingEvents,
+} from './webhook';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -81,7 +84,6 @@ async function embedOne(text: string): Promise<number[]> {
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({ model: EMBEDDING_MODEL, prompt: text }),
   }).catch(err => {
-    // This shows the real cause: ECONNREFUSED, ENOTFOUND, etc.
     throw new Error(`fetch failed: ${err.cause?.message ?? err.message}`);
   });
 
@@ -119,8 +121,20 @@ export interface EmbedFileResult {
 export async function embedFile(opts: EmbedFileOptions): Promise<EmbedFileResult> {
   const { fileId, orgId, extractedText, replace = true } = opts;
 
+  // ── Skipped: no text to embed ──────────────────────────────────────────────
   if (!extractedText?.trim()) {
-    await db.update(files).set({ embeddingStatus: 'skipped' }).where(eq(files.id, fileId));
+    await db.update(files)
+      .set({ embeddingStatus: 'skipped' })
+      .where(eq(files.id, fileId));
+
+    await dispatchWebhookEvent(orgId, 'embedding.skipped', {
+      fileId,
+      reason: 'no_extracted_text',
+    });
+
+    // Check if this settles any collections
+    await dispatchCollectionEmbeddingEvents(orgId, fileId);
+
     return { chunksCreated: 0, skipped: true };
   }
 
@@ -129,57 +143,127 @@ export async function embedFile(opts: EmbedFileOptions): Promise<EmbedFileResult
   }
 
   const chunks = chunkText(extractedText);
+
+  // ── Skipped: text produced no chunks ──────────────────────────────────────
   if (chunks.length === 0) {
-    await db.update(files).set({ embeddingStatus: 'skipped' }).where(eq(files.id, fileId));
+    await db.update(files)
+      .set({ embeddingStatus: 'skipped' })
+      .where(eq(files.id, fileId));
+
+    await dispatchWebhookEvent(orgId, 'embedding.skipped', {
+      fileId,
+      reason: 'no_chunks_produced',
+    });
+
+    await dispatchCollectionEmbeddingEvents(orgId, fileId);
+
     return { chunksCreated: 0, skipped: true };
   }
 
-  await db.update(files).set({ embeddingStatus: 'embedding' }).where(eq(files.id, fileId));
+  // ── Started ────────────────────────────────────────────────────────────────
+  await db.update(files)
+    .set({ embeddingStatus: 'embedding' })
+    .where(eq(files.id, fileId));
 
-  // Embed in batches
-  const allEmbeddings: number[][] = [];
-  for (let i = 0; i < chunks.length; i += EMBED_BATCH_SIZE) {
-    const batch      = chunks.slice(i, i + EMBED_BATCH_SIZE);
-    const embeddings = await embedBatch(batch.map(c => c.content));
-    allEmbeddings.push(...embeddings);
-  }
+  await dispatchWebhookEvent(orgId, 'embedding.started', {
+    fileId,
+    totalChunks: chunks.length,
+  });
 
-  // Persist using raw pool — Drizzle cannot bind vector arrays correctly
-  // for bulk inserts with ON CONFLICT DO UPDATE that reference the vector column.
-  const INSERT_BATCH = 100;
-  for (let i = 0; i < chunks.length; i += INSERT_BATCH) {
-    const batchChunks     = chunks.slice(i, i + INSERT_BATCH);
-    const batchEmbeddings = allEmbeddings.slice(i, i + INSERT_BATCH);
-
-    // Build a multi-row VALUES clause with vector literals inlined
-    const valuePlaceholders: string[] = [];
-    const values: unknown[]           = [];
-    let   paramIdx = 1;
-
-    for (let j = 0; j < batchChunks.length; j++) {
-      const chunk     = batchChunks[j];
-      const vecLit    = `[${batchEmbeddings[j].join(',')}]`;
-      // fileId, orgId, chunkIndex, content are parameterized; vector is inlined
-      valuePlaceholders.push(
-        `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, '${vecLit}'::vector, $${paramIdx++})`
-      );
-      values.push(fileId, orgId, chunk.index, chunk.content, chunk.tokenCount);
+  // ── Embed in batches ───────────────────────────────────────────────────────
+  let allEmbeddings: number[][] = [];
+  try {
+    for (let i = 0; i < chunks.length; i += EMBED_BATCH_SIZE) {
+      const batch      = chunks.slice(i, i + EMBED_BATCH_SIZE);
+      const embeddings = await embedBatch(batch.map(c => c.content));
+      allEmbeddings.push(...embeddings);
     }
+  } catch (embedErr: any) {
+    // Mark the file as failed and fire the webhook before re-throwing so the
+    // worker's outer catch can still log/mark the job status.
+    await db.update(files)
+      .set({ embeddingStatus: 'failed' })
+      .where(eq(files.id, fileId));
 
-    const insertSql = `
-      INSERT INTO file_chunks (file_id, org_id, chunk_index, content, embedding, token_count)
-      VALUES ${valuePlaceholders.join(', ')}
-      ON CONFLICT (file_id, chunk_index)
-      DO UPDATE SET
-        content     = EXCLUDED.content,
-        embedding   = EXCLUDED.embedding,
-        token_count = EXCLUDED.token_count
-    `;
+    await dispatchWebhookEvent(orgId, 'embedding.failed', {
+      fileId,
+      error:        embedErr.message ?? 'Unknown embedding error',
+      chunksTotal:  chunks.length,
+      // chunksEmbedded tells consumers how far we got before the failure
+      chunksEmbedded: allEmbeddings.length,
+    });
 
-    await pool.query(insertSql, values);
+    // Settle any collections that contain this file
+    await dispatchCollectionEmbeddingEvents(orgId, fileId);
+
+    throw embedErr; // let the worker decide whether to retry
   }
 
-  await db.update(files).set({ embeddingStatus: 'completed' }).where(eq(files.id, fileId));
+  // ── Persist chunks ─────────────────────────────────────────────────────────
+  // Uses raw pool — Drizzle cannot bind vector arrays correctly for bulk
+  // inserts with ON CONFLICT DO UPDATE that reference the vector column.
+  const INSERT_BATCH = 100;
+  try {
+    for (let i = 0; i < chunks.length; i += INSERT_BATCH) {
+      const batchChunks     = chunks.slice(i, i + INSERT_BATCH);
+      const batchEmbeddings = allEmbeddings.slice(i, i + INSERT_BATCH);
+
+      const valuePlaceholders: string[] = [];
+      const values: unknown[]           = [];
+      let   paramIdx = 1;
+
+      for (let j = 0; j < batchChunks.length; j++) {
+        const chunk  = batchChunks[j];
+        const vecLit = `[${batchEmbeddings[j].join(',')}]`;
+        valuePlaceholders.push(
+          `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, '${vecLit}'::vector, $${paramIdx++})`
+        );
+        values.push(fileId, orgId, chunk.index, chunk.content, chunk.tokenCount);
+      }
+
+      const insertSql = `
+        INSERT INTO file_chunks (file_id, org_id, chunk_index, content, embedding, token_count)
+        VALUES ${valuePlaceholders.join(', ')}
+        ON CONFLICT (file_id, chunk_index)
+        DO UPDATE SET
+          content     = EXCLUDED.content,
+          embedding   = EXCLUDED.embedding,
+          token_count = EXCLUDED.token_count
+      `;
+
+      await pool.query(insertSql, values);
+    }
+  } catch (persistErr: any) {
+    await db.update(files)
+      .set({ embeddingStatus: 'failed' })
+      .where(eq(files.id, fileId));
+
+    await dispatchWebhookEvent(orgId, 'embedding.failed', {
+      fileId,
+      error:          persistErr.message ?? 'Failed to persist chunks',
+      chunksTotal:    chunks.length,
+      chunksEmbedded: allEmbeddings.length,
+      stage:          'persist',
+    });
+
+    await dispatchCollectionEmbeddingEvents(orgId, fileId);
+
+    throw persistErr;
+  }
+
+  // ── Completed ──────────────────────────────────────────────────────────────
+  await db.update(files)
+    .set({ embeddingStatus: 'completed' })
+    .where(eq(files.id, fileId));
+
+  await dispatchWebhookEvent(orgId, 'embedding.completed', {
+    fileId,
+    chunksCreated: chunks.length,
+    totalTokens:   chunks.reduce((sum, c) => sum + c.tokenCount, 0),
+  });
+
+  // Check if every file in any containing collection is now settled
+  await dispatchCollectionEmbeddingEvents(orgId, fileId);
 
   return { chunksCreated: chunks.length, skipped: false };
 }
@@ -212,10 +296,7 @@ export async function semanticSearch(opts: SemanticSearchOptions): Promise<Seman
   const { orgId, query, fileIds, limit = 10, minScore = 0.3 } = opts;
 
   const queryEmbedding = await embedQuery(query);
-  // Inline vector as a SQL literal — do NOT use a bind parameter.
-  // Postgres cannot implicitly cast a text bind param to the vector type,
-  // which causes "operator does not exist: vector <=> text".
-  const vectorLiteral = `[${queryEmbedding.join(',')}]`;
+  const vectorLiteral  = `[${queryEmbedding.join(',')}]`;
 
   const params: unknown[] = [orgId];
   let fileFilter = '';
