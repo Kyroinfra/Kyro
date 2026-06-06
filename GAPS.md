@@ -4,7 +4,7 @@
 
 Legal discovery teams organize by matter, researchers by project, support bots by product area. Right now everything is a flat file list per org. You need a `collections` table that files belong to, and the `/ask` and `/semantic-search` endpoints need a `collectionId` filter alongside `fileIds`. Passing 50 file IDs per query is not a real UX.
 
-* [ ] Embedding is fire-and-forget with no visibility
+* [x] Embedding is fire-and-forget with no visibility
 
 `embeddingStatus` on the file is good, but there's no way to know "are all files in this collection ready for querying?" You need either a collection-level readiness summary or a bulk status endpoint. Legal teams will ask "can I query this yet?" constantly during document ingestion.
 
