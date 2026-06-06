@@ -8,7 +8,7 @@ Legal discovery teams organize by matter, researchers by project, support bots b
 
 `embeddingStatus` on the file is good, but there's no way to know "are all files in this collection ready for querying?" You need either a collection-level readiness summary or a bulk status endpoint. Legal teams will ask "can I query this yet?" constantly during document ingestion.
 
-* [ ] The chunking strategy is naïve for legal/research docs
+* [x] The chunking strategy is naïve for legal/research docs
 
 Fixed character chunking at 1200 chars with 200 overlap will split across headings, clauses, and citations. For legal documents especially, you want to respect structural boundaries — at minimum detect double-newlines as paragraph breaks and prefer those. For PDFs you're already getting raw text from `pdf-parse` which loses structure, but that's a harder problem.
 
