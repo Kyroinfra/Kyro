@@ -12,7 +12,7 @@ Legal discovery teams organize by matter, researchers by project, support bots b
 
 Fixed character chunking at 1200 chars with 200 overlap will split across headings, clauses, and citations. For legal documents especially, you want to respect structural boundaries — at minimum detect double-newlines as paragraph breaks and prefer those. For PDFs you're already getting raw text from `pdf-parse` which loses structure, but that's a harder problem.
 
-* [ ] No reranking
+* [x] No reranking
 
 Your retrieval is pure cosine similarity. For "find all clauses mentioning indemnification across 200 contracts" you'll get noisy results. Even a simple cross-encoder rerank pass (or BM25 hybrid) would meaningfully improve precision for legal/research use cases. Ollama can run cross-encoder models locally.
 
