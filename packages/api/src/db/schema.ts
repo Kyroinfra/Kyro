@@ -117,18 +117,20 @@ export const textExtractionJobs = pgTable('text_extraction_jobs', {
 // ── NEW: file_chunks ──────────────────────────────────────────────────────────
 // One row per text chunk. Populated after text extraction completes.
 export const fileChunks = pgTable('file_chunks', {
-  id:          uuid('id').defaultRandom().primaryKey(),
-  fileId:      uuid('file_id').notNull().references(() => files.id, { onDelete: 'cascade' }),
-  orgId:       uuid('org_id').notNull().references(() => organisations.id, { onDelete: 'cascade' }),
-  chunkIndex:  integer('chunk_index').notNull(),
-  content:     text('content').notNull(),
-  embedding:   vector('embedding'),       // null until embedding job runs
-  tokenCount:  integer('token_count'),
-  createdAt:   timestamp('created_at').defaultNow(),
+  id:                uuid('id').defaultRandom().primaryKey(),
+  fileId:            uuid('file_id').notNull().references(() => files.id, { onDelete: 'cascade' }),
+  orgId:             uuid('org_id').notNull().references(() => organisations.id, { onDelete: 'cascade' }),
+  chunkIndex:        integer('chunk_index').notNull(),
+  content:           text('content').notNull(),
+  embedding:         vector('embedding'),
+  tokenCount:        integer('token_count'),
+  textSearchVector:  tsvector('text_search_vector'),   // ← add this
+  createdAt:         timestamp('created_at').defaultNow(),
 }, (table) => ({
   orgIdIdx:    index('idx_file_chunks_org_id').on(table.orgId),
   fileIdIdx:   index('idx_file_chunks_file_id').on(table.fileId),
   uniqueChunk: uniqueIndex('idx_file_chunks_file_chunk').on(table.fileId, table.chunkIndex),
+  ftsIdx:      index('idx_file_chunks_fts').using('gin', table.textSearchVector),  // ← add this
 }));
 
 export const usageLogs = pgTable('usage_logs', {

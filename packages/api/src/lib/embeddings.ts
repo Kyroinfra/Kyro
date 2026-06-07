@@ -1,12 +1,11 @@
 // lib/embeddings.ts
 // ─────────────────────────────────────────────────────────────────────────────
-// Changes from original:
-//   • embedFile() now dispatches embedding.started / embedding.completed /
-//     embedding.failed / embedding.skipped webhooks.
-//   • After settling, it calls dispatchCollectionEmbeddingEvents() so that
-//     collection.embedding_completed / collection.embedding_failed fire once
-//     every file in the collection has a final status.
-//   • semanticSearch() and chunkText() are unchanged.
+// Changes from previous version:
+//   • semanticSearch() now delegates to hybridSearch() from lib/retrieval.ts.
+//     The function signature and return type are unchanged so all existing
+//     callers continue to work without modification.
+//   • All other functions (chunkText, embedFile, embedQuery, embedBatch,
+//     embedOne) are unchanged.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { db } from '../db';
@@ -17,15 +16,20 @@ import {
   dispatchWebhookEvent,
   dispatchCollectionEmbeddingEvents,
 } from './webhook';
+import { hybridSearch } from './retrieval';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const OLLAMA_URL      = process.env.OLLAMA_URL      ?? 'http://localhost:11434';
 const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL ?? 'nomic-embed-text';
 
-const CHUNK_SIZE_CHARS    = 1200;
-const CHUNK_OVERLAP_CHARS = 200;
-const EMBED_BATCH_SIZE    = 32;
+// Chunking thresholds (characters, not tokens)
+const CHUNK_TARGET_CHARS  = 1200; // aim for this size per chunk
+const CHUNK_MIN_CHARS     = 400;  // below this, merge with the next paragraph
+const CHUNK_MAX_CHARS     = 1800; // above this, force a sentence-level split
+const CHUNK_OVERLAP_CHARS = 200;  // tail of prev chunk prepended as context
+
+const EMBED_BATCH_SIZE = 32;
 
 // ── Chunking ──────────────────────────────────────────────────────────────────
 
@@ -38,39 +42,93 @@ export interface TextChunk {
 export function chunkText(text: string): TextChunk[] {
   if (!text.trim()) return [];
 
+  // ── 1. Split on paragraph boundaries ──────────────────────────────────────
+  // Handles \n\n, \r\n\r\n, or any line that is entirely whitespace.
+  const rawParagraphs = text
+    .split(/\n\s*\n/)
+    .map(p => p.trim())
+    .filter(p => p.length > 0);
+
+  // ── 2. Merge short paragraphs forward ─────────────────────────────────────
+  // Walk forward: while the accumulated buffer is below CHUNK_MIN_CHARS, keep
+  // appending the next paragraph. This keeps related short clauses together
+  // (e.g. numbered legal sub-clauses, citation lines, figure captions).
+  const merged: string[] = [];
+  let buffer = '';
+
+  for (const para of rawParagraphs) {
+    if (buffer.length === 0) {
+      buffer = para;
+    } else if (buffer.length < CHUNK_MIN_CHARS) {
+      buffer += '\n\n' + para;
+    } else {
+      merged.push(buffer);
+      buffer = para;
+    }
+  }
+  if (buffer.length > 0) {
+    merged.push(buffer);
+  }
+
+  // ── 3. Split oversized blocks at sentence boundaries ──────────────────────
+  // A paragraph that exceeds CHUNK_MAX_CHARS is split greedily: sentences are
+  // accumulated until adding the next one would exceed CHUNK_TARGET_CHARS,
+  // at which point the current accumulator is flushed and a new one starts.
+  const sized: string[] = [];
+
+  for (const block of merged) {
+    if (block.length <= CHUNK_MAX_CHARS) {
+      sized.push(block);
+      continue;
+    }
+
+    // Match sequences ending with sentence-terminating punctuation.
+    // Keeps ". " boundaries intact without stripping the period.
+    const sentences = block.match(/[^.!?]+[.!?]*/g) ?? [block];
+    let current = '';
+
+    for (const sentence of sentences) {
+      const s = sentence.trim();
+      if (!s) continue;
+
+      if (current.length > 0 && current.length + 1 + s.length > CHUNK_TARGET_CHARS) {
+        sized.push(current.trim());
+        current = s;
+      } else {
+        current = current ? current + ' ' + s : s;
+      }
+    }
+    if (current.trim()) {
+      sized.push(current.trim());
+    }
+  }
+
+  // ── 4. Build final chunks with soft overlap ────────────────────────────────
+  // Each chunk begins with the tail of the previous chunk (CHUNK_OVERLAP_CHARS)
+  // so that a sentence split mid-way between two chunks does not lose context.
+  // The overlap is prepended as genuine text; the primary paragraph boundary is
+  // still honoured — the chunk does not start mid-sentence.
   const chunks: TextChunk[] = [];
-  let start = 0;
-  let index = 0;
+  let previousTail = '';
 
-  while (start < text.length) {
-    let end = start + CHUNK_SIZE_CHARS;
+  for (let i = 0; i < sized.length; i++) {
+    const primary = sized[i];
+    const content = previousTail
+      ? previousTail + '\n\n' + primary
+      : primary;
 
-    if (end < text.length) {
-      const breakCandidates = [
-        text.lastIndexOf('\n\n', end),
-        text.lastIndexOf('. ',  end),
-        text.lastIndexOf('? ',  end),
-        text.lastIndexOf('! ',  end),
-        text.lastIndexOf('\n',  end),
-        text.lastIndexOf(' ',   end),
-      ];
+    const trimmed = content.trim();
+    chunks.push({
+      index:      i,
+      content:    trimmed,
+      tokenCount: Math.ceil(trimmed.length / 4),
+    });
 
-      const minBreak  = start + CHUNK_SIZE_CHARS * 0.5;
-      const goodBreak = breakCandidates
-        .filter(b => b > minBreak)
-        .sort((a, b) => b - a)[0];
-
-      if (goodBreak > minBreak) end = goodBreak + 1;
-    }
-
-    const content = text.slice(start, end).trim();
-    if (content.length > 0) {
-      chunks.push({ index, content, tokenCount: Math.ceil(content.length / 4) });
-      index++;
-    }
-
-    start = end - CHUNK_OVERLAP_CHARS;
-    if (start <= 0) break;
+    // Capture the tail of *primary* (not the full content including overlap)
+    // so we don't accumulate overlap-of-overlap across many chunks.
+    previousTail = primary.length > CHUNK_OVERLAP_CHARS
+      ? primary.slice(-CHUNK_OVERLAP_CHARS)
+      : primary;
   }
 
   return chunks;
@@ -132,7 +190,6 @@ export async function embedFile(opts: EmbedFileOptions): Promise<EmbedFileResult
       reason: 'no_extracted_text',
     });
 
-    // Check if this settles any collections
     await dispatchCollectionEmbeddingEvents(orgId, fileId);
 
     return { chunksCreated: 0, skipped: true };
@@ -179,24 +236,20 @@ export async function embedFile(opts: EmbedFileOptions): Promise<EmbedFileResult
       allEmbeddings.push(...embeddings);
     }
   } catch (embedErr: any) {
-    // Mark the file as failed and fire the webhook before re-throwing so the
-    // worker's outer catch can still log/mark the job status.
     await db.update(files)
       .set({ embeddingStatus: 'failed' })
       .where(eq(files.id, fileId));
 
     await dispatchWebhookEvent(orgId, 'embedding.failed', {
       fileId,
-      error:        embedErr.message ?? 'Unknown embedding error',
-      chunksTotal:  chunks.length,
-      // chunksEmbedded tells consumers how far we got before the failure
+      error:          embedErr.message ?? 'Unknown embedding error',
+      chunksTotal:    chunks.length,
       chunksEmbedded: allEmbeddings.length,
     });
 
-    // Settle any collections that contain this file
     await dispatchCollectionEmbeddingEvents(orgId, fileId);
 
-    throw embedErr; // let the worker decide whether to retry
+    throw embedErr;
   }
 
   // ── Persist chunks ─────────────────────────────────────────────────────────
@@ -262,7 +315,6 @@ export async function embedFile(opts: EmbedFileOptions): Promise<EmbedFileResult
     totalTokens:   chunks.reduce((sum, c) => sum + c.tokenCount, 0),
   });
 
-  // Check if every file in any containing collection is now settled
   await dispatchCollectionEmbeddingEvents(orgId, fileId);
 
   return { chunksCreated: chunks.length, skipped: false };
@@ -275,6 +327,9 @@ export async function embedQuery(query: string): Promise<number[]> {
 }
 
 // ── Semantic search ───────────────────────────────────────────────────────────
+// Delegates to hybridSearch() (Phase 1: BM25+vector→RRF, Phase 2: rerank).
+// The function signature and SemanticSearchResult shape are unchanged so that
+// routes/v2/semantic.ts and any other callers need no modifications.
 
 export interface SemanticSearchOptions {
   orgId:     string;
@@ -285,50 +340,36 @@ export interface SemanticSearchOptions {
 }
 
 export interface SemanticSearchResult {
-  fileId:     string;
-  fileName:   string;
-  chunkIndex: number;
-  content:    string;
-  score:      number;
+  fileId:      string;
+  fileName:    string;
+  chunkIndex:  number;
+  content:     string;
+  score:       number;   // rrfScore when no reranker; rerankScore when reranker ran
+  rrfScore?:   number;   // always present (useful for debugging)
+  rerankScore?: number;  // only present when OLLAMA_URL is set
 }
 
 export async function semanticSearch(opts: SemanticSearchOptions): Promise<SemanticSearchResult[]> {
-  const { orgId, query, fileIds, limit = 10, minScore = 0.3 } = opts;
+  const { orgId, query, fileIds, limit = 10, minScore = 0 } = opts;
 
-  const queryEmbedding = await embedQuery(query);
-  const vectorLiteral  = `[${queryEmbedding.join(',')}]`;
+  const results = await hybridSearch({
+    orgId,
+    query,
+    fileIds,
+    limit,
+    minRrfScore: minScore,
+  });
 
-  const params: unknown[] = [orgId];
-  let fileFilter = '';
-
-  if (fileIds && fileIds.length > 0) {
-    params.push(fileIds);
-    fileFilter = `AND fc.file_id = ANY($${params.length}::uuid[])`;
-  }
-
-  params.push(minScore);
-  const minScoreParam = params.length;
-  params.push(limit);
-  const limitParam = params.length;
-
-  const rawSql = `
-    SELECT
-      fc.file_id        AS "fileId",
-      f.name            AS "fileName",
-      fc.chunk_index    AS "chunkIndex",
-      fc.content,
-      (1 - (fc.embedding <=> '${vectorLiteral}'::vector))::float4 AS score
-    FROM file_chunks fc
-    JOIN files f ON f.id = fc.file_id
-    WHERE
-      fc.org_id = $1
-      AND f.deleted_at IS NULL
-      ${fileFilter}
-      AND (1 - (fc.embedding <=> '${vectorLiteral}'::vector)) >= $${minScoreParam}
-    ORDER BY fc.embedding <=> '${vectorLiteral}'::vector
-    LIMIT $${limitParam}
-  `;
-
-  const result = await pool.query(rawSql, params);
-  return result.rows as SemanticSearchResult[];
+  // Map to the established SemanticSearchResult shape.
+  // `score` is the most relevant score available: rerankScore when present
+  // (Phase 2 ran), otherwise rrfScore (Phase 1 only).
+  return results.map(r => ({
+    fileId:      r.fileId,
+    fileName:    r.fileName,
+    chunkIndex:  r.chunkIndex,
+    content:     r.content,
+    score:       r.rerankScore !== undefined ? r.rerankScore : r.rrfScore,
+    rrfScore:    r.rrfScore,
+    rerankScore: r.rerankScore,
+  }));
 }

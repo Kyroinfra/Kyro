@@ -43,6 +43,13 @@
       "when": 1780225494425,
       "tag": "0005_clear_edwin_jarvis",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1780763354155,
+      "tag": "0006_lame_masque",
+      "breakpoints": true
     }
   ]
 }
