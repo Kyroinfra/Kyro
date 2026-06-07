@@ -13,17 +13,28 @@
 //   cross-encoder model that sees (query, chunk) jointly and assigns a
 //   relevance score. Final results are sorted by that score.
 //
-// FIX (2026-06-07):
+// Fixes applied:
+//
+//   FIX 1 (2026-06-07) — Parameter index corruption:
 //   The original rrfSearch() built SQL parameter indices ($N) by reading
 //   params.length mid-template-literal, but the fileIds IIFE mutated params
 //   during vector-arm template evaluation — so by the time the BM25 arm was
 //   evaluated, params.length was already wrong, giving the BM25 query string
-//   the wrong bind index. This caused the BM25 arm to silently fail (wrong
-//   param), leaving only the vector arm contributing to RRF — and because
-//   minScore defaulted to 0, all chunks passed through regardless of relevance.
-//
+//   the wrong bind index. This caused the BM25 arm to silently fail, leaving
+//   only the vector arm contributing to RRF.
 //   Fix: assign ALL parameter indices explicitly BEFORE constructing the SQL
-//   string, so there is no implicit dependency on mutation order.
+//   string.
+//
+//   FIX 2 (2026-06-07) — Vector arm distance threshold:
+//   Without a distance filter the vector arm always returns CANDIDATE_LIMIT
+//   rows regardless of relevance — cosine similarity ranks every chunk against
+//   every query, so even nonsense queries get N results. This meant RRF always
+//   had N candidates from the vector arm even when none were relevant, causing
+//   semantic-search to return all chunks for any query.
+//   Fix: add VECTOR_DISTANCE_THRESHOLD to the vector arm's WHERE clause so
+//   only genuinely similar chunks (distance < threshold) enter RRF. Chunks
+//   that are too far from the query vector are excluded before ranking.
+//   The BM25 arm is unaffected — it already self-filters via @@ tsquery.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import pool from '../db';
@@ -32,9 +43,26 @@ import { embedQuery } from './embeddings';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const RRF_K              = 60;
-const CANDIDATE_LIMIT    = 100;
+// RRF constant — 60 is the value from the original RRF paper (Cormack 2009).
+const RRF_K = 60;
+
+// How many candidates each arm fetches before fusion.
+const CANDIDATE_LIMIT = 100;
+
+// How many fused candidates are passed to the cross-encoder.
 const RERANK_INPUT_LIMIT = 50;
+
+// Cosine distance threshold for the vector arm.
+// pgvector's <=> operator returns cosine distance in [0, 2]:
+//   0.0  = identical vectors
+//   1.0  = orthogonal (no similarity)
+//   2.0  = opposite vectors
+// Typical values for nomic-embed-text on related text: 0.1–0.4
+// Typical values for unrelated/nonsense text:          0.5–1.0+
+// 0.5 is a deliberately generous cutoff — it admits anything with any
+// directional similarity while excluding pure noise. Tighten to 0.3–0.4
+// if you want stricter relevance filtering.
+const VECTOR_DISTANCE_THRESHOLD = 0.5;
 
 // ── Shared result shape ───────────────────────────────────────────────────────
 
@@ -68,14 +96,14 @@ export interface RrfSearchOptions {
  *   $2  — query text  (used in BM25 arm)
  *   $3  — fileIds[]   (only when fileIds filter is present)
  *
- * The vector literal is inlined as a safe string (it's a number[] we produced,
- * never raw user input) because pgvector's <=> operator does not accept a bind
- * parameter for the right-hand side.
+ * The vector literal and distance threshold are inlined as safe strings
+ * (number[] and a numeric constant we produced, never raw user input) because
+ * pgvector's <=> operator does not accept bind parameters for its operands.
  */
 export async function rrfSearch(opts: RrfSearchOptions): Promise<RetrievalResult[]> {
   const { orgId, query, queryVector, fileIds, limit, minScore = 0 } = opts;
 
-  // ── Build params array and record indices BEFORE touching the SQL string ──
+  // ── Build params array with explicit indices BEFORE touching SQL ──────────
   const params: unknown[] = [];
 
   // $1 — orgId
@@ -94,11 +122,14 @@ export async function rrfSearch(opts: RrfSearchOptions): Promise<RetrievalResult
     fileFilterClause = `AND fc.file_id = ANY($${P_FILE_IDS}::uuid[])`;
   }
 
-  // Inline the vector literal — safe because queryVector is number[] we produced
+  // Inline the vector literal and threshold — safe, number[] we produced
   const vectorLiteral = `[${queryVector.join(',')}]`;
 
   const sql = `
     WITH vector_ranked AS (
+      -- Dense arm: only include chunks within VECTOR_DISTANCE_THRESHOLD of the
+      -- query vector. This prevents noise chunks from always contributing to RRF
+      -- even when the query has no semantic match in the corpus.
       SELECT
         fc.file_id         AS file_id,
         f.name             AS file_name,
@@ -110,13 +141,16 @@ export async function rrfSearch(opts: RrfSearchOptions): Promise<RetrievalResult
       FROM file_chunks fc
       JOIN files f ON f.id = fc.file_id
       WHERE
-            fc.org_id      = $${P_ORG}
-        AND f.deleted_at   IS NULL
-        AND fc.embedding   IS NOT NULL
+            fc.org_id    = $${P_ORG}
+        AND f.deleted_at  IS NULL
+        AND fc.embedding  IS NOT NULL
+        AND fc.embedding <=> '${vectorLiteral}'::vector < ${VECTOR_DISTANCE_THRESHOLD}
         ${fileFilterClause}
       LIMIT ${CANDIDATE_LIMIT}
     ),
     bm25_ranked AS (
+      -- Sparse arm: BM25 via tsvector. Self-filtering — only chunks that match
+      -- the tsquery are included, so no threshold needed here.
       SELECT
         fc.file_id         AS file_id,
         f.name             AS file_name,
@@ -128,13 +162,16 @@ export async function rrfSearch(opts: RrfSearchOptions): Promise<RetrievalResult
       FROM file_chunks fc
       JOIN files f ON f.id = fc.file_id
       WHERE
-            fc.org_id              = $${P_ORG}
-        AND f.deleted_at           IS NULL
-        AND fc.text_search_vector  @@ websearch_to_tsquery('english', $${P_QUERY})
+            fc.org_id             = $${P_ORG}
+        AND f.deleted_at          IS NULL
+        AND fc.text_search_vector @@ websearch_to_tsquery('english', $${P_QUERY})
         ${fileFilterClause}
       LIMIT ${CANDIDATE_LIMIT}
     ),
     fused AS (
+      -- Reciprocal Rank Fusion over the union of both arms.
+      -- A chunk that appears in both arms gets contributions from each.
+      -- A chunk that appears in neither arm is not present at all.
       SELECT
         COALESCE(v.file_id,     b.file_id)     AS file_id,
         COALESCE(v.file_name,   b.file_name)   AS file_name,
@@ -175,11 +212,11 @@ interface ChunkCandidate extends RerankCandidate {
 // ── Public entry point ────────────────────────────────────────────────────────
 
 export interface HybridSearchOptions {
-  orgId:         string;
-  query:         string;
-  fileIds?:      string[];
-  limit?:        number;
-  minRrfScore?:  number;
+  orgId:        string;
+  query:        string;
+  fileIds?:     string[];
+  limit?:       number;
+  minRrfScore?: number;
 }
 
 /**

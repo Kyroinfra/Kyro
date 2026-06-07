@@ -53,6 +53,16 @@ async function resolveCollectionToFileIds(
 }
 
 // ── GET /semantic-search ──────────────────────────────────────────────────────
+//
+// min_score defaults to 0.01 — enough to filter chunks that appear in neither
+// retrieval arm while still returning anything with a genuine signal.
+// RRF score reference:
+//   ~0.016  chunk ranked #1 in one arm only   (1 / (60+1))
+//   ~0.008  chunk ranked #60 in one arm only  (1 / (60+60))
+//   ~0.032  chunk ranked #1 in BOTH arms      (two contributions)
+// 0.01 sits between a mid-table single-arm hit and a top single-arm hit,
+// so it filters obvious noise without hiding legitimate low-confidence matches.
+// Consumers can pass ?min_score=0 to disable filtering entirely.
 
 router.get('/semantic-search', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
   try {
@@ -69,8 +79,9 @@ router.get('/semantic-search', requireScope('read'), async (req: ApiKeyRequest, 
       return;
     }
 
-    const limit    = Math.min(parseInt((req.query.limit    as string) || '10',  10), 50);
-    const minScore = parseFloat((req.query.min_score as string) || '0');
+    const limit    = Math.min(parseInt((req.query.limit as string) || '10', 10), 50);
+    // Default 0.01 filters noise; pass ?min_score=0 to get all results
+    const minScore = parseFloat((req.query.min_score as string) || '0.01');
 
     // ── Resolve file ID filter ─────────────────────────────────────────────
     const hasCollectionId = !!req.query.collection_id;
@@ -110,9 +121,10 @@ router.get('/semantic-search', requireScope('read'), async (req: ApiKeyRequest, 
     });
 
     res.json({
-      data:  results,
-      query: q,
+      data:     results,
+      query:    q,
       limit,
+      minScore, // expose so consumers know what threshold was applied
     });
   } catch (error: any) {
     console.error('Error in semantic-search:', error);
@@ -128,7 +140,7 @@ const askSchema = z.object({
   collectionId: z.string().uuid().optional(),
   topK:         z.number().int().min(1).max(20).optional().default(8),
   model:        z.string().optional(),
-  minScore:     z.number().min(0).max(1).optional().default(0),  // ← was 0.25
+  minScore:     z.number().min(0).max(1).optional().default(0),
   stream:       z.boolean().optional().default(true),
 }).refine(
   data => data.fileIds || data.collectionId,
@@ -206,8 +218,7 @@ router.post('/ask', requireScope('read'), async (req: ApiKeyRequest, res: Respon
       return;
     }
 
-    // ── Phase 1 + 2: hybrid retrieval ──────────────────────────────────────
-    // hybridSearch handles: embed query → BM25+vector → RRF → cross-encoder rerank
+    // ── Hybrid retrieval ───────────────────────────────────────────────────
     const sources = await hybridSearch({
       orgId,
       query:       question,
@@ -284,7 +295,6 @@ Rules:
           }
         }
 
-        // Flush any remaining buffered data
         if (buffer.trim()) {
           try {
             const json = JSON.parse(buffer) as { message?: { content?: string } };
@@ -323,7 +333,6 @@ Rules:
 });
 
 // ── POST /:id/embed ───────────────────────────────────────────────────────────
-// Unchanged from original.
 
 router.post('/:id/embed', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
   try {
