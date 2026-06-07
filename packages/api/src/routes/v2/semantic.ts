@@ -128,7 +128,7 @@ const askSchema = z.object({
   collectionId: z.string().uuid().optional(),
   topK:         z.number().int().min(1).max(20).optional().default(8),
   model:        z.string().optional(),
-  minScore:     z.number().min(0).max(1).optional().default(0.25),
+  minScore:     z.number().min(0).max(1).optional().default(0),  // ← was 0.25
   stream:       z.boolean().optional().default(true),
 }).refine(
   data => data.fileIds || data.collectionId,
