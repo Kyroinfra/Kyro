@@ -231,6 +231,27 @@ All tables are defined in `packages/api/src/db/schema.ts` using Drizzle ORM with
 
 ---
 
+## `file_metadata`
+
+Arbitrary key-value metadata per file.
+
+| Column | Type | Constraints | Default |
+|---|---|---|---|
+| `id` | `uuid` | PK, `defaultRandom()` | — |
+| `file_id` | `uuid` | NOT NULL, FK → `files.id` ON DELETE CASCADE | — |
+| `org_id` | `uuid` | NOT NULL, FK → `organisations.id` ON DELETE CASCADE | — |
+| `key` | `varchar(100)` | NOT NULL | — |
+| `value` | `text` | NOT NULL | — |
+| `created_at` | `timestamp` | | `now()` |
+
+**Indexes:**
+- `idx_file_metadata_file_id` on `file_id`
+- `idx_file_metadata_org_key` on `(org_id, key)`
+- `idx_file_metadata_org_key_value` on `(org_id, key, value)`
+- `idx_file_metadata_file_key` UNIQUE on `(file_id, key)`
+
+---
+
 ## `_migrations`
 
 | Column | Type | Constraints | Default |
