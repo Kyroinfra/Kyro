@@ -1,13 +1,29 @@
 // routes/v2/semantic.ts
 // ─────────────────────────────────────────────────────────────────────────────
-// Changes from original:
-//   • /semantic-search now calls hybridSearch() (BM25+vector→RRF→rerank)
-//     instead of a raw cosine-only SQL query. Query params are unchanged.
-//   • /ask now calls hybridSearch() for its retrieval step instead of the
-//     inline cosine SQL. All other /ask logic (prompt, streaming, sources)
-//     is unchanged.
-//   • /:id/embed is unchanged.
-//   • The resolveCollectionToFileIds helper is unchanged.
+// Changes from previous version:
+//   • /ask no longer requires fileIds or collectionId — when neither is
+//     provided the search runs across the entire org's embedded corpus.
+//     This enables support-bot / knowledge-base use cases where the caller
+//     should not need to know which files are relevant.
+//
+//   • askSchema: removed the refine() that required one of fileIds /
+//     collectionId. The mutual-exclusion refine() is kept.
+//
+//   • File ID resolution is now a three-way branch:
+//       collectionId → resolve to that collection's file IDs
+//       fileIds      → use as-is
+//       neither      → undefined (hybridSearch scopes to orgId only)
+//
+//   • Ownership + embedding-status check handles undefined resolvedFileIds:
+//       - When scoped: verify ownership, filter to embedded files, 422 if none.
+//       - When org-wide: verify at least one embedded file exists in the org.
+//
+//   • Both hybridSearch calls receive embeddedFileIds (which may be undefined
+//     for the org-wide case) — rrfSearch already handles undefined fileIds
+//     by omitting the AND file_id = ANY(...) clause entirely.
+//
+//   • All other logic (/semantic-search, /:id/embed, streaming, prompt) is
+//     unchanged.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { Router, Response } from 'express';
@@ -133,6 +149,15 @@ router.get('/semantic-search', requireScope('read'), async (req: ApiKeyRequest, 
 });
 
 // ── POST /ask ─────────────────────────────────────────────────────────────────
+//
+// Supported modes (all via the same endpoint):
+//   { question, collectionId }   — search within a specific collection
+//   { question, fileIds: [...] } — search within specific files
+//   { question }                 — search across the entire org's embedded corpus
+//
+// The third mode is the primary addition: it lets support-bot callers send
+// only the question and let the retrieval layer determine relevance, rather
+// than requiring the caller to know which files to search.
 
 const askSchema = z.object({
   question:     z.string().min(1).max(2000),
@@ -143,9 +168,7 @@ const askSchema = z.object({
   minScore:     z.number().min(0).max(1).optional().default(0),
   stream:       z.boolean().optional().default(true),
 }).refine(
-  data => data.fileIds || data.collectionId,
-  { message: 'Either fileIds or collectionId is required' },
-).refine(
+  // Mutual exclusion — providing both is always an error
   data => !(data.fileIds && data.collectionId),
   { message: 'Provide either fileIds or collectionId, not both' },
 );
@@ -170,7 +193,9 @@ router.post('/ask', requireScope('read'), async (req: ApiKeyRequest, res: Respon
     const model    = parsed.data.model ?? CHAT_MODEL;
 
     // ── Resolve file IDs ───────────────────────────────────────────────────
-    let resolvedFileIds: string[];
+    // resolvedFileIds === undefined means "search the whole org" — this is
+    // intentional and handled correctly downstream by hybridSearch / rrfSearch.
+    let resolvedFileIds: string[] | undefined;
 
     if (parsed.data.collectionId) {
       const ids = await resolveCollectionToFileIds(parsed.data.collectionId, orgId);
@@ -183,46 +208,79 @@ router.post('/ask', requireScope('read'), async (req: ApiKeyRequest, res: Respon
         return;
       }
       resolvedFileIds = ids;
-    } else {
-      resolvedFileIds = parsed.data.fileIds!;
+    } else if (parsed.data.fileIds) {
+      resolvedFileIds = parsed.data.fileIds;
     }
+    // else: resolvedFileIds stays undefined → org-wide search
 
     // ── Verify ownership + embedding status ────────────────────────────────
-    const ownedFiles = await db
-      .select({ id: files.id, name: files.name, embeddingStatus: files.embeddingStatus })
-      .from(files)
-      .where(and(
-        eq(files.orgId, orgId),
-        isNull(files.deletedAt),
-        inArray(files.id, resolvedFileIds),
-      ));
+    //
+    // Scoped mode (resolvedFileIds is defined):
+    //   Verify the caller owns the files and at least some are embedded.
+    //   Return a 422 with per-file statuses if none are ready.
+    //
+    // Org-wide mode (resolvedFileIds is undefined):
+    //   Skip per-file ownership check (orgId scoping in hybridSearch is
+    //   sufficient). Just confirm the org has at least one embedded file so
+    //   we can return a useful error rather than an empty result.
+    let embeddedFileIds: string[] | undefined;
 
-    if (ownedFiles.length === 0) {
-      res.status(404).json({ error: 'No matching files found' });
-      return;
-    }
+    if (resolvedFileIds !== undefined) {
+      const ownedFiles = await db
+        .select({ id: files.id, name: files.name, embeddingStatus: files.embeddingStatus })
+        .from(files)
+        .where(and(
+          eq(files.orgId, orgId),
+          isNull(files.deletedAt),
+          inArray(files.id, resolvedFileIds),
+        ));
 
-    const embeddedFileIds = ownedFiles
-      .filter(f => f.embeddingStatus === 'completed')
-      .map(f => f.id);
+      if (ownedFiles.length === 0) {
+        res.status(404).json({ error: 'No matching files found' });
+        return;
+      }
 
-    if (embeddedFileIds.length === 0) {
-      res.status(422).json({
-        error: 'None of the requested files have embeddings yet.',
-        fileStatuses: ownedFiles.map(f => ({
-          id:              f.id,
-          name:            f.name,
-          embeddingStatus: f.embeddingStatus,
-        })),
-      });
-      return;
+      embeddedFileIds = ownedFiles
+        .filter(f => f.embeddingStatus === 'completed')
+        .map(f => f.id);
+
+      if (embeddedFileIds.length === 0) {
+        res.status(422).json({
+          error: 'None of the requested files have embeddings yet.',
+          fileStatuses: ownedFiles.map(f => ({
+            id:              f.id,
+            name:            f.name,
+            embeddingStatus: f.embeddingStatus,
+          })),
+        });
+        return;
+      }
+    } else {
+      // Org-wide mode — confirm the org has at least one embedded file
+      const embeddedCheck = await db
+        .select({ id: files.id })
+        .from(files)
+        .where(and(
+          eq(files.orgId, orgId),
+          isNull(files.deletedAt),
+          eq(files.embeddingStatus, 'completed'),
+        ))
+        .limit(1);
+
+      if (embeddedCheck.length === 0) {
+        res.status(422).json({
+          error: 'No embedded files found for this organisation. Upload and embed files first.',
+        });
+        return;
+      }
+      // embeddedFileIds stays undefined → hybridSearch searches the whole org
     }
 
     // ── Hybrid retrieval ───────────────────────────────────────────────────
     const sources = await hybridSearch({
       orgId,
       query:       question,
-      fileIds:     embeddedFileIds,
+      fileIds:     embeddedFileIds,   // undefined = whole org
       limit:       topK,
       minRrfScore: minScore,
     });
