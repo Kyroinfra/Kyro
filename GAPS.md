@@ -16,7 +16,7 @@ Fixed character chunking at 1200 chars with 200 overlap will split across headin
 
 Your retrieval is pure cosine similarity. For "find all clauses mentioning indemnification across 200 contracts" you'll get noisy results. Even a simple cross-encoder rerank pass (or BM25 hybrid) would meaningfully improve precision for legal/research use cases. Ollama can run cross-encoder models locally.
 
-* [ ] `/ask` only supports a fixed `fileIds` array
+* [x] `/ask` only supports a fixed `fileIds` array
 
 For a support bot knowledge base, the caller shouldn't have to know which files are relevant — that's the whole point of RAG. You need a mode where it searches across the entire org's embedded corpus (or a collection) rather than requiring explicit file IDs.
 
