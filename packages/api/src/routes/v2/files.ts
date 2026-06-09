@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { db } from '../../db';
+import pool, { db } from '../../db';
 import { apiKeys, organisations, files, textExtractionJobs, fileMetadata } from '../../db/schema';
 import { eq, and, isNull, inArray, sql } from 'drizzle-orm';
 import { apiKeyAuthMiddleware, ApiKeyRequest, requireScope } from '../../middleware/apiKeyAuth';
@@ -492,7 +492,6 @@ router.put('/:id/metadata', requireScope('write'), async (req: ApiKeyRequest, re
       return;
     }
 
-    // Verify ownership
     const [file] = await db
       .select({ id: files.id })
       .from(files)
@@ -509,19 +508,32 @@ router.put('/:id/metadata', requireScope('write'), async (req: ApiKeyRequest, re
       return;
     }
 
-    await db
-      .insert(fileMetadata)
-      .values(entries.map(([key, value]) => ({ fileId: id, orgId, key, value })))
-      .onConflictDoUpdate({
-        // Requires the unique index idx_file_metadata_file_key on (file_id, key)
-        target: [fileMetadata.fileId, fileMetadata.key],
-        set:    { value: sql`EXCLUDED.value` },
-      });
+    // Build a raw upsert — Drizzle's onConflictDoUpdate requires a unique()
+    // constraint (not just a uniqueIndex()) for composite targets. Since the
+    // schema uses uniqueIndex(), we use a raw query referencing the index name.
+    const placeholders: string[] = [];
+    const values: unknown[]      = [];
+    let   p = 1;
+
+    for (const [key, value] of entries) {
+      placeholders.push(`($${p++}::uuid, $${p++}::uuid, $${p++}, $${p++})`);
+      values.push(id, orgId, key, value);
+    }
+
+    await pool.query(
+      `INSERT INTO file_metadata (file_id, org_id, key, value)
+       VALUES ${placeholders.join(', ')}
+       ON CONFLICT (file_id, key) DO UPDATE SET value = EXCLUDED.value`,
+      values,
+    );
 
     res.json(parsed.data);
   } catch (error) {
-    console.error('Error setting metadata (v2):', error);
-    res.status(500).json({ error: 'Failed to set metadata' });
+   console.error('Error setting metadata (v2):', error);
+    res.status(500).json({ 
+      error: 'Failed to set metadata',
+      detail: error instanceof Error ? error.message : String(error)  // ← add this
+    });
   }
 });
 
