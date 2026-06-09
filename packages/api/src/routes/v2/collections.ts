@@ -1,18 +1,18 @@
 // routes/v2/collections.ts
 
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { db } from '../../db';
 import pool from '../../db';
-import { collections, collectionFiles, files } from '../../db/schema';
+import { collections, collectionFiles, files, apiKeys } from '../../db/schema';
 import { eq, and } from 'drizzle-orm';
-import { authMiddleware } from '../../middleware/auth';
+import { apiKeyAuthMiddleware, ApiKeyRequest, requireScope } from '../../middleware/apiKeyAuth';
 import { z } from 'zod';
 
 const router = Router();
 
-router.use(authMiddleware);
+router.use(apiKeyAuthMiddleware);
 
-// ── Validation ────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 const createCollectionSchema = z.object({
   name:        z.string().min(1).max(255),
@@ -46,11 +46,20 @@ async function uniqueSlug(orgId: string, base: string, excludeId?: string): Prom
   return slug;
 }
 
+/** Resolve the userId that owns the API key making the request. */
+async function getUserIdFromApiKey(apiKeyId: string): Promise<string> {
+  const [row] = await db
+    .select({ userId: apiKeys.userId })
+    .from(apiKeys)
+    .where(eq(apiKeys.id, apiKeyId));
+  return row.userId;
+}
+
 // ── GET / — list collections ──────────────────────────────────────────────────
 
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
   try {
-    const orgId = req.user!.orgId;
+    const orgId = req.orgId!;
 
     const result = await pool.query<{
       id: string;
@@ -92,10 +101,9 @@ router.get('/', async (req: Request, res: Response) => {
 
 // ── POST / — create collection ────────────────────────────────────────────────
 
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
   try {
-    const orgId = req.user!.orgId;
-    const userId = req.user!.userId;
+    const orgId = req.orgId!;
 
     const parsed = createCollectionSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -103,6 +111,7 @@ router.post('/', async (req: Request, res: Response) => {
       return;
     }
 
+    const userId = await getUserIdFromApiKey(req.apiKeyId!);
     const { name, description } = parsed.data;
     const slug = await uniqueSlug(orgId, toSlug(name));
 
@@ -126,9 +135,9 @@ router.post('/', async (req: Request, res: Response) => {
 
 // ── GET /:id — get collection with status summary ─────────────────────────────
 
-router.get('/:id', async (req: Request, res: Response) => {
+router.get('/:id', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
   try {
-    const orgId = req.user!.orgId;
+    const orgId = req.orgId!;
     const id = req.params.id as string;
 
     const result = await pool.query<{
@@ -180,11 +189,11 @@ router.get('/:id', async (req: Request, res: Response) => {
   }
 });
 
-// ── PATCH /:id — update collection name/description ──────────────────────────
+// ── PATCH /:id — update collection ───────────────────────────────────────────
 
-router.patch('/:id', async (req: Request, res: Response) => {
+router.patch('/:id', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
   try {
-    const orgId = req.user!.orgId;
+    const orgId = req.orgId!;
     const id = req.params.id as string;
 
     const parsed = updateCollectionSchema.safeParse(req.body);
@@ -226,11 +235,11 @@ router.patch('/:id', async (req: Request, res: Response) => {
   }
 });
 
-// ── DELETE /:id — delete collection (does NOT delete files) ──────────────────
+// ── DELETE /:id ───────────────────────────────────────────────────────────────
 
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
   try {
-    const orgId = req.user!.orgId;
+    const orgId = req.orgId!;
     const id = req.params.id as string;
 
     const [deleted] = await db
@@ -250,11 +259,11 @@ router.delete('/:id', async (req: Request, res: Response) => {
   }
 });
 
-// ── GET /:id/files — list files in collection ─────────────────────────────────
+// ── GET /:id/files ────────────────────────────────────────────────────────────
 
-router.get('/:id/files', async (req: Request, res: Response) => {
+router.get('/:id/files', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
   try {
-    const orgId = req.user!.orgId;
+    const orgId = req.orgId!;
     const id = req.params.id as string;
 
     const [collection] = await db
@@ -272,13 +281,8 @@ router.get('/:id/files', async (req: Request, res: Response) => {
 
     const [rowsResult, countResult] = await Promise.all([
       pool.query<{
-        id: string;
-        name: string;
-        mimeType: string;
-        sizeBytes: number;
-        embeddingStatus: string;
-        createdAt: Date;
-        addedAt: Date;
+        id: string; name: string; mimeType: string; sizeBytes: number;
+        embeddingStatus: string; createdAt: Date; addedAt: Date;
       }>(`
         SELECT
           f.id,
@@ -307,12 +311,7 @@ router.get('/:id/files', async (req: Request, res: Response) => {
 
     res.json({
       data: rowsResult.rows,
-      pagination: {
-        total,
-        limit,
-        offset,
-        hasMore: offset + rowsResult.rows.length < total,
-      },
+      pagination: { total, limit, offset, hasMore: offset + rowsResult.rows.length < total },
     });
   } catch (error) {
     console.error('Error listing collection files:', error);
@@ -320,12 +319,11 @@ router.get('/:id/files', async (req: Request, res: Response) => {
   }
 });
 
-// ── POST /:id/files — add files to collection ─────────────────────────────────
+// ── POST /:id/files ───────────────────────────────────────────────────────────
 
-router.post('/:id/files', async (req: Request, res: Response) => {
+router.post('/:id/files', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
   try {
-    const orgId  = req.user!.orgId;
-    const userId = req.user!.userId;
+    const orgId  = req.orgId!;
     const id     = req.params.id as string;
 
     const parsed = addFilesSchema.safeParse(req.body);
@@ -345,15 +343,11 @@ router.post('/:id/files', async (req: Request, res: Response) => {
     }
 
     const ownedFilesResult = await pool.query<{ id: string }>(
-      `SELECT id FROM files
-       WHERE org_id = $1
-         AND id = ANY($2::uuid[])
-         AND deleted_at IS NULL`,
+      `SELECT id FROM files WHERE org_id = $1 AND id = ANY($2::uuid[]) AND deleted_at IS NULL`,
       [orgId, parsed.data.fileIds],
     );
-    const ownedFiles = ownedFilesResult.rows;
 
-    const ownedIds = new Set(ownedFiles.map(f => f.id));
+    const ownedIds = new Set(ownedFilesResult.rows.map(f => f.id));
     const unowned  = parsed.data.fileIds.filter(fid => !ownedIds.has(fid));
 
     if (unowned.length > 0) {
@@ -363,6 +357,8 @@ router.post('/:id/files', async (req: Request, res: Response) => {
       });
       return;
     }
+
+    const userId = await getUserIdFromApiKey(req.apiKeyId!);
 
     await db
       .insert(collectionFiles)
@@ -381,11 +377,11 @@ router.post('/:id/files', async (req: Request, res: Response) => {
   }
 });
 
-// ── DELETE /:id/files/:fileId — remove a file from collection ────────────────
+// ── DELETE /:id/files/:fileId ─────────────────────────────────────────────────
 
-router.delete('/:id/files/:fileId', async (req: Request, res: Response) => {
+router.delete('/:id/files/:fileId', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
   try {
-    const orgId              = req.user!.orgId;
+    const orgId              = req.orgId!;
     const { id, fileId } = req.params as { id: string; fileId: string };
 
     const [collection] = await db
