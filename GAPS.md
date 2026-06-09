@@ -20,6 +20,6 @@ Your retrieval is pure cosine similarity. For "find all clauses mentioning indem
 
 For a support bot knowledge base, the caller shouldn't have to know which files are relevant — that's the whole point of RAG. You need a mode where it searches across the entire org's embedded corpus (or a collection) rather than requiring explicit file IDs.
 
-* [ ] No document metadata/tagging
+* [x] No document metadata/tagging
 
 Legal: matter number, document type, date range, parties. Research: authors, publication year, journal. Support: product, version, category. Without metadata filtering your semantic search has no way to scope queries beyond file IDs.
