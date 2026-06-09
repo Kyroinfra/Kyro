@@ -221,3 +221,29 @@ export const collectionFiles = pgTable('collection_files', {
   fileIdIdx:       index('idx_collection_files_file_id').on(table.fileId),
   collectionIdIdx: index('idx_collection_files_collection_id').on(table.collectionId),
 }));
+
+// ── file_metadata ─────────────────────────────────────────────────────────────
+// Arbitrary key-value metadata per file. Vertical-agnostic: legal uses
+// matter_number/document_type, research uses author/journal, support uses
+// product/version. All stored in the same table — no schema changes needed
+// when a new vertical adds new keys.
+//
+// The unique constraint on (file_id, key) is required for the upsert in
+// PUT /files/:id/metadata — ON CONFLICT (file_id, key) DO UPDATE.
+ 
+export const fileMetadata = pgTable('file_metadata', {
+  id:        uuid('id').defaultRandom().primaryKey(),
+  fileId:    uuid('file_id').notNull().references(() => files.id, { onDelete: 'cascade' }),
+  orgId:     uuid('org_id').notNull().references(() => organisations.id, { onDelete: 'cascade' }),
+  key:       varchar('key', { length: 100 }).notNull(),
+  value:     text('value').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+  // Covering index for the most common query: "all metadata for a file"
+  fileIdIdx:    index('idx_file_metadata_file_id').on(table.fileId),
+  // Covering index for filter queries: "files in this org with key=value"
+  orgKeyIdx:    index('idx_file_metadata_org_key').on(table.orgId, table.key),
+  orgKeyValIdx: index('idx_file_metadata_org_key_value').on(table.orgId, table.key, table.value),
+  // Required for ON CONFLICT upsert in PUT /files/:id/metadata
+  fileKeyUniq:  uniqueIndex('idx_file_metadata_file_key').on(table.fileId, table.key),
+}));

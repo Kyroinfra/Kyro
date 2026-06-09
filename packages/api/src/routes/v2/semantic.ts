@@ -36,6 +36,7 @@ import { ApiKeyRequest, requireScope } from '../../middleware/apiKeyAuth';
 import { embedFile } from '../../lib/embeddings';
 import { hybridSearch } from '../../lib/retrieval';
 import { z } from 'zod';
+import { resolveMetadataFilter } from '../../lib/metadata';
 
 const router = Router();
 
@@ -160,6 +161,7 @@ router.get('/semantic-search', requireScope('read'), async (req: ApiKeyRequest, 
 // than requiring the caller to know which files to search.
 
 const askSchema = z.object({
+  filters: z.record(z.string(), z.union([z.string(), z.array(z.string())])).optional(),
   question:     z.string().min(1).max(2000),
   fileIds:      z.array(z.string().uuid()).max(20).optional(),
   collectionId: z.string().uuid().optional(),
@@ -196,6 +198,21 @@ router.post('/ask', requireScope('read'), async (req: ApiKeyRequest, res: Respon
     // resolvedFileIds === undefined means "search the whole org" — this is
     // intentional and handled correctly downstream by hybridSearch / rrfSearch.
     let resolvedFileIds: string[] | undefined;
+
+
+    // Filter from filters
+    
+    if (parsed.data.filters && Object.keys(parsed.data.filters).length > 0) {
+      const filteredIds = await resolveMetadataFilter(orgId, parsed.data.filters);
+      if (filteredIds.length === 0) {
+        res.status(422).json({ error: 'No files match the provided metadata filters' });
+        return;
+      }
+      // Intersect with resolvedFileIds if already scoped, otherwise use directly
+      resolvedFileIds = resolvedFileIds
+        ? resolvedFileIds.filter(id => filteredIds.includes(id))
+        : filteredIds;
+    }
 
     if (parsed.data.collectionId) {
       const ids = await resolveCollectionToFileIds(parsed.data.collectionId, orgId);

@@ -50,6 +50,13 @@
       "when": 1780763354155,
       "tag": "0006_lame_masque",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1780990459407,
+      "tag": "0007_dizzy_titania",
+      "breakpoints": true
     }
   ]
 }
