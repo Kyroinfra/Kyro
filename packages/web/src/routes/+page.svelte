@@ -2,18 +2,7 @@
     import { onMount, onDestroy } from "svelte";
     import Logo from "$lib/components/Logo.svelte";
 
-    type HealthStatus = "checking" | "connected" | "degraded" | "error";
-
-    let status: HealthStatus = $state("checking");
-    let health: {
-        uptime?: number;
-        database?: string;
-        redis?: string;
-        timestamp?: string;
-    } = $state({});
-
     let canvasEl: HTMLCanvasElement | undefined = $state();
-    let heroSection: HTMLElement | undefined;
     let scrolled = $state(false);
     let threeLoaded = $state(false);
     let canvasVisible = $state(true);
@@ -129,11 +118,7 @@
             const ro = new ResizeObserver(resize);
             if (canvasEl.parentElement) ro.observe(canvasEl.parentElement);
 
-            // FIX 1: removed leading minus from my so vertical mouse movement maps correctly
-            let mx = 0,
-                my = 0,
-                tmx = 0,
-                tmy = 0;
+            let mx = 0, my = 0, tmx = 0, tmy = 0;
             const onMouse = (e: MouseEvent) => {
                 mx = (e.clientX / window.innerWidth - 0.5) * 2;
                 my = (e.clientY / window.innerHeight - 0.5) * 2;
@@ -146,11 +131,9 @@
                 raf = requestAnimationFrame(animate);
                 t += 0.006;
 
-                // FIX 2: lerp factor 0.04 → 0.1 for snappier tracking
                 tmx += (mx - tmx) * 0.1;
                 tmy += (my - tmy) * 0.1;
 
-                // FIX 3: mouse multiplier 0.15 → 0.5 so it actually drives the rotation
                 ico.rotation.x = t * 0.18 + tmy * 0.5;
                 ico.rotation.y = t * 0.26 + tmx * 0.5;
                 inner.rotation.copy(ico.rotation);
@@ -158,7 +141,6 @@
                 ring.rotation.y = t * 0.08;
                 ring2.rotation.z = t * 0.05 + Math.PI / 6;
 
-                // FIX 4: particles also react to mouse, at half the ico multiplier
                 particles.rotation.y = -t * 0.04 + tmx * 0.2;
                 particles.rotation.x = t * 0.02 + tmy * 0.2;
 
@@ -191,27 +173,9 @@
     }
 
     onMount(() => {
-        // ── Health check ──────────────────────────────────────────────────
-        fetch("/health")
-            .then((res) => {
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                return res.json();
-            })
-            .then((data) => {
-                health = data;
-                status = data.status === "ok" ? "connected" : "degraded";
-            })
-            .catch(() => {
-                status = "error";
-            });
-
-        // ── Scroll detection for header ───────────────────────────────────
-        const onScroll = () => {
-            scrolled = window.scrollY > 20;
-        };
+        const onScroll = () => { scrolled = window.scrollY > 20; };
         window.addEventListener("scroll", onScroll, { passive: true });
 
-        // ── Intersection observer for reveal animations ───────────────────
         const observer = new IntersectionObserver(
             (entries) => {
                 entries.forEach((e) => {
@@ -223,83 +187,42 @@
             },
             { threshold: 0.12, rootMargin: "0px 0px -40px 0px" },
         );
-        document
-            .querySelectorAll(".reveal")
-            .forEach((el) => observer.observe(el));
+        document.querySelectorAll(".reveal").forEach((el) => observer.observe(el));
 
-        // ── Kick off Three.js (async, no return value) ────────────────────
         loadThree();
 
-        // ── Sync cleanup only ─────────────────────────────────────────────
         return () => {
             window.removeEventListener("scroll", onScroll);
             observer.disconnect();
         };
     });
 
-    onDestroy(() => {
-        threeCleanup?.();
-    });
-
-    function formatUptime(seconds: number): string {
-        if (!seconds) return "—";
-        const d = Math.floor(seconds / 86400);
-        const h = Math.floor((seconds % 86400) / 3600);
-        const m = Math.floor((seconds % 3600) / 60);
-        if (d > 0) return `${d}d ${h}h`;
-        if (h > 0) return `${h}h ${m}m`;
-        return `${m}m`;
-    }
-
-    const statusConfig = {
-        checking: {
-            label: "connecting...",
-            color: "var(--color-warning)",
-            dot: "pulse",
-        },
-        connected: {
-            label: "all systems operational",
-            color: "var(--color-success)",
-            dot: "online",
-        },
-        degraded: {
-            label: "degraded",
-            color: "var(--color-warning)",
-            dot: "warn",
-        },
-        error: {
-            label: "backend unreachable",
-            color: "var(--color-danger)",
-            dot: "error",
-        },
-    };
-
-    let cfg = $derived(statusConfig[status]);
+    onDestroy(() => { threeCleanup?.(); });
 
     const features = [
         {
             icon: "◇",
-            tag: "QUERY",
+            tag: "RAG",
             title: "Ask Your Documents",
-            desc: "Upload a file, ask a question, get an answer with inline citations. Runs entirely against your local Ollama instance.",
+            desc: "Ask a question, get a grounded answer with inline citations. The LLM only sees what's in your files — no hallucination, no guessing.",
         },
         {
             icon: "↑",
             tag: "SEARCH",
-            title: "Semantic Search",
-            desc: "pgvector-powered similarity search across your entire knowledge base. Zero third-party embedding APIs.",
+            title: "Hybrid Semantic Search",
+            desc: "BM25 keyword search fused with pgvector similarity via RRF. Finds the right chunk even when the query doesn't share exact words with the source.",
         },
         {
             icon: "▤",
             tag: "INFRA",
-            title: "Self-Hosted by Design",
-            desc: "Postgres + local storage + your own LLM. One Docker Compose command. Your data never leaves your server.",
+            title: "Fully Self-Hosted",
+            desc: "One docker compose up. Postgres, Redis, Ollama, and Kyro on your own server. Your documents never leave your network.",
         },
         {
             icon: "⊙",
-            tag: "SCALE",
-            title: "Multi-tenant Ready",
-            desc: "Orgs, scoped API keys, role-based access. Ship it to your team or embed it directly in your product.",
+            tag: "PLATFORM",
+            title: "API-First & Multi-tenant",
+            desc: "Scoped API keys, role-based access, webhooks, collections. Embed it in your own product or wire it up to an internal tool in an afternoon.",
         },
     ];
 
@@ -307,21 +230,28 @@
         {
             n: "01",
             title: "Deploy in one command",
-            desc: "docker compose up — Postgres, Redis, Ollama, and Kyro running locally in under two minutes.",
+            desc: "Postgres, Redis, Ollama, and Kyro running locally. No cloud accounts, no API keys, no dependencies outside your machine.",
             cmd: "docker compose up -d",
         },
         {
             n: "02",
             title: "Upload your documents",
-            desc: "PDFs, DOCX, plain text. Text extraction and vector embedding happen automatically in the background.",
+            desc: "PDFs, DOCX, plain text. Text extraction and vector embedding run automatically in the background via BullMQ workers.",
             cmd: "POST /api/v2/files",
         },
         {
             n: "03",
             title: "Ask questions via API",
-            desc: "Send a question and file IDs. Get streamed answers with source citations — no hallucination, grounded in your data.",
+            desc: "Send a question. Get a streamed, cited answer grounded in your documents. Wire it to a chatbot, a search UI, or a CLI.",
             cmd: "POST /api/v2/files/ask",
         },
+    ];
+
+    const audiences = [
+        { icon: "⚖", label: "Legal teams", desc: "Contract review, clause extraction, matter research — without sending client files to OpenAI." },
+        { icon: "⊞", label: "Research teams", desc: "Query across hundreds of papers. Find the passage you half-remember without re-reading everything." },
+        { icon: "◎", label: "Support teams", desc: "Ground your support bot in your actual product docs. No hallucinated feature names." },
+        { icon: "⌥", label: "Developers", desc: "Embed a fully-featured RAG API into your product. No ML infra to manage." },
     ];
 
     const socialProof = [
@@ -335,11 +265,12 @@
     <title>Kyro — RAG without the data leak</title>
     <meta
         name="description"
-        content="Upload documents, ask questions in plain English. Everything runs on your infrastructure. OpenAI never sees a byte."
+        content="Upload documents, ask questions in plain English. Everything runs on your own server. Your data never leaves your network."
     />
 </svelte:head>
 
 <div class="landing">
+
     <!-- ══════════════════════ HEADER ══════════════════════ -->
     <header class="header" class:scrolled>
         <a href="/" class="logo" aria-label="Kyro home">
@@ -349,47 +280,28 @@
         <nav class="nav" aria-label="Primary navigation">
             <a href="/docs" class="nav-link">docs</a>
             <a href="/health" class="nav-link">status</a>
-            <a href="/login" class="nav-link">sign in</a>
-            <a href="/register" class="nav-cta">get started →</a>
+            <a href="/dashboard" class="nav-cta">open dashboard →</a>
         </nav>
-        <!-- Mobile menu toggle (visible ≤640px) -->
-        <a href="/register" class="nav-cta-mobile">start free</a>
+        <a href="/dashboard" class="nav-cta-mobile">dashboard</a>
     </header>
 
-    <!-- ══════════════════════ STATUS BAR ══════════════════════ -->
-    <div
-        class="statusbar"
-        style="--s: {cfg.color}"
-        role="status"
-        aria-live="polite"
-    >
-        <span class="dot dot-{cfg.dot}" aria-hidden="true"></span>
-        <span class="status-text">{cfg.label}</span>
-        {#if status === "connected" || status === "degraded"}
-            <span class="sep" aria-hidden="true">·</span>
-            <span
-                >db <span
-                    class="chip chip-{health.database === 'connected'
-                        ? 'ok'
-                        : 'err'}">{health.database}</span
-                ></span
-            >
-            <span class="sep" aria-hidden="true">·</span>
-            <span
-                >redis <span
-                    class="chip chip-{health.redis === 'connected'
-                        ? 'ok'
-                        : 'err'}">{health.redis}</span
-                ></span
-            >
-            <span class="sep" aria-hidden="true">·</span>
-            <span class="muted">up {formatUptime(health.uptime ?? 0)}</span>
-        {/if}
+    <!-- ══════════════════════ TAGLINE BAR ══════════════════════ -->
+    <div class="tagbar" role="banner">
+        <span class="tagbar-item">
+            <span class="tagbar-dot" aria-hidden="true"></span>
+            Self-hosted
+        </span>
+        <span class="tagbar-sep" aria-hidden="true">·</span>
+        <span class="tagbar-item">MIT licensed</span>
+        <span class="tagbar-sep" aria-hidden="true">·</span>
+        <span class="tagbar-item">Open source</span>
+        <span class="tagbar-sep" aria-hidden="true">·</span>
+        <span class="tagbar-item tagbar-muted">No vendor lock-in. No data egress. Ever.</span>
     </div>
 
     <main>
         <!-- ══════════════════════ HERO ══════════════════════ -->
-        <section class="hero" bind:this={heroSection} aria-label="Hero">
+        <section class="hero" aria-label="Hero">
             <div class="hero-left">
                 <div class="hero-badge reveal">
                     <span class="badge-dot" aria-hidden="true"></span>
@@ -401,24 +313,14 @@
                 </h1>
 
                 <p class="hero-sub reveal">
-                    Upload PDFs, contracts, or codebases — then ask questions in
-                    plain English. Everything runs on your infrastructure.
-                    OpenAI never sees a byte.
+                    Upload documents, ask questions in plain English, get cited answers —
+                    all on your own server. OpenAI never sees a byte.
                 </p>
 
                 <div class="hero-cta reveal">
-                    <a href="/register" class="btn-primary">
-                        <span>Start building free</span>
-                        <svg
-                            width="14"
-                            height="14"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            aria-hidden="true"
-                            ><path d="M5 12h14M12 5l7 7-7 7" /></svg
-                        >
+                    <a href="/dashboard" class="btn-primary">
+                        <span>Open dashboard</span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
                     </a>
                     <a href="/docs" class="btn-ghost">read the docs</a>
                 </div>
@@ -433,7 +335,7 @@
                 </div>
             </div>
 
-            <!-- 3D Canvas -->
+            <!-- 3D Canvas — desktop only -->
             <div class="hero-canvas-wrap" aria-hidden="true">
                 {#if canvasVisible}
                     <canvas
@@ -441,15 +343,13 @@
                         class="hero-canvas"
                         class:loaded={threeLoaded}
                     ></canvas>
-                    <div class="canvas-glow" aria-hidden="true"></div>
+                    <div class="canvas-glow"></div>
                 {:else}
-                    <!-- Fallback: static decorative element -->
-                    <div class="canvas-fallback" aria-hidden="true">
+                    <div class="canvas-fallback">
                         <div class="fallback-ico">◇</div>
                     </div>
                 {/if}
 
-                <!-- Floating code card overlay -->
                 <div class="float-card float-card-1 reveal">
                     <div class="float-card-dot"></div>
                     <span class="float-card-text">embedding complete</span>
@@ -460,6 +360,41 @@
                     <div class="float-card-label">latency</div>
                     <div class="float-card-value">142<span>ms</span></div>
                 </div>
+            </div>
+
+            <!-- Mobile-only stats strip (shown instead of canvas on small screens) -->
+            <div class="hero-mobile-stats reveal" aria-label="Platform highlights">
+                <div class="mobile-stat">
+                    <span class="mobile-stat-icon">◇</span>
+                    <span class="mobile-stat-text">Vector + BM25 hybrid search</span>
+                </div>
+                <div class="mobile-stat">
+                    <span class="mobile-stat-icon">▤</span>
+                    <span class="mobile-stat-text">Runs entirely on your server</span>
+                </div>
+                <div class="mobile-stat">
+                    <span class="mobile-stat-icon">⊙</span>
+                    <span class="mobile-stat-text">PDF, DOCX, TXT supported</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ══════════════════════ WHO IS THIS FOR ══════════════════════ -->
+        <section class="audience-section" aria-labelledby="audience-heading">
+            <div class="section-eyebrow reveal">built for</div>
+            <h2 id="audience-heading" class="section-title reveal">
+                Teams that can't send<br class="title-br" />client data to OpenAI.
+            </h2>
+            <div class="audience-grid">
+                {#each audiences as aud, i}
+                    <div class="aud-card reveal" style="--delay: {i * 60}ms">
+                        <span class="aud-icon" aria-hidden="true">{aud.icon}</span>
+                        <div class="aud-body">
+                            <h3 class="aud-label">{aud.label}</h3>
+                            <p class="aud-desc">{aud.desc}</p>
+                        </div>
+                    </div>
+                {/each}
             </div>
         </section>
 
@@ -472,15 +407,16 @@
                         One endpoint.<br />Infinite answers.
                     </h2>
                     <p class="demo-desc">
-                        The <code>/ask</code> endpoint accepts a question and a list
-                        of file IDs. It retrieves relevant chunks via vector similarity,
-                        builds a grounded prompt, and streams back an answer with
-                        source citations — all on your own server.
+                        The <code>/ask</code> endpoint accepts a question and optional
+                        file IDs. It retrieves the most relevant chunks via hybrid search,
+                        builds a grounded prompt, and streams back an answer with source
+                        citations — entirely on your own server.
                     </p>
                     <div class="demo-chips">
                         <span class="chip-tag">streaming SSE</span>
                         <span class="chip-tag">source citations</span>
                         <span class="chip-tag">local LLM</span>
+                        <span class="chip-tag">metadata filters</span>
                     </div>
                 </div>
 
@@ -493,56 +429,21 @@
                         <span class="code-lang-tag">typescript</span>
                     </div>
                     <pre class="code-body" aria-label="Code example"><code
-                            ><span class="c-comment"
-                                >// Ask a question across your documents</span
-                            >
-<span class="c-kw">const</span> stream <span class="c-dim">=</span> <span
-                                class="c-kw">await</span
-                            > <span class="c-fn">fetch</span><span
-                                class="c-brace">(</span
-                            ><span class="c-str">"/api/v2/files/ask"</span><span
-                                class="c-dim">,</span
-                            > <span class="c-brace">{"{"}</span>
-  method<span class="c-dim">:</span>  <span class="c-str">"POST"</span><span
-                                class="c-dim">,</span
-                            >
-  headers<span class="c-dim">:</span> <span class="c-brace">{"{"}</span> <span
-                                class="c-str">"X-API-Key"</span
-                            ><span class="c-dim">:</span> process<span
-                                class="c-dim">.</span
-                            >env<span class="c-dim">.</span><span class="c-prop"
-                                >KYRO_KEY</span
-                            > <span class="c-brace">{"}"}</span><span
-                                class="c-dim">,</span
-                            >
-  body<span class="c-dim">:</span> <span class="c-prop">JSON</span><span
-                                class="c-dim">.</span
-                            ><span class="c-fn">stringify</span><span
-                                class="c-brace">({"{"}</span
-                            >
-    question<span class="c-dim">:</span> <span class="c-str"
-                                >"What are the payment terms?"</span
-                            ><span class="c-dim">,</span>
-    fileIds<span class="c-dim">:</span>  <span class="c-brace">[</span><span
-                                class="c-str">"uuid-1"</span
-                            ><span class="c-dim">,</span> <span class="c-str"
-                                >"uuid-2"</span
-                            ><span class="c-brace">],</span>
-    topK<span class="c-dim">:</span>     <span class="c-num">8</span><span
-                                class="c-dim">,</span
-                            >
+><span class="c-comment">// Ask a question across your documents</span>
+<span class="c-kw">const</span> stream <span class="c-dim">=</span> <span class="c-kw">await</span> <span class="c-fn">fetch</span><span class="c-brace">(</span><span class="c-str">"/api/v2/files/ask"</span><span class="c-dim">,</span> <span class="c-brace">{"{"}  </span>
+  method<span class="c-dim">:</span>  <span class="c-str">"POST"</span><span class="c-dim">,</span>
+  headers<span class="c-dim">:</span> <span class="c-brace">{"{"}</span> <span class="c-str">"X-API-Key"</span><span class="c-dim">:</span> process<span class="c-dim">.</span>env<span class="c-dim">.</span><span class="c-prop">KYRO_KEY</span> <span class="c-brace">{"}"}</span><span class="c-dim">,</span>
+  body<span class="c-dim">:</span> <span class="c-prop">JSON</span><span class="c-dim">.</span><span class="c-fn">stringify</span><span class="c-brace">({"{"}</span>
+    question<span class="c-dim">:</span> <span class="c-str">"What are the payment terms?"</span><span class="c-dim">,</span>
+    fileIds<span class="c-dim">:</span>  <span class="c-brace">[</span><span class="c-str">"uuid-1"</span><span class="c-dim">,</span> <span class="c-str">"uuid-2"</span><span class="c-brace">],</span>
+    topK<span class="c-dim">:</span>     <span class="c-num">8</span><span class="c-dim">,</span>
   <span class="c-brace">{"}"}</span>)<span class="c-dim">,</span>
 <span class="c-brace">{"}"}</span>)<span class="c-dim">;</span>
 
 <span class="c-comment">// Response streams SSE events:</span>
-<span class="c-success"
-                                >// {"{"} type: "sources",  sources: [{"{"} fileId, score, content {"}"}] {"}"}</span
-                            >
-<span class="c-success"
-                                >// {"{"} type: "chunk",    text: "According to [1], payment..." {"}"}</span
-                            >
-<span class="c-success">// {"{"} type: "done" {"}"}</span></code
-                        ></pre>
+<span class="c-success">// {"{"} type: "sources",  sources: [{"{"} fileId, score, content {"}"}] {"}"}</span>
+<span class="c-success">// {"{"} type: "chunk",    text: "According to [1], payment..." {"}"}</span>
+<span class="c-success">// {"{"} type: "done" {"}"}</span></code></pre>
                 </div>
             </div>
         </section>
@@ -557,9 +458,7 @@
                 {#each features as feat, i}
                     <div class="feat-card reveal" style="--delay: {i * 70}ms">
                         <div class="feat-top">
-                            <span class="feat-icon" aria-hidden="true"
-                                >{feat.icon}</span
-                            >
+                            <span class="feat-icon" aria-hidden="true">{feat.icon}</span>
                             <span class="feat-tag">{feat.tag}</span>
                         </div>
                         <h3 class="feat-title">{feat.title}</h3>
@@ -578,30 +477,18 @@
             </h2>
             <div class="steps-grid">
                 {#each steps as step, i}
-                    <div
-                        class="step-card reveal"
-                        style="--delay: {i * 90}ms"
-                        aria-label="Step {step.n}"
-                    >
+                    <div class="step-card reveal" style="--delay: {i * 90}ms" aria-label="Step {step.n}">
                         <div class="step-num" aria-hidden="true">{step.n}</div>
                         <div class="step-content">
                             <h3 class="step-title">{step.title}</h3>
                             <p class="step-desc">{step.desc}</p>
-                            <div
-                                class="step-cmd"
-                                role="code"
-                                aria-label="Command: {step.cmd}"
-                            >
-                                <span class="term-prompt" aria-hidden="true"
-                                    >$</span
-                                >
+                            <div class="step-cmd" role="code" aria-label="Command: {step.cmd}">
+                                <span class="term-prompt" aria-hidden="true">$</span>
                                 <span>{step.cmd}</span>
                             </div>
                         </div>
                         {#if i < steps.length - 1}
-                            <div class="step-connector" aria-hidden="true">
-                                <span>→</span>
-                            </div>
+                            <div class="step-connector" aria-hidden="true"><span>→</span></div>
                         {/if}
                     </div>
                 {/each}
@@ -614,32 +501,21 @@
             <div class="cta-inner">
                 <div class="cta-badge">
                     <span class="badge-dot" aria-hidden="true"></span>
-                    <span>Free to self-host · MIT licensed</span>
+                    <span>Free to self-host · MIT licensed · always open source</span>
                 </div>
                 <h2 id="cta-heading" class="cta-title">
                     Your knowledge base.<br />Your rules.
                 </h2>
                 <p class="cta-sub">
-                    Start with the free tier. No credit card. No vendor lock-in.
-                    Your documents never leave your server.
+                    No credit card. No vendor lock-in. No data egress.
+                    Your documents stay on your server, forever.
                 </p>
                 <div class="cta-btns">
-                    <a href="/register" class="btn-primary btn-lg">
-                        <span>Create your account</span>
-                        <svg
-                            width="14"
-                            height="14"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            aria-hidden="true"
-                            ><path d="M5 12h14M12 5l7 7-7 7" /></svg
-                        >
+                    <a href="/dashboard" class="btn-primary btn-lg">
+                        <span>Open the dashboard</span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
                     </a>
-                    <a href="/docs" class="btn-ghost btn-lg"
-                        >explore the docs →</a
-                    >
+                    <a href="/docs" class="btn-ghost btn-lg">read the docs →</a>
                 </div>
                 <div class="cta-term" aria-label="Quick start command">
                     <span class="term-prompt" aria-hidden="true">$</span>
@@ -652,18 +528,19 @@
 
     <!-- ══════════════════════ FOOTER ══════════════════════ -->
     <footer class="footer">
-        <span>© 2026 kyro</span>
+        <span class="footer-copy">© 2026 kyro</span>
         <nav class="footer-links" aria-label="Footer navigation">
             <a href="/docs">docs</a>
             <a href="/health">status</a>
+            <a href="https://github.com/your-org/kyro" target="_blank" rel="noopener noreferrer">github</a>
         </nav>
     </footer>
 </div>
 
 <style>
     /* ═══════════════════════════════════════════
-     RESET & BASE
-  ═══════════════════════════════════════════ */
+     BASE
+    ═══════════════════════════════════════════ */
     .landing {
         min-height: 100vh;
         display: flex;
@@ -672,7 +549,6 @@
         overflow-x: hidden;
     }
 
-    /* ─── Reveal animation system ───────────────── */
     :global(.reveal) {
         opacity: 0;
         transform: translateY(22px);
@@ -688,7 +564,7 @@
 
     /* ═══════════════════════════════════════════
      HEADER
-  ═══════════════════════════════════════════ */
+    ═══════════════════════════════════════════ */
     .header {
         display: flex;
         align-items: center;
@@ -723,13 +599,8 @@
         text-decoration: none;
         letter-spacing: -0.02em;
     }
-
-    .logo:hover {
-        color: var(--color-text);
-    }
-    .logo-text {
-        letter-spacing: 0.04em;
-    }
+    .logo:hover { color: var(--color-text); }
+    .logo-text { letter-spacing: 0.04em; }
 
     .nav {
         display: flex;
@@ -745,10 +616,7 @@
         transition: color 0.15s ease;
         letter-spacing: 0.02em;
     }
-
-    .nav-link:hover {
-        color: var(--color-text);
-    }
+    .nav-link:hover { color: var(--color-text); }
 
     .nav-cta {
         display: inline-flex;
@@ -765,11 +633,7 @@
         transition: opacity 0.15s ease;
         letter-spacing: 0.02em;
     }
-
-    .nav-cta:hover {
-        opacity: 0.85;
-        color: var(--color-bg);
-    }
+    .nav-cta:hover { opacity: 0.85; color: var(--color-bg); }
 
     .nav-cta-mobile {
         display: none;
@@ -786,9 +650,9 @@
     }
 
     /* ═══════════════════════════════════════════
-     STATUS BAR
-  ═══════════════════════════════════════════ */
-    .statusbar {
+     TAGLINE BAR  (replaces the health status bar)
+    ═══════════════════════════════════════════ */
+    .tagbar {
         display: flex;
         align-items: center;
         gap: 8px;
@@ -801,77 +665,37 @@
         letter-spacing: 0.03em;
     }
 
-    .dot {
+    .tagbar-dot {
+        display: inline-block;
         width: 5px;
         height: 5px;
         border-radius: 50%;
-        flex-shrink: 0;
-    }
-    .dot-online {
         background: var(--color-success);
         box-shadow: 0 0 6px var(--color-success);
-    }
-    .dot-warn {
-        background: var(--color-warning);
-    }
-    .dot-error {
-        background: var(--color-danger);
-    }
-    .dot-pulse {
-        background: var(--color-warning);
-        animation: pulse 1.4s ease-in-out infinite;
+        flex-shrink: 0;
     }
 
-    @keyframes pulse {
-        0%,
-        100% {
-            opacity: 1;
-        }
-        50% {
-            opacity: 0.25;
-        }
-    }
-
-    .status-text {
-        color: var(--s);
-        font-weight: 600;
-    }
-    .sep {
-        color: var(--color-border-hover);
-    }
-    .muted {
-        color: var(--color-text-muted);
-    }
-
-    .chip {
-        display: inline-flex;
+    .tagbar-item {
+        display: flex;
         align-items: center;
-        padding: 0 5px;
-        height: 14px;
-        border-radius: 2px;
-        font-size: 9px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
+        gap: 6px;
+        color: var(--color-text-dim);
+        font-weight: 500;
     }
-    .chip-ok {
-        background: var(--color-success-dim);
-        color: var(--color-success);
-    }
-    .chip-err {
-        background: var(--color-danger-dim);
-        color: var(--color-danger);
-    }
+
+    .tagbar-sep { color: var(--color-border-hover); }
+
+    .tagbar-muted { color: var(--color-text-muted); font-weight: 400; }
 
     /* ═══════════════════════════════════════════
      HERO
-  ═══════════════════════════════════════════ */
+    ═══════════════════════════════════════════ */
     .hero {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 0;
         align-items: center;
-        min-height: calc(100svh - 80px);
+        min-height: calc(100svh - 88px);
         padding: 64px var(--space-8) 80px;
         max-width: 1200px;
         margin: 0 auto;
@@ -887,7 +711,6 @@
         z-index: 1;
     }
 
-    /* Badge */
     .hero-badge {
         display: inline-flex;
         align-items: center;
@@ -912,7 +735,6 @@
         animation: pulse 2s ease-in-out infinite;
     }
 
-    /* Title */
     .hero-title {
         font-family: var(--font-mono);
         font-size: clamp(38px, 5vw, 64px);
@@ -923,22 +745,17 @@
         margin: 0;
     }
 
-    .accent {
-        color: var(--color-success);
-        position: relative;
-    }
+    .accent { color: var(--color-success); }
 
-    /* Subtitle */
     .hero-sub {
         font-family: var(--font-mono);
         font-size: 14px;
         color: var(--color-text-dim);
         line-height: 1.8;
         margin: 0;
-        max-width: 440px;
+        max-width: 420px;
     }
 
-    /* CTA buttons */
     .hero-cta {
         display: flex;
         align-items: center;
@@ -959,21 +776,12 @@
         font-weight: 600;
         border-radius: var(--radius-md);
         text-decoration: none;
-        transition:
-            opacity 0.15s ease,
-            transform 0.15s ease;
+        transition: opacity 0.15s ease, transform 0.15s ease;
         white-space: nowrap;
         letter-spacing: 0.01em;
     }
-    .btn-primary:hover {
-        opacity: 0.88;
-        transform: translateY(-1px);
-        color: var(--color-bg);
-    }
-    .btn-primary.btn-lg {
-        height: 48px;
-        padding: 0 26px;
-    }
+    .btn-primary:hover { opacity: 0.88; transform: translateY(-1px); color: var(--color-bg); }
+    .btn-primary.btn-lg { height: 48px; padding: 0 26px; }
 
     .btn-ghost {
         display: inline-flex;
@@ -986,23 +794,12 @@
         text-decoration: none;
         border: 1px solid var(--color-border-2);
         border-radius: var(--radius-md);
-        transition:
-            color 0.15s ease,
-            border-color 0.15s ease,
-            transform 0.15s ease;
+        transition: color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
         white-space: nowrap;
     }
-    .btn-ghost:hover {
-        color: var(--color-text);
-        border-color: var(--color-border-hover);
-        transform: translateY(-1px);
-    }
-    .btn-ghost.btn-lg {
-        height: 48px;
-        padding: 0 22px;
-    }
+    .btn-ghost:hover { color: var(--color-text); border-color: var(--color-border-hover); transform: translateY(-1px); }
+    .btn-ghost.btn-lg { height: 48px; padding: 0 22px; }
 
-    /* Social proof row */
     .hero-proof {
         display: flex;
         align-items: stretch;
@@ -1020,9 +817,7 @@
         padding: 12px 22px;
         border-right: 1px solid var(--color-border);
     }
-    .proof-item:last-child {
-        border-right: none;
-    }
+    .proof-item:last-child { border-right: none; }
 
     .proof-stat {
         font-family: var(--font-mono);
@@ -1041,7 +836,7 @@
         text-transform: uppercase;
     }
 
-    /* ── 3D Canvas ─────────────────────────────────────── */
+    /* ── 3D Canvas ── */
     .hero-canvas-wrap {
         position: relative;
         width: 100%;
@@ -1058,37 +853,22 @@
         transition: opacity 1.2s ease;
         display: block;
     }
-
-    .hero-canvas.loaded {
-        opacity: 1;
-    }
+    .hero-canvas.loaded { opacity: 1; }
 
     .canvas-glow {
         position: absolute;
         inset: 20%;
-        background: radial-gradient(
-            ellipse at center,
-            rgba(0, 204, 102, 0.08) 0%,
-            transparent 70%
-        );
+        background: radial-gradient(ellipse at center, rgba(0, 204, 102, 0.08) 0%, transparent 70%);
         pointer-events: none;
         border-radius: 50%;
         animation: glow-breathe 4s ease-in-out infinite;
     }
 
     @keyframes glow-breathe {
-        0%,
-        100% {
-            opacity: 0.6;
-            transform: scale(1);
-        }
-        50% {
-            opacity: 1;
-            transform: scale(1.08);
-        }
+        0%, 100% { opacity: 0.6; transform: scale(1); }
+        50% { opacity: 1; transform: scale(1.08); }
     }
 
-    /* Static fallback */
     .canvas-fallback {
         display: flex;
         align-items: center;
@@ -1105,14 +885,8 @@
         animation: spin-slow 20s linear infinite;
         line-height: 1;
     }
+    @keyframes spin-slow { to { transform: rotate(360deg); } }
 
-    @keyframes spin-slow {
-        to {
-            transform: rotate(360deg);
-        }
-    }
-
-    /* Floating info cards */
     .float-card {
         position: absolute;
         background: rgba(12, 12, 12, 0.9);
@@ -1177,7 +951,6 @@
         letter-spacing: -0.03em;
         line-height: 1;
     }
-
     .float-card-value span {
         font-size: 12px;
         color: var(--color-text-dim);
@@ -1185,9 +958,128 @@
         font-weight: 400;
     }
 
+    /* Mobile stats strip — hidden on desktop */
+    .hero-mobile-stats {
+        display: none;
+        flex-direction: column;
+        gap: var(--space-2);
+        padding: var(--space-4);
+        background: var(--color-bg-2);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-lg);
+    }
+
+    .mobile-stat {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-family: var(--font-mono);
+        font-size: var(--font-size-xs);
+        color: var(--color-text-dim);
+    }
+
+    .mobile-stat-icon {
+        font-size: 14px;
+        color: var(--color-success);
+        opacity: 0.7;
+        width: 18px;
+        text-align: center;
+        flex-shrink: 0;
+    }
+
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.25; }
+    }
+
+    /* ═══════════════════════════════════════════
+     AUDIENCE SECTION
+    ═══════════════════════════════════════════ */
+    .audience-section {
+        padding: 80px var(--space-8);
+        max-width: 1200px;
+        margin: 0 auto;
+        width: 100%;
+        border-top: 1px solid var(--color-border);
+    }
+
+    .audience-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: var(--space-3);
+    }
+
+    .aud-card {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 22px 20px;
+        background: var(--color-bg-2);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-lg);
+        transition: border-color 0.2s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        cursor: default;
+    }
+    .aud-card:hover {
+        border-color: var(--color-border-2);
+        transform: translateY(-2px);
+    }
+
+    .aud-icon {
+        font-family: var(--font-mono);
+        font-size: 18px;
+        color: var(--color-success);
+        opacity: 0.7;
+        line-height: 1;
+    }
+
+    .aud-body { display: flex; flex-direction: column; gap: 6px; }
+
+    .aud-label {
+        font-family: var(--font-mono);
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--color-text);
+        margin: 0;
+        letter-spacing: -0.01em;
+    }
+
+    .aud-desc {
+        font-family: var(--font-mono);
+        font-size: 11.5px;
+        color: var(--color-text-muted);
+        line-height: 1.7;
+        margin: 0;
+    }
+
+    /* ═══════════════════════════════════════════
+     SHARED SECTION HEADERS
+    ═══════════════════════════════════════════ */
+    .section-eyebrow {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--color-success);
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        margin-bottom: 12px;
+    }
+
+    .section-title {
+        font-family: var(--font-mono);
+        font-size: clamp(24px, 3.5vw, 40px);
+        font-weight: 700;
+        color: var(--color-text);
+        letter-spacing: -0.025em;
+        margin: 0 0 48px;
+        line-height: 1.1;
+    }
+
+    .title-br { display: none; }
+
     /* ═══════════════════════════════════════════
      CODE DEMO SECTION
-  ═══════════════════════════════════════════ */
+    ═══════════════════════════════════════════ */
     .demo-section {
         padding: 80px var(--space-8);
         max-width: 1200px;
@@ -1230,7 +1122,6 @@
         line-height: 1.8;
         margin: 0 0 20px;
     }
-
     .demo-desc code {
         font-family: var(--font-mono);
         font-size: 12px;
@@ -1260,7 +1151,6 @@
         color: var(--color-text-dim);
     }
 
-    /* Code block */
     .demo-code {
         background: var(--color-bg-2);
         border: 1px solid var(--color-border-2);
@@ -1277,10 +1167,7 @@
         border-bottom: 1px solid var(--color-border);
     }
 
-    .code-dots {
-        display: flex;
-        gap: 5px;
-    }
+    .code-dots { display: flex; gap: 5px; }
     .code-dots span {
         width: 9px;
         height: 9px;
@@ -1310,7 +1197,7 @@
 
     .code-body {
         margin: 0;
-        padding: 20px 20px;
+        padding: 20px;
         font-family: var(--font-mono);
         font-size: 11.5px;
         line-height: 1.75;
@@ -1318,72 +1205,22 @@
         overflow-x: auto;
         white-space: pre;
         background: transparent;
-        -webkit-font-smoothing: antialiased;
     }
+    .code-body code { background: none; padding: 0; }
 
-    .code-body code {
-        background: none;
-        padding: 0;
-    }
-
-    /* Syntax tokens */
-    .c-kw {
-        color: var(--color-success);
-    }
-    .c-fn {
-        color: var(--color-text);
-    }
-    .c-str {
-        color: #d4a854;
-    }
-    .c-prop {
-        color: var(--color-text-dim);
-    }
-    .c-dim {
-        color: var(--color-text-muted);
-        opacity: 0.7;
-    }
-    .c-brace {
-        color: var(--color-text-muted);
-    }
-    .c-num {
-        color: #d4a854;
-    }
-    .c-comment {
-        color: var(--color-text-ghost);
-        font-style: italic;
-    }
-    .c-success {
-        color: var(--color-success);
-        opacity: 0.72;
-    }
-
-    /* ═══════════════════════════════════════════
-     SHARED SECTION HEADERS
-  ═══════════════════════════════════════════ */
-    .section-eyebrow {
-        font-family: var(--font-mono);
-        font-size: 10px;
-        font-weight: 700;
-        color: var(--color-success);
-        text-transform: uppercase;
-        letter-spacing: 0.12em;
-        margin-bottom: 12px;
-    }
-
-    .section-title {
-        font-family: var(--font-mono);
-        font-size: clamp(24px, 3.5vw, 40px);
-        font-weight: 700;
-        color: var(--color-text);
-        letter-spacing: -0.025em;
-        margin: 0 0 48px;
-        line-height: 1.1;
-    }
+    .c-kw   { color: var(--color-success); }
+    .c-fn   { color: var(--color-text); }
+    .c-str  { color: #d4a854; }
+    .c-prop { color: var(--color-text-dim); }
+    .c-dim  { color: var(--color-text-muted); opacity: 0.7; }
+    .c-brace{ color: var(--color-text-muted); }
+    .c-num  { color: #d4a854; }
+    .c-comment { color: var(--color-text-ghost); font-style: italic; }
+    .c-success { color: var(--color-success); opacity: 0.72; }
 
     /* ═══════════════════════════════════════════
      FEATURES
-  ═══════════════════════════════════════════ */
+    ═══════════════════════════════════════════ */
     .features-section {
         padding: 80px var(--space-8);
         max-width: 1200px;
@@ -1404,40 +1241,21 @@
         background: var(--color-bg-2);
         border: 1px solid var(--color-border);
         border-radius: var(--radius-lg);
-        transition:
-            border-color 0.2s ease,
-            transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-            background 0.2s ease;
+        transition: border-color 0.2s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), background 0.2s ease;
         overflow: hidden;
         cursor: default;
     }
-
     .feat-card::before {
         content: "";
         position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
+        top: 0; left: 0; right: 0;
         height: 1px;
-        background: linear-gradient(
-            90deg,
-            transparent,
-            rgba(0, 204, 102, 0.4),
-            transparent
-        );
+        background: linear-gradient(90deg, transparent, rgba(0, 204, 102, 0.4), transparent);
         opacity: 0;
         transition: opacity 0.3s ease;
     }
-
-    .feat-card:hover {
-        border-color: var(--color-border-2);
-        transform: translateY(-3px);
-        background: var(--color-bg-3);
-    }
-
-    .feat-card:hover::before {
-        opacity: 1;
-    }
+    .feat-card:hover { border-color: var(--color-border-2); transform: translateY(-3px); background: var(--color-bg-3); }
+    .feat-card:hover::before { opacity: 1; }
 
     .feat-top {
         display: flex;
@@ -1493,7 +1311,7 @@
 
     /* ═══════════════════════════════════════════
      STEPS
-  ═══════════════════════════════════════════ */
+    ═══════════════════════════════════════════ */
     .steps-section {
         padding: 80px var(--space-8);
         max-width: 1200px;
@@ -1515,15 +1333,9 @@
         background: var(--color-bg-2);
         border: 1px solid var(--color-border);
         border-radius: var(--radius-lg);
-        transition:
-            border-color 0.2s ease,
-            transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        transition: border-color 0.2s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     }
-
-    .step-card:hover {
-        border-color: var(--color-border-2);
-        transform: translateY(-2px);
-    }
+    .step-card:hover { border-color: var(--color-border-2); transform: translateY(-2px); }
 
     .step-num {
         font-family: var(--font-mono);
@@ -1565,10 +1377,7 @@
         color: var(--color-text-dim);
     }
 
-    .term-prompt {
-        color: var(--color-success);
-        font-weight: 700;
-    }
+    .term-prompt { color: var(--color-success); font-weight: 700; }
 
     .step-connector {
         position: absolute;
@@ -1584,7 +1393,7 @@
 
     /* ═══════════════════════════════════════════
      CTA SECTION
-  ═══════════════════════════════════════════ */
+    ═══════════════════════════════════════════ */
     .cta-section {
         padding: 100px var(--space-8);
         border-top: 1px solid var(--color-border);
@@ -1599,11 +1408,7 @@
         transform: translateX(-50%);
         width: 600px;
         height: 300px;
-        background: radial-gradient(
-            ellipse at center top,
-            rgba(0, 204, 102, 0.07) 0%,
-            transparent 65%
-        );
+        background: radial-gradient(ellipse at center top, rgba(0, 204, 102, 0.07) 0%, transparent 65%);
         pointer-events: none;
     }
 
@@ -1648,7 +1453,7 @@
         color: var(--color-text-dim);
         line-height: 1.75;
         margin: 0;
-        max-width: 420px;
+        max-width: 400px;
     }
 
     .cta-btns {
@@ -1673,9 +1478,7 @@
         margin-top: 4px;
     }
 
-    .term-cmd {
-        letter-spacing: 0.02em;
-    }
+    .term-cmd { letter-spacing: 0.02em; }
 
     .term-cursor {
         display: inline-block;
@@ -1689,18 +1492,13 @@
     }
 
     @keyframes blink {
-        0%,
-        100% {
-            opacity: 0.6;
-        }
-        50% {
-            opacity: 0;
-        }
+        0%, 100% { opacity: 0.6; }
+        50% { opacity: 0; }
     }
 
     /* ═══════════════════════════════════════════
      FOOTER
-  ═══════════════════════════════════════════ */
+    ═══════════════════════════════════════════ */
     .footer {
         display: flex;
         align-items: center;
@@ -1713,113 +1511,80 @@
         letter-spacing: 0.03em;
     }
 
+    .footer-copy { color: var(--color-text-ghost); }
+
     .footer-links {
         display: flex;
         gap: var(--space-5);
     }
 
-    .footer a {
-        color: var(--color-text-ghost);
-        text-decoration: none;
-        transition: color 0.15s ease;
-    }
-
-    .footer a:hover {
-        color: var(--color-text-muted);
-    }
+    .footer a { color: var(--color-text-ghost); text-decoration: none; transition: color 0.15s ease; }
+    .footer a:hover { color: var(--color-text-muted); }
 
     /* ═══════════════════════════════════════════
      RESPONSIVE
-  ═══════════════════════════════════════════ */
+    ═══════════════════════════════════════════ */
     @media (max-width: 1024px) {
-        .features-grid {
-            grid-template-columns: repeat(2, 1fr);
-        }
-        .demo-grid {
-            grid-template-columns: 1fr;
-            gap: 36px;
-        }
+        .features-grid  { grid-template-columns: repeat(2, 1fr); }
+        .audience-grid  { grid-template-columns: repeat(2, 1fr); }
+        .demo-grid      { grid-template-columns: 1fr; gap: 36px; }
     }
 
     @media (max-width: 900px) {
-        .header {
-            padding: 12px var(--space-5);
-        }
+        .header { padding: 12px var(--space-5); }
 
         .hero {
             grid-template-columns: 1fr;
             min-height: auto;
-            padding: 56px var(--space-5) 64px;
-            gap: 48px;
+            padding: 56px var(--space-5) 40px;
+            gap: 36px;
         }
 
-        .hero-left {
-            padding-right: 0;
-        }
-        .hero-canvas-wrap {
-            height: 340px;
-        }
+        /* Hide 3D canvas on tablet/mobile, show text strip instead */
+        .hero-canvas-wrap { display: none; }
+        .hero-mobile-stats { display: flex; }
 
-        .demo-section,
-        .features-section,
-        .steps-section {
-            padding: 64px var(--space-5);
-        }
+        .hero-left { padding-right: 0; }
 
-        .cta-section {
-            padding: 80px var(--space-5);
-        }
-
-        .steps-grid {
-            grid-template-columns: 1fr;
-            gap: var(--space-4);
-        }
-        .step-connector {
-            display: none;
-        }
-        .float-card {
-            display: none;
-        }
-    }
-
-    @media (max-width: 640px) {
-        .header {
-            padding: 10px var(--space-4);
-        }
-        .nav {
-            gap: var(--space-4);
-        }
-        .nav-link {
-            display: none;
-        }
-        .nav-cta {
-            display: none;
-        }
-        .nav-cta-mobile {
-            display: inline-flex;
-        }
-
-        .statusbar {
-            padding: 6px var(--space-4);
+        .tagbar {
+            padding: 6px var(--space-5);
             overflow-x: auto;
             white-space: nowrap;
         }
 
-        .hero {
-            padding: 40px var(--space-4) 56px;
-            gap: 36px;
-        }
+        .audience-section,
+        .demo-section,
+        .features-section,
+        .steps-section { padding: 64px var(--space-5); }
 
-        .hero-canvas-wrap {
-            height: 260px;
+        .cta-section { padding: 80px var(--space-5); }
+
+        .steps-grid { grid-template-columns: 1fr; gap: var(--space-4); }
+        .step-connector { display: none; }
+        .float-card { display: none; }
+    }
+
+    @media (max-width: 640px) {
+        .header { padding: 10px var(--space-4); }
+        .nav { gap: var(--space-4); }
+        .nav-link { display: none; }
+        .nav-cta { display: none; }
+        .nav-cta-mobile { display: inline-flex; }
+
+        .tagbar {
+            padding: 6px var(--space-4);
+            font-size: 10px;
+            gap: 6px;
         }
+        .tagbar-muted { display: none; }
+
+        .hero { padding: 40px var(--space-4) 36px; gap: 28px; }
 
         .hero-proof {
             flex-direction: column;
             border-radius: var(--radius-lg);
             width: 100%;
         }
-
         .proof-item {
             flex-direction: row;
             align-items: center;
@@ -1828,68 +1593,34 @@
             border-bottom: 1px solid var(--color-border);
             padding: 10px 16px;
         }
-        .proof-item:last-child {
-            border-bottom: none;
-        }
+        .proof-item:last-child { border-bottom: none; }
 
-        .hero-cta {
-            flex-direction: column;
-            width: 100%;
-        }
-        .btn-primary,
-        .btn-ghost {
-            width: 100%;
-            justify-content: center;
-        }
+        .hero-cta { flex-direction: column; width: 100%; }
+        .btn-primary, .btn-ghost { width: 100%; justify-content: center; }
 
+        .title-br { display: inline; }
+
+        .audience-section,
         .demo-section,
         .features-section,
-        .steps-section {
-            padding: 48px var(--space-4);
-        }
+        .steps-section { padding: 48px var(--space-4); }
 
-        .features-grid {
-            grid-template-columns: 1fr;
-        }
+        .audience-grid  { grid-template-columns: 1fr; }
+        .features-grid  { grid-template-columns: 1fr; }
 
-        .cta-section {
-            padding: 64px var(--space-4);
-        }
-        .cta-btns {
-            flex-direction: column;
-            width: 100%;
-        }
+        .cta-section { padding: 64px var(--space-4); }
+        .cta-btns { flex-direction: column; width: 100%; }
         .cta-btns .btn-primary,
-        .cta-btns .btn-ghost {
-            width: 100%;
-            justify-content: center;
-        }
+        .cta-btns .btn-ghost { width: 100%; justify-content: center; }
 
-        .footer {
-            padding: 14px var(--space-4);
-            font-size: 10px;
-        }
+        .footer { padding: 14px var(--space-4); font-size: 10px; }
+        .footer-links { gap: var(--space-4); }
     }
 
-    /* ─── Reduced motion ────────────────────────── */
+    /* ─── Reduced motion ── */
     @media (prefers-reduced-motion: reduce) {
-        :global(.reveal) {
-            opacity: 1;
-            transform: none;
-            transition: none;
-        }
-        .dot-pulse,
-        .badge-dot,
-        .canvas-glow,
-        .fallback-ico,
-        .term-cursor {
-            animation: none;
-        }
-        .btn-primary:hover,
-        .btn-ghost:hover,
-        .feat-card:hover,
-        .step-card:hover {
-            transform: none;
-        }
+        :global(.reveal) { opacity: 1; transform: none; transition: none; }
+        .badge-dot, .float-card-dot, .canvas-glow, .fallback-ico, .term-cursor { animation: none; }
+        .btn-primary:hover, .btn-ghost:hover, .feat-card:hover, .step-card:hover, .aud-card:hover { transform: none; }
     }
 </style>
