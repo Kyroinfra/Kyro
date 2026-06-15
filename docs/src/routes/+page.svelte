@@ -279,7 +279,7 @@
         </a>
     <nav class="nav" aria-label="Primary navigation">
             <a href="/docs" class="nav-link">docs</a>
-            <a href="https://github.com/your-org/kyro" class="nav-cta" target="_blank" rel="noopener noreferrer">github →</a>
+            <a href="https://github.com/Kyroinfra/Kyro" class="nav-cta" target="_blank" rel="noopener noreferrer">github →</a>
         </nav>
     </header>
 
@@ -320,7 +320,7 @@
                         <span>Read the docs</span>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
                     </a>
-                    <a href="https://github.com/your-org/kyro" class="btn-ghost" target="_blank" rel="noopener noreferrer">view on github</a>
+                    <a href="https://github.com/Kyroinfra/Kyro" class="btn-ghost" target="_blank" rel="noopener noreferrer">view on github</a>
                 </div>
 
                 <div class="hero-proof reveal" aria-label="Key statistics">
@@ -513,7 +513,7 @@
                         <span>Read the docs</span>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
                     </a>
-                    <a href="https://github.com/your-org/kyro" class="btn-ghost btn-lg" target="_blank" rel="noopener noreferrer">view on github →</a>
+                    <a href="https://github.com/Kyroinfra/Kyro" class="btn-ghost btn-lg" target="_blank" rel="noopener noreferrer">view on github →</a>
                 </div>
                 <div class="cta-term" aria-label="Quick start command">
                     <span class="term-prompt" aria-hidden="true">$</span>
@@ -529,7 +529,7 @@
         <span class="footer-copy">© 2026 kyro</span>
         <nav class="footer-links" aria-label="Footer navigation">
             <a href="/docs">docs</a>
-            <a href="https://github.com/your-org/kyro" target="_blank" rel="noopener noreferrer">github</a>
+            <a href="https://github.com/Kyroinfra/Kyro" target="_blank" rel="noopener noreferrer">github</a>
         </nav>
     </footer>
 </div>
