@@ -1,0 +1,128 @@
+:root {
+	/* Core palette — true blacks with deliberate surface steps */
+	--color-bg: #050505;
+	--color-bg-2: #0c0c0c;
+	--color-bg-3: #111111;
+	--color-bg-4: #161616;
+	--color-bg-hover: #1a1a1a;
+
+	/* Borders — wider spread so surfaces feel distinct */
+	--color-border: #161616;
+	--color-border-2: #222222;
+	--color-border-hover: #333333;
+	--color-border-active: #444444;
+
+	/* Text */
+	--color-text: #e8e8e8;
+	--color-text-dim: #999999;
+	--color-text-muted: #444444;
+	--color-text-ghost: #2a2a2a;
+
+	/* Accent — keep white for interactive elements */
+	--color-accent: #e8e8e8;
+	--color-accent-hover: #aaaaaa;
+
+	/* Semantic */
+	--color-success: #00cc66;
+	--color-success-dim: rgba(0, 204, 102, 0.12);
+	--color-success-border: rgba(0, 204, 102, 0.2);
+	--color-danger: #ff4444;
+	--color-danger-dim: rgba(255, 68, 68, 0.1);
+	--color-danger-border: rgba(255, 68, 68, 0.25);
+	--color-warning: #ffaa00;
+	--color-warning-dim: rgba(255, 170, 0, 0.1);
+	--color-warning-border: rgba(255, 170, 0, 0.25);
+
+	/* Spacing */
+	--space-1: 4px;
+	--space-2: 8px;
+	--space-3: 12px;
+	--space-4: 16px;
+	--space-5: 20px;
+	--space-6: 24px;
+	--space-8: 32px;
+	--space-10: 40px;
+	--space-12: 48px;
+
+	/* Typography */
+	--font-sans: 'Inter', system-ui, sans-serif;
+	--font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
+	--font-size-2xs: 10px;
+	--font-size-xs: 11px;
+	--font-size-sm: 13px;
+	--font-size-base: 14px;
+	--font-size-lg: 16px;
+	--font-size-xl: 20px;
+	--font-size-2xl: 24px;
+	--font-size-3xl: 30px;
+
+	/* Radius — keep it minimal for terminal feel */
+	--radius-sm: 2px;
+	--radius-md: 3px;
+	--radius-lg: 5px;
+	--radius-full: 9999px;
+}
+
+*, *::before, *::after {
+	box-sizing: border-box;
+	margin: 0;
+	padding: 0;
+}
+
+html, body {
+	height: 100%;
+	font-family: var(--font-mono);
+	font-size: var(--font-size-base);
+	line-height: 1.5;
+	color: var(--color-text);
+	background-color: var(--color-bg);
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+a {
+	color: var(--color-text);
+	text-decoration: none;
+	transition: color 0.1s ease;
+}
+
+a:hover {
+	color: var(--color-text-dim);
+}
+
+button {
+	font-family: var(--font-mono);
+	cursor: pointer;
+}
+
+input, textarea, select {
+	font-family: var(--font-mono);
+	font-size: inherit;
+}
+
+code, pre {
+	font-family: var(--font-mono);
+}
+
+::selection {
+	background-color: rgba(232, 232, 232, 0.15);
+	color: var(--color-text);
+}
+
+::-webkit-scrollbar {
+	width: 4px;
+	height: 4px;
+}
+
+::-webkit-scrollbar-track {
+	background: var(--color-bg);
+}
+
+::-webkit-scrollbar-thumb {
+	background: var(--color-bg-4);
+	border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: var(--color-border-hover);
+}
