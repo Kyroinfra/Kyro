@@ -1,22 +1,22 @@
 <script lang="ts">
-	import '../app.css';
-	import type { Snippet } from 'svelte';
+  import "../app.css";
+  import type { Snippet } from "svelte";
 
-	interface Props {
-		children: Snippet;
-	}
+  interface Props {
+    children: Snippet;
+  }
 
-	let { children }: Props = $props();
+  let { children }: Props = $props();
 </script>
 
 <main>
-	{@render children()}
+  {@render children()}
 </main>
 
 <style>
-	main {
-		min-height: 100vh;
-		display: flex;
-		flex-direction: column;
-	}
+  main {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
 </style>

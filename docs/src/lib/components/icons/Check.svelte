@@ -1,11 +1,21 @@
 <script lang="ts">
-	interface Props {
-		size?: number;
-	}
+  interface Props {
+    size?: number;
+  }
 
-	let { size = 18 }: Props = $props();
+  let { size = 18 }: Props = $props();
 </script>
 
-<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-	<polyline points="20 6 9 17 4 12" />
+<svg
+  width={size}
+  height={size}
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="1.5"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <polyline points="20 6 9 17 4 12" />
 </svg>
+
