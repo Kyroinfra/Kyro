@@ -418,6 +418,147 @@
       </div>
     </section>
 
+    <!-- ══════════════════════ TECH STACK STRIP ══════════════════════ -->
+    <div class="stack-strip">
+      <span class="stack-label">powered by</span>
+      <div class="stack-items">
+        <div class="stack-item">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M13 4h-2V2h2v2zm0 3h-2V5h2v2zm-3 0H8V5h2v2zm-3 0H5V5h2v2zm6 0h-2V5h2v2zm3-3h-2V2h2v2zm0 3h-2V5h2v2zM22.55 9.27a3.7 3.7 0 0 0-1.88-.48c-.32-1.12-1.1-2.1-2.2-2.72l-.44-.25-.28.43a3.9 3.9 0 0 0-.5 1.74c-.04.6.08 1.2.34 1.74a3.6 3.6 0 0 1-1.33.26H1.07a1 1 0 0 0-1 1.06 9.05 9.05 0 0 0 .56 3.26A5.9 5.9 0 0 0 3 17.47c1.17.6 3.08.94 5.25.94.98 0 1.97-.08 2.9-.25a11.26 11.26 0 0 0 3.84-1.6 9.4 9.4 0 0 0 2.63-2.7h.23a4.37 4.37 0 0 0 3.84-2.22l.19-.36-.33-.2z"
+              fill="#2496ED"
+            />
+          </svg>
+          <span>Docker</span>
+        </div>
+        <span class="stack-sep" aria-hidden="true">·</span>
+        <div class="stack-item">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+          >
+            <ellipse cx="12" cy="6.5" rx="9" ry="3" fill="#D82C20" />
+            <path
+              d="M3 6.5v4c0 1.66 4.03 3 9 3s9-1.34 9-3v-4c0 1.66-4.03 3-9 3s-9-1.34-9-3z"
+              fill="#A41E11"
+            />
+            <path
+              d="M3 10.5v4c0 1.66 4.03 3 9 3s9-1.34 9-3v-4c0 1.66-4.03 3-9 3s-9-1.34-9-3z"
+              fill="#D82C20"
+            />
+          </svg>
+          <span>Redis</span>
+        </div>
+        <span class="stack-sep" aria-hidden="true">·</span>
+        <div class="stack-item">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M17.13 2.55a6.46 6.46 0 0 0-1.44-.28c-.93-.06-1.7.1-2.37.4a9.3 9.3 0 0 0-1.32-.1C9.08 2.57 6.8 4.04 5.5 6.2c-.88 1.46-1.26 3.1-1.14 4.95.1 1.56.56 2.93 1.27 3.9.48.66 1.02 1.03 1.52 1.05.3.01.66-.08 1.03-.38l.06.13c.48 1.04 1.17 1.67 1.94 1.7.53.02 1.04-.27 1.48-.82.3.28.63.43.98.44.46.02.92-.22 1.3-.67.07.27.2.5.38.65.28.24.63.27.94.08.82-.5 1.42-2.08 1.6-3.32.1-.02.2-.05.3-.1.72-.3 1.3-1.07 1.65-2.1.28-.82.37-1.78.25-2.63a8.35 8.35 0 0 0-.93-2.78c.37-.22.7-.53.97-.92.51-.74.72-1.67.52-2.5-.13-.56-.43-.97-.7-1.23z"
+              fill="#336791"
+            />
+            <ellipse cx="12" cy="8" rx="4" ry="1.5" fill="#fff" opacity=".3" />
+          </svg>
+          <span>Postgres</span>
+        </div>
+        <span class="stack-sep" aria-hidden="true">·</span>
+        <div class="stack-item">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="var(--color-text-ghost)"
+            stroke-width="1.5"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="7.5" r="4.5" fill="none" />
+            <circle
+              cx="10"
+              cy="6.5"
+              r="0.9"
+              fill="var(--color-text-ghost)"
+              stroke="none"
+            />
+            <circle
+              cx="14"
+              cy="6.5"
+              r="0.9"
+              fill="var(--color-text-ghost)"
+              stroke="none"
+            />
+            <path
+              d="M9.5 9.5s.9 1.2 2.5 1.2 2.5-1.2 2.5-1.2"
+              stroke-linecap="round"
+              fill="none"
+            />
+            <path d="M8.5 12v5M15.5 12v5M8.5 17h7" stroke-linecap="round" />
+          </svg>
+          <span>Ollama</span>
+        </div>
+        <span class="stack-sep" aria-hidden="true">·</span>
+        <div class="stack-item">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+          >
+            <rect x="3" y="4" width="18" height="3.5" rx="1.5" fill="#E4533A" />
+            <rect
+              x="3"
+              y="10"
+              width="13"
+              height="3.5"
+              rx="1.5"
+              fill="#E4533A"
+              opacity=".65"
+            />
+            <rect
+              x="3"
+              y="16"
+              width="8"
+              height="3.5"
+              rx="1.5"
+              fill="#E4533A"
+              opacity=".35"
+            />
+          </svg>
+          <span>BullMQ</span>
+        </div>
+        <span class="stack-sep" aria-hidden="true">·</span>
+        <div class="stack-item">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"
+            />
+          </svg>
+          <span>open source</span>
+        </div>
+      </div>
+    </div>
+
     <!-- ══════════════════════ WHO IS THIS FOR ══════════════════════ -->
     <section class="audience-section" aria-labelledby="audience-heading">
       <div class="section-eyebrow reveal">built for</div>
@@ -655,6 +796,63 @@
   :global(.reveal.revealed) {
     opacity: 1;
     transform: translateY(0);
+  }
+
+  /* ═══════════════════════════════════════════
+   TECH STACK STRIP
+  ═══════════════════════════════════════════ */
+  .stack-strip {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 14px var(--space-8);
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-bg);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .stack-strip::-webkit-scrollbar {
+    display: none;
+  }
+
+  .stack-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--color-text-ghost);
+    flex-shrink: 0;
+  }
+
+  .stack-items {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .stack-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .stack-sep {
+    color: var(--color-text-ghost);
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+
+  @media (max-width: 640px) {
+    .stack-strip {
+      padding: 12px var(--space-4);
+      gap: 14px;
+    }
   }
 
   /* ═══════════════════════════════════════════
