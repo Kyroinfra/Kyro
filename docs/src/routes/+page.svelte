@@ -563,7 +563,7 @@
     <section class="audience-section" aria-labelledby="audience-heading">
       <div class="section-eyebrow reveal">built for</div>
       <h2 id="audience-heading" class="section-title reveal">
-        Teams that can't send<br class="title-br" />client data to OpenAI.
+        Teams that can't send <br class="title-br" />client data to OpenAI.
       </h2>
       <div class="audience-grid">
         {#each audiences as aud, i}
