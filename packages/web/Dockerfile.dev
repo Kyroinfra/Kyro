@@ -5,4 +5,4 @@ RUN npm install -g pnpm && \
     CI=true pnpm install --frozen-lockfile
 WORKDIR /app/packages/web
 EXPOSE 3001
-CMD ["node", "build"]
+CMD ["pnpm", "dev", "--host", "0.0.0.0", "--port", "3001"]
