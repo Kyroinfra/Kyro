@@ -10,7 +10,7 @@ Starts the development environment.
 Runs all services using `compose.yml` + `compose.dev.yml` with `.env.dev`.
 Hot reload is enabled for the API and web via bind mounts.
 
-## down.sh
+## dev-down.sh
 Stops the development environment.
 
 ```bash
@@ -20,7 +20,7 @@ Stops the development environment.
 Stops and removes all development containers but keeps volumes intact,
 so your database and uploads are preserved.
 
-## rebuild.sh
+## dev-rebuild.sh
 Rebuilds all Docker images and restarts all services.
 
 ```bash
@@ -55,7 +55,7 @@ Starts the production environment in detached mode.
 Runs all services using `compose.yml` + `compose.prod.yml` with `.env`.
 Runs in the background — use `prodDown.sh` to stop.
 
-## prodDown.sh
+## prod-down.sh
 Stops the production environment.
 
 ```bash
@@ -63,3 +63,21 @@ Stops the production environment.
 ```
 
 Stops and removes all production containers but keeps volumes intact.
+
+
+## prod-rebuild.sh
+Rebuild Containers for prod.
+
+```bash
+./scripts/prod-rebuild.sh
+```
+
+
+## prod-down.sh
+Stops the production environment.
+
+```bash
+./scripts/prod-down.sh
+```
+
+Stop all containers in production environment.
