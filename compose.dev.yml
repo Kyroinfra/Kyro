@@ -1,19 +1,9 @@
 services:
-  # Expose infra ports locally so you can connect with DB clients / Redis tools
-  # postgres:
-  #   ports:
-  #     - "5432:5432"
-  #
-  # redis:
-  #   ports:
-  #     - "6379:6379"
-
-  # Run migrations once on startup, then exit — same as prod but lighter
   migrate:
     build:
       context: .
       dockerfile: packages/api/Dockerfile.dev
-    command: node dist/db/migrate.js
+    command: pnpm migrate
     environment:
       - NODE_ENV=development
       - PORT=3000
@@ -30,10 +20,9 @@ services:
     build:
       context: .
       dockerfile: packages/api/Dockerfile.dev
-    # No replicas in dev — single instance, easier to read logs
     deploy:
       replicas: 1
-    command: npx nodemon --watch src --ext ts,js --exec "node -r tsconfig-paths/register -r ts-node/register src/index.ts"
+    command: pnpm dev
     environment:
       - PORT=3000
       - NODE_ENV=development
@@ -45,11 +34,11 @@ services:
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text}
       - CHAT_MODEL=${CHAT_MODEL:-llama3.2}
     volumes:
-      - ./packages/api/src:/app/packages/api/src   # hot reload
-      - ./packages/shared:/app/packages/shared       # shared types
+      - ./packages/api/src:/app/packages/api/src
+      - ./packages/shared:/app/packages/shared
       - uploads_data:/app/uploads
     ports:
-      - "3000:3000"   # direct access, no nginx in dev
+      - "3000:3000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -68,7 +57,7 @@ services:
       dockerfile: packages/api/Dockerfile.dev
     deploy:
       replicas: 1
-    command: npx nodemon --watch src --ext ts,js --exec "node -r tsconfig-paths/register -r ts-node/register src/workers/textExtractor.ts"
+    command: pnpm dev:worker
     environment:
       - NODE_ENV=development
       - PORT=3000
@@ -99,7 +88,7 @@ services:
     build:
       context: .
       dockerfile: packages/api/Dockerfile.dev
-    command: npx nodemon --watch src --ext ts,js --exec "node -r tsconfig-paths/register -r ts-node/register src/workers/webhookDelivery.ts"
+    command: pnpm dev:webhook
     environment:
       - NODE_ENV=development
       - PORT=3000
@@ -134,7 +123,7 @@ services:
       - ./packages/web/static:/app/packages/web/static
       - ./packages/shared:/app/packages/shared
     ports:
-      - "3001:3001"   # Vite dev server, direct
+      - "3001:3001"
     depends_on:
       - api
     networks:
