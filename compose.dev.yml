@@ -1,5 +1,130 @@
-# docker-compose.dev.yml
 services:
-  pgadmin:
+  migrate:
+    build:
+      context: .
+      dockerfile: packages/api/Dockerfile.dev
+    command: pnpm migrate
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - JWT_SECRET=dev-secret
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+    networks:
+      - kyro-net
+
+  api:
+    build:
+      context: .
+      dockerfile: packages/api/Dockerfile.dev
+    deploy:
+      replicas: 1
+    command: pnpm dev
+    environment:
+      - PORT=3000
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - JWT_SECRET=${JWT_SECRET:-dev-secret}
+      - UPLOAD_DIR=/app/uploads
+      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text}
+      - CHAT_MODEL=${CHAT_MODEL:-llama3.2}
+    volumes:
+      - ./packages/api/src:/app/packages/api/src
+      - ./packages/shared:/app/packages/shared
+      - uploads_data:/app/uploads
     ports:
-      - "5055:80"  # Open binding — fine locally, never in prod
+      - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - kyro-net
+
+  worker:
+    build:
+      context: .
+      dockerfile: packages/api/Dockerfile.dev
+    deploy:
+      replicas: 1
+    command: pnpm dev:worker
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - JWT_SECRET=${JWT_SECRET:-dev-secret}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - UPLOAD_DIR=/app/uploads
+      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text}
+      - CHAT_MODEL=${CHAT_MODEL:-llama3.2}
+    volumes:
+      - ./packages/api/src:/app/packages/api/src
+      - ./packages/shared:/app/packages/shared
+      - uploads_data:/app/uploads
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - kyro-net
+
+  webhook-worker:
+    build:
+      context: .
+      dockerfile: packages/api/Dockerfile.dev
+    command: pnpm dev:webhook
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - JWT_SECRET=${JWT_SECRET:-dev-secret}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+    volumes:
+      - ./packages/api/src:/app/packages/api/src
+      - ./packages/shared:/app/packages/shared
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - kyro-net
+
+  web:
+    build:
+      context: .
+      dockerfile: packages/web/Dockerfile.dev
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - JWT_SECRET=${JWT_SECRET:-dev-secret}
+      - INTERNAL_API_URL=http://api:3000
+      - PUBLIC_API_URL=http://localhost:3000
+    volumes:
+      - ./packages/web/src:/app/packages/web/src
+      - ./packages/web/static:/app/packages/web/static
+      - ./packages/shared:/app/packages/shared
+    ports:
+      - "3001:3001"
+    depends_on:
+      - api
+    networks:
+      - kyro-net

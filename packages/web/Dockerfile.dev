@@ -1,0 +1,10 @@
+FROM node:20-alpine
+WORKDIR /app
+COPY . .
+RUN npm install -g pnpm && \
+    CI=true pnpm install --frozen-lockfile
+ARG PUBLIC_API_URL=http://localhost:3000
+ENV PUBLIC_API_URL=$PUBLIC_API_URL
+WORKDIR /app/packages/web
+EXPOSE 3001
+CMD ["pnpm", "dev", "--host", "0.0.0.0", "--port", "3001"]

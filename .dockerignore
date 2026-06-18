@@ -1,0 +1,35 @@
+# Dependencies
+node_modules
+**/node_modules
+
+# Build outputs
+packages/web/build
+packages/web/.svelte-kit
+packages/api/dist
+
+# Environment files
+.env
+.env.*
+
+# Git
+.git
+.gitignore
+
+# Docker
+compose*.yml
+.dockerignore
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+
+# Dev tools
+.vscode
+.idea
+
+# Scripts
+scripts
+README.md
