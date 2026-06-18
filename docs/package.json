@@ -12,6 +12,7 @@
   },
   "devDependencies": {
     "@sveltejs/adapter-node": "^5.2.9",
+    "@sveltejs/adapter-vercel": "^6.3.3",
     "@sveltejs/kit": "^2.9.0",
     "@sveltejs/vite-plugin-svelte": "^4.0.0",
     "@types/jsonwebtoken": "^9.0.7",
