@@ -180,4 +180,18 @@ router.get('/me', authMiddleware, async (req: Request, res: Response) => {
   }
 });
 
+
+// routes/v1/auth.ts — add this route
+router.get('/setup-status', async (req: Request, res: Response) => {
+	try {
+		const result = await query<{ count: string }>(
+			'SELECT COUNT(*) as count FROM organisations'
+		);
+		const count = parseInt(result[0]?.count || '0', 10);
+		res.json({ configured: count > 0 });
+	} catch {
+		res.status(500).json({ configured: false });
+	}
+});
+
 export default router;
