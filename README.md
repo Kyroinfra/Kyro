@@ -77,11 +77,7 @@ Create an account and generate an API key via the REST API, then use the [TypeSc
 ```bash
 # Health check
 curl http://localhost/health
-
-# Register
-curl -X POST http://localhost/api/v2/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{ "orgName": "Acme", "email": "you@acme.com", "password": "..." }'
 ```
+Create a Scoped API key to use with SDK
 
 For the full API reference and SDK documentation visit [docs](https://kyro-henna.vercel.app/docs).
