@@ -85,3 +85,4 @@ curl -X POST http://localhost/api/v2/auth/register \
 ```
 
 For the full API reference and SDK documentation visit [kyro.io/docs](https://kyro.io/docs).
+
