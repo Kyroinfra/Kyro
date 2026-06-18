@@ -5,22 +5,23 @@ import { ApiError } from '$lib/api/client';
 
 const COOKIE_NAME = 'kyro_token';
 
-export const load: PageServerLoad = async ({ locals, fetch }) => {
-	if (locals.user) {
-		throw redirect(302, '/dashboard');
-	}
-
-	try {
-		const res = await fetch('/api/org-exists');
-		const { exists } = await res.json();
-		if (exists) {
-			throw redirect(302, '/login');
-		}
-	} catch (err) {
-		if ((err as any)?.status === 302) throw err;
-		// if the check fails, allow registration to proceed
-	}
-};
+// To futher lock down auth
+// export const load: PageServerLoad = async ({ locals, fetch }) => {
+// 	if (locals.user) {
+// 		throw redirect(302, '/dashboard');
+// 	}
+//
+// 	try {
+// 		const res = await fetch('/api/org-exists');
+// 		const { exists } = await res.json();
+// 		if (exists) {
+// 			throw redirect(302, '/login');
+// 		}
+// 	} catch (err) {
+// 		if ((err as any)?.status === 302) throw err;
+// 		// if the check fails, allow registration to proceed
+// 	}
+// };
 
 export const actions: Actions = {
 	default: async ({ request, cookies }) => {

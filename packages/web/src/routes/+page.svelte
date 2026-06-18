@@ -1,14 +1,11 @@
-<script lang="ts">
-  import { page } from '$app/stores';
-</script>
-
 <svelte:head>
   <title>KYRO</title>
 </svelte:head>
 
 <div class="landing">
   <div class="hero">
-    <h1 class="logo">KYRO</h1>
+    <img src="/logo.svg" class="logo-img" alt="KYRO" />
+    <h1 class="heading">KYRO</h1>
     <p class="tagline">welcome</p>
     <a href="/register" class="btn-primary">Get Started</a>
   </div>
@@ -31,9 +28,15 @@
     text-align: center;
   }
 
-  .logo {
+  .logo-img {
+    width: 64px;
+    height: 64px;
+    display: block;
+  }
+
+  .heading {
     font-family: var(--font-mono);
-    font-size: clamp(3rempx, 10vw, 96px);
+    font-size: clamp(1rem, 10vw, 2rem);
     font-weight: 700;
     letter-spacing: 0.15em;
     color: var(--color-text);
