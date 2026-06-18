@@ -84,4 +84,4 @@ curl -X POST http://localhost/api/v2/auth/register \
   -d '{ "orgName": "Acme", "email": "you@acme.com", "password": "..." }'
 ```
 
-For the full API reference and SDK documentation visit [kyro.io/docs](https://kyro.io/docs).
+For the full API reference and SDK documentation visit [kyro.io/docs](https://kyro-henna.vercel.app/docs).
