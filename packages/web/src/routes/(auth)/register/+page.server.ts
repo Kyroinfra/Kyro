@@ -1,9 +1,27 @@
 import { fail, redirect } from '@sveltejs/kit';
-import type { Actions } from './$types';
+import type { Actions, PageServerLoad } from './$types';
 import { register } from '$lib/api/auth';
 import { ApiError } from '$lib/api/client';
 
 const COOKIE_NAME = 'kyro_token';
+
+// To futher lock down auth
+// export const load: PageServerLoad = async ({ locals, fetch }) => {
+// 	if (locals.user) {
+// 		throw redirect(302, '/dashboard');
+// 	}
+//
+// 	try {
+// 		const res = await fetch('/api/org-exists');
+// 		const { exists } = await res.json();
+// 		if (exists) {
+// 			throw redirect(302, '/login');
+// 		}
+// 	} catch (err) {
+// 		if ((err as any)?.status === 302) throw err;
+// 		// if the check fails, allow registration to proceed
+// 	}
+// };
 
 export const actions: Actions = {
 	default: async ({ request, cookies }) => {
@@ -31,7 +49,7 @@ export const actions: Actions = {
 				maxAge: 60 * 60 * 24 * 7
 			});
 
-			redirect(302, '/dashboard');
+			throw redirect(302, '/dashboard');
 		} catch (err) {
 			if ((err as any)?.status === 302 || (err as any)?.status === 301) {
 				throw err;
