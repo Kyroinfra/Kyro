@@ -17,8 +17,8 @@ Built for teams that can't send their data to third-party AI providers.
 **1. Clone and configure**
 
 ```bash
-git clone https://github.com/kyro/kyro.git
-cd kyro
+git clone https://github.com/Kyroinfra/Kyro
+cd Kyro
 cp .env.example .env
 ```
 
