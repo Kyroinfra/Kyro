@@ -1,3 +1,245 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - kyro-net
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - kyro-net
+  pgadmin:
+    image: dpage/pgadmin4
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+    ports:
+      - "127.0.0.1:5050:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/misc/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - kyro-net
+volumes:
+  pg_data:
+  redis_data:
+  pgadmin_data:
+  uploads_data:
+networks:
+  kyro-net:
+    driver: bridge
+
+
+compose.dev.yml
+
+services:
+  migrate:
+    build:
+      context: .
+      dockerfile: packages/api/Dockerfile.dev
+    command: pnpm migrate
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - JWT_SECRET=dev-secret
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+    networks:
+      - kyro-net
+  api:
+    build:
+      context: .
+      dockerfile: packages/api/Dockerfile.dev
+    deploy:
+      replicas: 1
+    command: pnpm dev
+    environment:
+      - PORT=3000
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - JWT_SECRET=${JWT_SECRET:-dev-secret}
+      - UPLOAD_DIR=/app/uploads
+      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text}
+      - CHAT_MODEL=${CHAT_MODEL:-llama3.2}
+    volumes:
+      - ./packages/api/src:/app/packages/api/src
+      - ./packages/shared:/app/packages/shared
+      - uploads_data:/app/uploads
+    ports:
+      - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - kyro-net
+  worker:
+    build:
+      context: .
+      dockerfile: packages/api/Dockerfile.dev
+    deploy:
+      replicas: 1
+    command: pnpm dev:worker
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - JWT_SECRET=${JWT_SECRET:-dev-secret}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - UPLOAD_DIR=/app/uploads
+      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text}
+      - CHAT_MODEL=${CHAT_MODEL:-llama3.2}
+    volumes:
+      - ./packages/api/src:/app/packages/api/src
+      - ./packages/shared:/app/packages/shared
+      - uploads_data:/app/uploads
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - kyro-net
+  webhook-worker:
+    build:
+      context: .
+      dockerfile: packages/api/Dockerfile.dev
+    command: pnpm dev:webhook
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - JWT_SECRET=${JWT_SECRET:-dev-secret}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+    volumes:
+      - ./packages/api/src:/app/packages/api/src
+      - ./packages/shared:/app/packages/shared
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - kyro-net
+  web:
+    build:
+      context: .
+      dockerfile: packages/web/Dockerfile.dev
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - JWT_SECRET=${JWT_SECRET:-dev-secret}
+      - INTERNAL_API_URL=http://api:3000
+      - PUBLIC_API_URL=http://localhost:3000
+    volumes:
+      - ./packages/web/src:/app/packages/web/src
+      - ./packages/web/static:/app/packages/web/static
+      - ./packages/shared:/app/packages/shared
+    ports:
+      - "3001:3001"
+    depends_on:
+      - api
+    networks:
+      - kyro-net
+
+
+I've provided the current frontend codebase and also the current backend codebase, this is intended to be used with an sdk but I just want to have a better dashboard for easy use, so I need you to update the current dashboard code with the missing routes and also a chat interface which they can use to interact
+
+make no mistake and make sure to use the current style and theme dont change anything that has to do with design just add the missing routes
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 **"Kyro is a file management platform for development teams — you integrate it once and get file storage, delivery, and content extraction out of the box, with team management and usage analytics built in."**
 
 The v2 text extraction is actually your differentiator over a basic S3 clone. S3 just stores bytes. Kyro stores files *and* knows what's inside them.
