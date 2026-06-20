@@ -1,21 +1,30 @@
 <script lang="ts">
   import { user } from "$lib/stores/auth";
+  import { apiKey, apiKeyVerified } from "$lib/stores/apiKey";
   import Button from "$lib/components/ui/Button.svelte";
   import Card from "$lib/components/ui/Card.svelte";
+  import Badge from "$lib/components/ui/Badge.svelte";
+  import Modal from "$lib/components/ui/Modal.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import ProgressBar from "$lib/components/ui/ProgressBar.svelte";
+  import ApiKeyGate from "$lib/components/ApiKeyGate.svelte";
   import { formatBytes, formatDateTime } from "$lib/utils/format";
   import {
     uploadFile,
     deleteFile,
-    getFiles,
     getDownloadUrl,
-    type FileItem,
   } from "$lib/api/files";
+  import {
+    getFilesV2,
+    embedFileV2,
+    triggerExtraction,
+    type FileItemV2,
+    type ExtractionStatus,
+  } from "$lib/api/files-v2";
+  import { getCollections, addFilesToCollection, type Collection } from "$lib/api/collections";
 
   interface Props {
     data: {
-      files: FileItem[];
       hasApiKey: boolean;
       apiKeyPrefix: string | null;
     };
@@ -23,75 +32,55 @@
 
   let { data }: Props = $props();
 
-  let files = $state<FileItem[]>(data.files);
   let hasApiKey = $state(data.hasApiKey);
-  let apiKeyPrefix = $state(data.apiKeyPrefix);
 
   // Pagination state
+  let files = $state<FileItemV2[]>([]);
   let nextCursor = $state<string | null>(null);
   let hasMore = $state(false);
   let loadingMore = $state(false);
+  let loadingFiles = $state(false);
 
-  let apiKey = $state("");
-  let apiKeyVerified = $state(false);
-  let verifyingApiKey = $state(false);
-  let apiKeyError = $state<string | null>(null);
   let selectedFile = $state<File | null>(null);
   let uploading = $state(false);
   let uploadProgress = $state(0);
   let showDeleteConfirm = $state(false);
-  let fileToDelete = $state<FileItem | null>(null);
+  let fileToDelete = $state<FileItemV2 | null>(null);
   let dragOver = $state(false);
   let uploadError = $state<string | null>(null);
+
+  // Embedding state, keyed by file id
+  let embedding = $state<Record<string, boolean>>({});
+  let embedResult = $state<Record<string, string>>({}); // fileId -> embeddingStatus
+
+  // Re-extract state
+  let extracting = $state<Record<string, boolean>>({});
+
+  // Add-to-collection modal
+  let showCollectionModal = $state(false);
+  let fileForCollection = $state<FileItemV2 | null>(null);
+  let collections = $state<Collection[]>([]);
+  let loadingCollections = $state(false);
+  let addingToCollection = $state(false);
+  let collectionAddError = $state<string | null>(null);
+  let collectionAddedMessage = $state<string | null>(null);
 
   const canManage = $derived(
     $user?.role === "owner" || $user?.role === "admin",
   );
 
-  $effect(() => {
-    hasApiKey = data.hasApiKey;
-    apiKeyPrefix = data.apiKeyPrefix;
-  });
-
-  async function verifyApiKey() {
-    if (!apiKey.trim()) {
-      apiKeyError = "Please enter an API key";
-      return;
-    }
-
-    verifyingApiKey = true;
-    apiKeyError = null;
-
-    try {
-      const result = await getFiles(apiKey, 100);
-      apiKeyVerified = true;
-      apiKeyError = null;
-      files = result.files;
-      nextCursor = result.nextCursor;
-      hasMore = result.hasMore;
-    } catch (error: any) {
-      apiKeyError =
-        error.message || "Invalid API key. Make sure it has read scope.";
-      apiKeyVerified = false;
-    } finally {
-      verifyingApiKey = false;
-    }
-  }
-
-  function changeApiKey() {
-    apiKeyVerified = false;
-    apiKey = "";
-    apiKeyError = null;
-    files = [];
-    nextCursor = null;
-    hasMore = false;
+  async function verifyKey(key: string) {
+    const result = await getFilesV2(key, 100);
+    files = result.files;
+    nextCursor = result.nextCursor;
+    hasMore = result.hasMore;
   }
 
   async function loadMore() {
     if (!nextCursor || loadingMore) return;
     loadingMore = true;
     try {
-      const result = await getFiles(apiKey, 100, nextCursor);
+      const result = await getFilesV2($apiKey, 100, nextCursor);
       files = [...files, ...result.files];
       nextCursor = result.nextCursor;
       hasMore = result.hasMore;
@@ -102,9 +91,24 @@
     }
   }
 
+  async function refreshFiles() {
+    if (!$apiKeyVerified) return;
+    loadingFiles = true;
+    try {
+      const result = await getFilesV2($apiKey, 100);
+      files = result.files;
+      nextCursor = result.nextCursor;
+      hasMore = result.hasMore;
+    } catch (error: any) {
+      console.error("Failed to refresh files:", error);
+    } finally {
+      loadingFiles = false;
+    }
+  }
+
   async function handleFileSelect(e: Event) {
     const input = e.target as HTMLInputElement;
-    if (input.files?.length && apiKeyVerified) {
+    if (input.files?.length && $apiKeyVerified) {
       selectedFile = input.files[0];
       await uploadSelectedFile();
       input.value = "";
@@ -115,7 +119,7 @@
     e.preventDefault();
     dragOver = false;
 
-    if (!apiKeyVerified) {
+    if (!$apiKeyVerified) {
       uploadError = "Please verify your API key first";
       return;
     }
@@ -128,14 +132,16 @@
   }
 
   async function uploadSelectedFile() {
-    if (!selectedFile || !apiKeyVerified) return;
+    if (!selectedFile || !$apiKeyVerified) return;
 
     uploading = true;
     uploadProgress = 0;
     uploadError = null;
 
     try {
-      const uploaded = await uploadFile(apiKey, selectedFile, (pct) => {
+      // Upload endpoint is identical between v1/v2 routers (multer + storage);
+      // v2's response additionally includes extractionStatus.
+      const uploaded = await uploadFile($apiKey, selectedFile, (pct) => {
         uploadProgress = pct;
       });
 
@@ -146,12 +152,16 @@
           mimeType: uploaded.mimeType,
           sizeBytes: uploaded.sizeBytes,
           createdAt: uploaded.createdAt,
+          extractionStatus: "pending",
         },
         ...files,
       ];
 
       selectedFile = null;
       uploadProgress = 0;
+
+      // Refresh shortly after to pick up the real extraction status
+      setTimeout(refreshFiles, 1500);
     } catch (error: any) {
       uploadError = error.message || "Upload failed";
     } finally {
@@ -170,10 +180,10 @@
   }
 
   async function handleDelete() {
-    if (!fileToDelete || !apiKey) return;
+    if (!fileToDelete || !$apiKey) return;
 
     try {
-      await deleteFile(apiKey, fileToDelete.id);
+      await deleteFile($apiKey, fileToDelete.id);
       files = files.filter((f) => f.id !== fileToDelete!.id);
     } catch (error: any) {
       console.error("Delete failed:", error);
@@ -183,14 +193,83 @@
     }
   }
 
-  function confirmDelete(file: FileItem) {
+  function confirmDelete(file: FileItemV2) {
     fileToDelete = file;
     showDeleteConfirm = true;
   }
 
-  function downloadFile(file: FileItem) {
-    if (!apiKey) return;
-    window.open(getDownloadUrl(file.id, apiKey), "_blank");
+  function downloadFile(file: FileItemV2) {
+    if (!$apiKey) return;
+    window.open(getDownloadUrl(file.id, $apiKey), "_blank");
+  }
+
+  async function handleExtract(file: FileItemV2) {
+    extracting = { ...extracting, [file.id]: true };
+    try {
+      const result = await triggerExtraction($apiKey, file.id);
+      files = files.map((f) =>
+        f.id === file.id ? { ...f, extractionStatus: result.extractionStatus } : f,
+      );
+    } catch (error: any) {
+      console.error("Extraction failed:", error);
+    } finally {
+      extracting = { ...extracting, [file.id]: false };
+    }
+  }
+
+  async function handleEmbed(file: FileItemV2) {
+    embedding = { ...embedding, [file.id]: true };
+    try {
+      const result = await embedFileV2($apiKey, file.id);
+      embedResult = { ...embedResult, [file.id]: result.embeddingStatus };
+    } catch (error: any) {
+      embedResult = { ...embedResult, [file.id]: "failed" };
+      console.error("Embedding failed:", error);
+    } finally {
+      embedding = { ...embedding, [file.id]: false };
+    }
+  }
+
+  async function openCollectionModal(file: FileItemV2) {
+    fileForCollection = file;
+    showCollectionModal = true;
+    collectionAddError = null;
+    collectionAddedMessage = null;
+    loadingCollections = true;
+    try {
+      collections = await getCollections($apiKey);
+    } catch (error: any) {
+      collectionAddError = error.message || "Failed to load collections";
+    } finally {
+      loadingCollections = false;
+    }
+  }
+
+  async function handleAddToCollection(collectionId: string) {
+    if (!fileForCollection) return;
+    addingToCollection = true;
+    collectionAddError = null;
+    try {
+      await addFilesToCollection($apiKey, collectionId, [fileForCollection.id]);
+      collectionAddedMessage = "Added to collection";
+      setTimeout(() => {
+        showCollectionModal = false;
+      }, 700);
+    } catch (error: any) {
+      collectionAddError = error.message || "Failed to add file to collection";
+    } finally {
+      addingToCollection = false;
+    }
+  }
+
+  function extractionBadgeVariant(status: ExtractionStatus): "default" | "success" | "warning" | "danger" | "info" {
+    switch (status) {
+      case "completed": return "success";
+      case "failed": return "danger";
+      case "pending":
+      case "processing": return "warning";
+      default: return "default";
+    }
   }
 </script>
 
@@ -220,52 +299,9 @@
       </div>
     </Card>
   {:else}
-    <Card>
-      <div class="api-key-section">
-        <div class="api-key-header">
-          <span class="api-key-icon">🔐</span>
-          <span class="api-key-title">API Key</span>
-        </div>
+    <ApiKeyGate verify={verifyKey} />
 
-        {#if !apiKeyVerified}
-          <div class="api-key-input-section">
-            <p class="api-key-desc">
-              Enter your full API key to manage files
-            </p>
-            <div class="api-key-row">
-              <input
-                type="password"
-                class="api-key-input"
-                bind:value={apiKey}
-                placeholder="kyro_live_..."
-                onkeydown={(e) => e.key === "Enter" && verifyApiKey()}
-              />
-              <Button onclick={verifyApiKey} loading={verifyingApiKey}>
-                Verify
-              </Button>
-            </div>
-            {#if apiKeyError}
-              <div class="api-key-error">{apiKeyError}</div>
-            {/if}
-          </div>
-        {:else}
-          <div class="api-key-verified">
-            <div class="verified-info">
-              <span class="verified-icon">✓</span>
-              <span class="verified-text">Connected</span>
-              {#if apiKeyPrefix}
-                <span class="verified-prefix">key_{apiKeyPrefix}***</span>
-              {/if}
-            </div>
-            <Button variant="ghost" size="sm" onclick={changeApiKey}>
-              Change
-            </Button>
-          </div>
-        {/if}
-      </div>
-    </Card>
-
-    {#if apiKeyVerified}
+    {#if $apiKeyVerified}
       <Card>
         <div
           class="upload-zone"
@@ -305,7 +341,7 @@
         {/if}
       </Card>
 
-      {#if files.length === 0}
+      {#if files.length === 0 && !loadingFiles}
         <Card>
           <div class="empty-state">
             <span class="empty-icon">📁</span>
@@ -319,7 +355,17 @@
             <Card>
               <div class="file-card">
                 <div class="file-info">
-                  <div class="file-name">{file.name}</div>
+                  <div class="file-name-row">
+                    <span class="file-name">{file.name}</span>
+                    <Badge variant={extractionBadgeVariant(file.extractionStatus)}>
+                      {file.extractionStatus}
+                    </Badge>
+                    {#if embedResult[file.id]}
+                      <Badge variant={embedResult[file.id] === 'completed' ? 'success' : embedResult[file.id] === 'failed' ? 'danger' : 'info'}>
+                        embed: {embedResult[file.id]}
+                      </Badge>
+                    {/if}
+                  </div>
                   <div class="file-meta">
                     <span>{formatBytes(file.sizeBytes)}</span>
                     <span>•</span>
@@ -329,6 +375,33 @@
                   </div>
                 </div>
                 <div class="file-actions">
+                  {#if file.extractionStatus === 'failed' || file.extractionStatus === 'pending'}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      loading={extracting[file.id]}
+                      onclick={() => handleExtract(file)}
+                    >
+                      Extract
+                    </Button>
+                  {/if}
+                  {#if file.extractionStatus === 'completed'}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      loading={embedding[file.id]}
+                      onclick={() => handleEmbed(file)}
+                    >
+                      Embed
+                    </Button>
+                  {/if}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onclick={() => openCollectionModal(file)}
+                  >
+                    + Collection
+                  </Button>
                   <Button
                     variant="secondary"
                     size="sm"
@@ -376,6 +449,40 @@
   onconfirm={handleDelete}
   oncancel={() => (showDeleteConfirm = false)}
 />
+
+<Modal
+  bind:open={showCollectionModal}
+  title="add to collection"
+  onclose={() => (showCollectionModal = false)}
+>
+  {#if loadingCollections}
+    <p class="modal-loading">Loading collections…</p>
+  {:else if collections.length === 0}
+    <p class="modal-empty">
+      No collections yet.
+      <a href="/dashboard/collections">Create one first</a>.
+    </p>
+  {:else}
+    <div class="collection-pick-list">
+      {#each collections as collection}
+        <button
+          class="collection-pick-row"
+          disabled={addingToCollection}
+          onclick={() => handleAddToCollection(collection.id)}
+        >
+          <span class="collection-pick-name">{collection.name}</span>
+          <span class="collection-pick-count">{collection.fileCount} files</span>
+        </button>
+      {/each}
+    </div>
+  {/if}
+  {#if collectionAddError}
+    <div class="modal-error">// {collectionAddError}</div>
+  {/if}
+  {#if collectionAddedMessage}
+    <div class="modal-success">✓ {collectionAddedMessage}</div>
+  {/if}
+</Modal>
 
 <style>
   .files-page {
@@ -427,100 +534,6 @@
     color: var(--color-text-muted);
     font-size: var(--font-size-sm);
     margin: 0 0 var(--space-4);
-  }
-
-  .api-key-section {
-    padding: var(--space-2) 0;
-  }
-
-  .api-key-header {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    margin-bottom: var(--space-3);
-  }
-
-  .api-key-icon {
-    color: var(--color-text-muted);
-  }
-
-  .api-key-title {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-xs);
-    font-weight: 600;
-    color: var(--color-text);
-    text-transform: uppercase;
-  }
-
-  .api-key-input-section {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-  }
-
-  .api-key-desc {
-    color: var(--color-text-muted);
-    font-size: var(--font-size-sm);
-    margin: 0;
-  }
-
-  .api-key-row {
-    display: flex;
-    gap: var(--space-3);
-  }
-
-  .api-key-input {
-    flex: 1;
-    max-width: 400px;
-    padding: var(--space-2) var(--space-3);
-    background: var(--color-bg);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    color: var(--color-text);
-    font-size: var(--font-size-base);
-    font-family: var(--font-mono);
-  }
-
-  .api-key-input:focus {
-    outline: none;
-    border-color: var(--color-accent);
-  }
-
-  .api-key-error {
-    color: var(--color-danger);
-    font-size: var(--font-size-sm);
-  }
-
-  .api-key-verified {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: var(--space-3);
-    background: rgba(34, 197, 94, 0.1);
-    border: 1px solid var(--color-success);
-    border-radius: var(--radius-md);
-  }
-
-  .verified-info {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-
-  .verified-icon {
-    color: var(--color-success);
-    font-size: var(--font-size-lg);
-  }
-
-  .verified-text {
-    font-weight: 500;
-    color: var(--color-success);
-  }
-
-  .verified-prefix {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
   }
 
   .upload-zone {
@@ -586,6 +599,7 @@
     justify-content: space-between;
     align-items: center;
     gap: var(--space-4);
+    flex-wrap: wrap;
   }
 
   .file-info {
@@ -593,10 +607,17 @@
     min-width: 0;
   }
 
+  .file-name-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: var(--space-1);
+    flex-wrap: wrap;
+  }
+
   .file-name {
     font-weight: 600;
     color: var(--color-text);
-    margin-bottom: var(--space-1);
     word-break: break-all;
   }
 
@@ -611,6 +632,7 @@
     display: flex;
     gap: var(--space-2);
     flex-shrink: 0;
+    flex-wrap: wrap;
   }
 
   .load-more {
@@ -619,16 +641,73 @@
     padding: var(--space-4) 0;
   }
 
+  .modal-loading,
+  .modal-empty {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+  }
+
+  .modal-empty a {
+    color: var(--color-text-dim);
+    text-decoration: underline;
+  }
+
+  .collection-pick-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    max-height: 280px;
+    overflow-y: auto;
+  }
+
+  .collection-pick-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: var(--space-3);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border-2);
+    border-radius: var(--radius-md);
+    color: var(--color-text);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    transition: all 0.1s ease;
+    text-align: left;
+  }
+
+  .collection-pick-row:hover:not(:disabled) {
+    border-color: var(--color-border-hover);
+    background: var(--color-bg-2);
+  }
+
+  .collection-pick-row:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .collection-pick-count {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+  }
+
+  .modal-error {
+    color: var(--color-danger);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-xs);
+    margin-top: var(--space-3);
+  }
+
+  .modal-success {
+    color: var(--color-success);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-xs);
+    margin-top: var(--space-3);
+  }
+
   @media (max-width: 640px) {
     .files-page {
-      max-width: 100%;
-    }
-
-    .api-key-row {
-      flex-direction: column;
-    }
-
-    .api-key-input {
       max-width: 100%;
     }
 

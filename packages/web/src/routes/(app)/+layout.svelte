@@ -2,7 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import { page } from '$app/stores';
 	import { user } from '$lib/stores/auth';
-	import { Dashboard, Key, File, Usage, Settings } from '$lib/components/icons';
+	import { Dashboard, Key, File, Usage, Settings, Collection, Chat } from '$lib/components/icons';
 	import Logo from '$lib/components/Logo.svelte';
 
 	interface Props {
@@ -34,8 +34,13 @@
 			items: [
 				{ href: '/dashboard', label: 'dashboard', icon: Dashboard },
 				{ href: '/dashboard/keys', label: 'api keys', icon: Key },
-				{ href: '/dashboard/files', label: 'files', icon: File }
+				{ href: '/dashboard/files', label: 'files', icon: File },
+				{ href: '/dashboard/collections', label: 'collections', icon: Collection }
 			]
+		},
+		{
+			label: '// query',
+			items: [{ href: '/dashboard/ask', label: 'ask', icon: Chat }]
 		},
 		{
 			label: '// analytics',
@@ -528,6 +533,7 @@
 			border-top: 1px solid var(--color-border);
 			z-index: 100;
 			padding-bottom: env(safe-area-inset-bottom);
+			overflow-x: auto;
 		}
 
 		.tab-item {
@@ -543,6 +549,7 @@
 			font-size: 9px;
 			letter-spacing: 0.3px;
 			transition: color 0.1s ease;
+			min-width: 52px;
 		}
 
 		.tab-item.active {

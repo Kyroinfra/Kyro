@@ -1,11 +1,11 @@
 import type { RequestHandler } from './$types';
 
-export const GET: RequestHandler = async ({ url, cookies }) => {
+export const GET: RequestHandler = async ({ url, params, cookies }) => {
 	const key = url.searchParams.get('key');
-	const id = url.searchParams.get('id');
+	const id = params.id;
 
-	if (!key || !id) {
-		return new Response('Missing key or id', { status: 400 });
+	if (!key) {
+		return new Response('Missing key', { status: 400 });
 	}
 
 	const token = cookies.get('kyro_token');

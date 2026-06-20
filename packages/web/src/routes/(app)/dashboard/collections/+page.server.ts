@@ -13,18 +13,12 @@ export const load: PageServerLoad = async ({ locals }) => {
 		const activeKeys = keys.filter(k => !k.revoked_at);
 
 		if (activeKeys.length === 0) {
-			return { hasApiKey: false, apiKeyPrefix: null };
+			return { hasApiKey: false };
 		}
 
-		// We only have the key prefix server-side, not the full key.
-		// Return the prefix so the client knows keys exist; the full key
-		// must be entered by the user in the browser.
-		return {
-			hasApiKey: true,
-			apiKeyPrefix: activeKeys[0].key_prefix
-		};
+		return { hasApiKey: true };
 	} catch (error) {
-		console.error('Failed to load files page:', error);
-		return { hasApiKey: false, apiKeyPrefix: null };
+		console.error('Failed to load collections page:', error);
+		return { hasApiKey: false };
 	}
 };
