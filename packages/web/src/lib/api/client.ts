@@ -1,4 +1,5 @@
 import { browser } from "$app/environment";
+import { env } from "$env/dynamic/public";
 
 export class ApiError extends Error {
   constructor(
@@ -19,9 +20,9 @@ type RequestOptions = {
 
 function getBaseUrl(): string {
   if (browser) {
-    return import.meta.env.PUBLIC_API_URL || "";
+    console.log("[DEBUG-V3]", env.PUBLIC_API_URL);
+    return env.PUBLIC_API_URL || "";
   }
-  // Server-side: use internal Docker network URL
   return process.env.INTERNAL_API_URL || "http://api:3000";
 }
 
@@ -54,6 +55,17 @@ export async function request<T>(
   if (!res.ok) {
     const error = await res.json().catch(() => ({ error: res.statusText }));
     throw new ApiError(res.status, error.error ?? "Request failed");
+  }
+
+  // 204 No Content (and any other empty response) — return void
+  const contentLength = res.headers.get("content-length");
+  const contentType   = res.headers.get("content-type") ?? "";
+  if (
+    res.status === 204 ||
+    contentLength === "0" ||
+    !contentType.includes("application/json")
+  ) {
+    return undefined as T;
   }
 
   return res.json();

@@ -86,6 +86,14 @@
         <span class="action-marker">></span>
         <span class="action-label">Upload File</span>
       </a>
+      <a href="/dashboard/collections" class="action-card">
+        <span class="action-marker">></span>
+        <span class="action-label">Create Collection</span>
+      </a>
+      <a href="/dashboard/ask" class="action-card">
+        <span class="action-marker">></span>
+        <span class="action-label">Ask Your Files</span>
+      </a>
       <a href="/dashboard/usage" class="action-card">
         <span class="action-marker">></span>
         <span class="action-label">View Analytics</span>
