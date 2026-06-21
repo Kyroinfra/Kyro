@@ -1,4 +1,5 @@
 import { browser } from "$app/environment";
+import { env } from "$env/dynamic/public";
 
 export class ApiError extends Error {
   constructor(
@@ -19,7 +20,8 @@ type RequestOptions = {
 
 function getBaseUrl(): string {
   if (browser) {
-    return import.meta.env.PUBLIC_API_URL || "";
+    console.log("[DEBUG-V3]", env.PUBLIC_API_URL);
+    return env.PUBLIC_API_URL || "";
   }
   // Server-side: use internal Docker network URL
   return process.env.INTERNAL_API_URL || "http://api:3000";
