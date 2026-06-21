@@ -1,23 +1,47 @@
 <script lang="ts">
-	import { apiKey, apiKeyVerified, apiKeyPrefix, clearApiKey } from '$lib/stores/apiKey';
+	import { onMount } from 'svelte';
+	import { apiKey, apiKeyVerified, apiKeyPrefix, clearApiKey, persistApiKey, getKeyExpiry } from '$lib/stores/apiKey';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Card from '$lib/components/ui/Card.svelte';
 
 	interface Props {
 		// Called to verify the key — should throw on failure.
-		// Typically a lightweight read-scope call (e.g. listing files).
 		verify: (key: string) => Promise<void>;
 	}
 
 	let { verify }: Props = $props();
 
-	let localKey = $state($apiKey);
-	let verifying = $state(false);
-	let error = $state<string | null>(null);
+	let localKey   = $state($apiKey);
+	let verifying  = $state(false);
+	let error      = $state<string | null>(null);
+	let expiryText = $state<string | null>(null);
 
-	async function handleVerify() {
-		if (!localKey.trim()) {
-			error = 'Please enter an API key';
+	// On mount: always call verify when a key exists.
+	// This serves two purposes:
+	//   1. If !$apiKeyVerified (fresh store): validates the key against the API.
+	//   2. If $apiKeyVerified (persisted from localStorage): still calls the
+	//      page's verifyKey callback which is responsible for loading page data
+	//      (files, collections, etc). Without this, pages show empty state on
+	//      reload even though the key and data are valid.
+	onMount(async () => {
+		if ($apiKey) {
+			await handleVerify(true);
+		}
+	});
+
+	function updateExpiryText() {
+		const exp = getKeyExpiry();
+		if (!exp) return;
+		const diffMs = exp.getTime() - Date.now();
+		const diffH  = Math.floor(diffMs / (1000 * 60 * 60));
+		const diffM  = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+		expiryText = diffH > 0 ? `expires in ${diffH}h ${diffM}m` : `expires in ${diffM}m`;
+	}
+
+	async function handleVerify(silent = false) {
+		const key = localKey.trim() || $apiKey.trim();
+		if (!key) {
+			if (!silent) error = 'Please enter an API key';
 			return;
 		}
 
@@ -25,13 +49,20 @@
 		error = null;
 
 		try {
-			await verify(localKey);
-			apiKey.set(localKey);
+			await verify(key);
+			const prefix = key.slice(0, 16);
+			apiKey.set(key);
 			apiKeyVerified.set(true);
-			apiKeyPrefix.set(localKey.slice(0, 16));
+			apiKeyPrefix.set(prefix);
+			persistApiKey(key, prefix); // ← write to localStorage only after successful verification
+			localKey = key;
+			updateExpiryText();
 		} catch (e: any) {
-			error = e.message || 'Invalid API key. Make sure it has read scope.';
-			apiKeyVerified.set(false);
+			error = silent
+				? null   // don't flash an error on silent auto-verify (e.g. expired key)
+				: (e.message || 'Invalid API key. Make sure it has read scope.');
+			clearApiKey();
+			localKey = '';
 		} finally {
 			verifying = false;
 		}
@@ -40,7 +71,8 @@
 	function handleChange() {
 		clearApiKey();
 		localKey = '';
-		error = null;
+		error    = null;
+		expiryText = null;
 	}
 </script>
 
@@ -61,7 +93,7 @@
 						placeholder="kyro_live_..."
 						onkeydown={(e) => e.key === 'Enter' && handleVerify()}
 					/>
-					<Button onclick={handleVerify} loading={verifying}>Verify</Button>
+					<Button onclick={() => handleVerify()} loading={verifying}>Verify</Button>
 				</div>
 				{#if error}
 					<div class="api-key-error">{error}</div>
@@ -78,6 +110,9 @@
 					<span class="verified-text">Connected</span>
 					{#if $apiKeyPrefix}
 						<span class="verified-prefix">key_{$apiKeyPrefix}***</span>
+					{/if}
+					{#if expiryText}
+						<span class="verified-expiry">{expiryText}</span>
 					{/if}
 				</div>
 				<Button variant="ghost" size="sm" onclick={handleChange}>Change</Button>
@@ -179,6 +214,14 @@
 		font-family: var(--font-mono);
 		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
+	}
+
+	.verified-expiry {
+		font-family: var(--font-mono);
+		font-size: var(--font-size-2xs);
+		color: var(--color-text-ghost);
+		border-left: 1px solid var(--color-border-2);
+		padding-left: var(--space-2);
 	}
 
 	@media (max-width: 640px) {

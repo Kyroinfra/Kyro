@@ -1,4 +1,13 @@
 import { request } from './client';
+import { browser } from '$app/environment';
+import { env } from '$env/dynamic/public';
+
+function getBaseUrl(): string {
+	if (browser) {
+		return env.PUBLIC_API_URL || '';
+	}
+	return process.env.INTERNAL_API_URL || 'http://api:3000';
+}
 
 export interface FileItem {
 	id: string;
@@ -63,6 +72,7 @@ export async function deleteFile(apiKey: string, id: string): Promise<{ message:
 	});
 }
 
+
 export async function uploadFile(
 	apiKey: string,
 	file: File,
@@ -99,7 +109,7 @@ export async function uploadFile(
 
 		xhr.onerror = () => reject(new Error('Network error'));
 
-		xhr.open('POST', '/api/v1/files');
+		xhr.open('POST', `${getBaseUrl()}/api/v2/files`);
 		xhr.setRequestHeader('X-API-Key', apiKey);
 
 		const fd = new FormData();

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { user } from "$lib/stores/auth";
   import { apiKey, apiKeyVerified } from "$lib/stores/apiKey";
   import Button from "$lib/components/ui/Button.svelte";
@@ -51,7 +52,7 @@
 
   // Embedding state, keyed by file id
   let embedding = $state<Record<string, boolean>>({});
-  let embedResult = $state<Record<string, string>>({}); // fileId -> embeddingStatus
+  let embedResult = $state<Record<string, string>>({});
 
   // Re-extract state
   let extracting = $state<Record<string, boolean>>({});
@@ -69,12 +70,24 @@
     $user?.role === "owner" || $user?.role === "admin",
   );
 
+  // ── Data loading ─────────────────────────────────────────────────────────────
+  // `verifyKey` is called by ApiKeyGate after verifying (including on mount
+  // when a persisted key exists). This is the primary data-loading path.
   async function verifyKey(key: string) {
     const result = await getFilesV2(key, 100);
     files = result.files;
     nextCursor = result.nextCursor;
     hasMore = result.hasMore;
   }
+
+  // Safety net: if the store is already verified when this page mounts
+  // (e.g. navigating between dashboard pages client-side), load files directly
+  // without waiting for ApiKeyGate's onMount to fire.
+  onMount(async () => {
+    if ($apiKeyVerified && $apiKey && files.length === 0) {
+      await refreshFiles();
+    }
+  });
 
   async function loadMore() {
     if (!nextCursor || loadingMore) return;
@@ -92,7 +105,7 @@
   }
 
   async function refreshFiles() {
-    if (!$apiKeyVerified) return;
+    if (!$apiKeyVerified || !$apiKey) return;
     loadingFiles = true;
     try {
       const result = await getFilesV2($apiKey, 100);
@@ -139,8 +152,6 @@
     uploadError = null;
 
     try {
-      // Upload endpoint is identical between v1/v2 routers (multer + storage);
-      // v2's response additionally includes extractionStatus.
       const uploaded = await uploadFile($apiKey, selectedFile, (pct) => {
         uploadProgress = pct;
       });
@@ -160,7 +171,6 @@
       selectedFile = null;
       uploadProgress = 0;
 
-      // Refresh shortly after to pick up the real extraction status
       setTimeout(refreshFiles, 1500);
     } catch (error: any) {
       uploadError = error.message || "Upload failed";
@@ -250,11 +260,15 @@
     addingToCollection = true;
     collectionAddError = null;
     try {
-      await addFilesToCollection($apiKey, collectionId, [fileForCollection.id]);
-      collectionAddedMessage = "Added to collection";
-      setTimeout(() => {
-        showCollectionModal = false;
-      }, 700);
+      const result = await addFilesToCollection($apiKey, collectionId, [fileForCollection.id]);
+      if (result.added === 0) {
+        collectionAddedMessage = "Already in this collection";
+      } else {
+        collectionAddedMessage = "Added to collection";
+        setTimeout(() => {
+          showCollectionModal = false;
+        }, 700);
+      }
     } catch (error: any) {
       collectionAddError = error.message || "Failed to add file to collection";
     } finally {
@@ -341,7 +355,13 @@
         {/if}
       </Card>
 
-      {#if files.length === 0 && !loadingFiles}
+      {#if loadingFiles}
+        <Card>
+          <div class="loading-state">
+            <span class="loading-text">Loading files…</span>
+          </div>
+        </Card>
+      {:else if files.length === 0}
         <Card>
           <div class="empty-state">
             <span class="empty-icon">📁</span>
@@ -534,6 +554,17 @@
     color: var(--color-text-muted);
     font-size: var(--font-size-sm);
     margin: 0 0 var(--space-4);
+  }
+
+  .loading-state {
+    text-align: center;
+    padding: var(--space-8) var(--space-4);
+  }
+
+  .loading-text {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
   }
 
   .upload-zone {
