@@ -54,7 +54,17 @@ ollama pull llama3.2
 **3. Start**
 
 ```bash
-docker compose up -d
+./scripts/prod.sh
+```
+
+Or manually:
+
+```bash
+docker compose \
+  -f compose.yml \
+  -f compose.prod.yml \
+  --env-file .env \
+  up -d
 ```
 
 The API will be available at `http://localhost/api/v2`. Migrations run automatically on first start.
