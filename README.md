@@ -5,7 +5,7 @@ Self-hosted document storage and RAG API. Upload files, extract text, embed chun
 
 Built for teams that can't send their data to third-party AI providers.
 
-[Website](https://kyro-henna.vercel.app/) · [TypeScript SDK](https://github.com/kyro/kyro-sdk-typescript) · [SDK Docs](https://kyro.io/docs/sdk)
+[Website](https://kyro-henna.vercel.app/) · [TypeScript SDK](https://github.com/Kyroinfra/kyro-sdk-typescript/settings) · [SDK Docs](https://kyro-henna.vercel.app/docs#sdk)
 
 ![Kyro Dashboard](as/dashboard.png)
 
