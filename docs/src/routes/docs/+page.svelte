@@ -606,6 +606,13 @@
 
   const staticSections = [
     { id: "overview", label: "Overview" },
+    { id: "access-methods", label: "How to use Kyro" }, // NEW
+    { id: "dashboard", label: "Dashboard" }, // NEW
+    { id: "sdk", label: "TypeScript SDK" }, // NEW
+    { id: "sdk-files", label: "↳ Files" }, // NEW
+    { id: "sdk-collections", label: "↳ Collections" }, // NEW
+    { id: "sdk-ask", label: "↳ Ask & Search" }, // NEW
+    { id: "sdk-errors", label: "↳ Error Handling" }, // NEW
     { id: "self-hosting", label: "Self-hosting" },
     { id: "auth", label: "Authentication" },
     { id: "rag-pipeline", label: "RAG Pipeline" },
@@ -1049,6 +1056,614 @@ const data = await response.json();`;
             >
             Download OpenAPI YAML
           </a>
+        </div>
+      </section>
+
+      <!-- HOW TO USE KYRO -->
+      <section id="access-methods" class="doc-section">
+        <h2 class="section-title">How to use Kyro</h2>
+        <p class="section-desc">
+          Kyro gives you three ways to interact with your documents — pick
+          whichever fits your workflow. All three talk to the same backend
+          running on your server.
+        </p>
+
+        <div class="access-grid">
+          <div class="access-card">
+            <div class="access-card-top">
+              <span class="access-num">01</span>
+              <span class="access-badge">no code</span>
+            </div>
+            <h3 class="access-title">Dashboard</h3>
+            <p class="access-desc">
+              A web UI built into Kyro. Upload files, manage collections, create
+              API keys, view usage analytics, and ask questions — all without
+              writing any code. Best for non-technical teammates or quick
+              one-off tasks.
+            </p>
+            <a href="#dashboard" class="access-link">Dashboard guide →</a>
+          </div>
+
+          <div class="access-card access-card-featured">
+            <div class="access-card-top">
+              <span class="access-num">02</span>
+              <span class="access-badge access-badge-green">recommended</span>
+            </div>
+            <h3 class="access-title">TypeScript SDK</h3>
+            <p class="access-desc">
+              The official <code>kyro-sdk</code> package. Typed methods for every
+              API operation — upload, embed, search, ask. The easiest way to integrate
+              Kyro into a Node.js or browser application.
+            </p>
+            <a href="#sdk" class="access-link">SDK reference →</a>
+          </div>
+
+          <div class="access-card">
+            <div class="access-card-top">
+              <span class="access-num">03</span>
+              <span class="access-badge">advanced</span>
+            </div>
+            <h3 class="access-title">HTTP API</h3>
+            <p class="access-desc">
+              Raw REST endpoints — useful if you're building in a language other
+              than TypeScript, scripting with curl, or need direct control over
+              request shape and headers.
+            </p>
+            <a href="#http-reference" class="access-link">HTTP reference →</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- DASHBOARD -->
+      <section id="dashboard" class="doc-section">
+        <h2 class="section-title">Dashboard</h2>
+        <p class="section-desc">
+          Kyro ships with a built-in web dashboard available at the root of your
+          instance (e.g. <code>http://localhost:3000</code>). It's the fastest
+          way to get started — no API calls required.
+        </p>
+
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">01</div>
+            <div class="step-body">
+              <h4>Register your organisation</h4>
+              <p class="section-desc" style="margin-bottom: 0">
+                On first run, navigate to your instance URL and register. This
+                creates your organisation and owner account. Subsequent users
+                are invited from the <strong>Settings</strong> page — the registration
+                page locks after the first org is created.
+              </p>
+            </div>
+          </div>
+
+          <div class="step">
+            <div class="step-num">02</div>
+            <div class="step-body">
+              <h4>Create an API key</h4>
+              <p class="section-desc" style="margin-bottom: 10px">
+                Go to <strong>API Keys</strong> in the sidebar and create a key with
+                the scopes you need. The full key is shown once — copy it immediately.
+                You'll need it to use the SDK or HTTP API.
+              </p>
+              <div class="code-block">
+                <div class="code-toolbar">
+                  <span class="code-lang">scopes</span>
+                </div>
+                <pre><code
+                    >read   — list files, search, ask questions
+write  — upload, delete, embed files
+admin  — full access including key management</code
+                  ></pre>
+              </div>
+            </div>
+          </div>
+
+          <div class="step">
+            <div class="step-num">03</div>
+            <div class="step-body">
+              <h4>Upload and manage files</h4>
+              <p class="section-desc" style="margin-bottom: 0">
+                The <strong>Files</strong> page lets you drag-and-drop uploads, track
+                extraction and embedding status per file, download originals, and
+                add files to collections. Text extraction and embedding are triggered
+                automatically — you can also re-trigger them manually from the file
+                row.
+              </p>
+            </div>
+          </div>
+
+          <div class="step">
+            <div class="step-num">04</div>
+            <div class="step-body">
+              <h4>Organise with Collections</h4>
+              <p class="section-desc" style="margin-bottom: 0">
+                Collections group files so you can scope search and <code
+                  >/ask</code
+                > to a specific set of documents — a matter, a product, a project.
+                Create a collection, add files, and use its ID in the SDK or API to
+                limit context.
+              </p>
+            </div>
+          </div>
+
+          <div class="step">
+            <div class="step-num">05</div>
+            <div class="step-body">
+              <h4>Ask questions</h4>
+              <p class="section-desc" style="margin-bottom: 0">
+                The <strong>Ask</strong> page is a chat interface wired to the
+                <code>/ask</code> endpoint. Select a scope (whole org or a specific
+                collection), type a question, and get a streamed answer with source
+                citations — no code required. Useful for testing retrieval quality
+                before building your own UI.
+              </p>
+            </div>
+          </div>
+
+          <div class="step">
+            <div class="step-num">06</div>
+            <div class="step-body">
+              <h4>Monitor usage</h4>
+              <p class="section-desc" style="margin-bottom: 0">
+                The <strong>Usage</strong> page shows total requests, data in/out,
+                storage consumed, and a daily request chart. Switch between 7, 30,
+                and 90-day windows to track trends.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-info" style="margin-top: 28px">
+          <span class="callout-icon">ℹ</span>
+          <div>
+            <strong>Dashboard vs API key scope</strong> — The dashboard authenticates
+            with a session cookie (JWT). The API key is a separate credential used
+            by the SDK and HTTP API. You manage API keys from the dashboard but use
+            them outside it.
+          </div>
+        </div>
+      </section>
+
+      <!-- SDK OVERVIEW -->
+      <section id="sdk" class="doc-section">
+        <div class="section-eyebrow">typescript sdk</div>
+        <h2 class="section-title">TypeScript SDK</h2>
+        <p class="section-desc">
+          <code>kyro-sdk</code> is the official client library for Node.js and the
+          browser. It wraps every HTTP endpoint with typed methods, handles streaming
+          SSE responses, and throws structured errors you can catch and branch on.
+        </p>
+
+        <div class="info-grid" style="margin-bottom: 24px">
+          <div class="info-card">
+            <span class="info-label">Package</span>
+            <code class="info-value">kyro-sdk</code>
+          </div>
+          <div class="info-card">
+            <span class="info-label">Install</span>
+            <code class="info-value">npm install kyro-sdk</code>
+          </div>
+          <div class="info-card">
+            <span class="info-label">Environments</span>
+            <code class="info-value">Node.js · Browser · Edge</code>
+          </div>
+          <div class="info-card">
+            <span class="info-label">Default API version</span>
+            <code class="info-value">v2</code>
+          </div>
+        </div>
+
+        <div class="code-block" style="margin-bottom: 20px">
+          <div class="code-toolbar">
+            <span class="code-lang">shell</span>
+            <button
+              class="copy-btn"
+              onclick={() => copy("npm install kyro-sdk", "sdk-install")}
+            >
+              {copiedId === "sdk-install" ? "✓ copied" : "copy"}
+            </button>
+          </div>
+          <pre><code>npm install kyro-sdk</code></pre>
+        </div>
+
+        <div class="code-block">
+          <div class="code-toolbar">
+            <span class="code-lang">typescript</span>
+            <button
+              class="copy-btn"
+              onclick={() =>
+                copy(
+                  `import { KyroClient } from "kyro-sdk";
+
+const kyro = new KyroClient({
+  baseURL: "http://localhost:3000/api/v2",
+  apiKey:  "kyro_live_...",
+});
+
+// Upload a file
+const file = await kyro.files.upload(blob, "report.pdf");
+
+// Ask a question (non-streaming)
+const { answer, sources } = await kyro.files.ask({
+  question: "What are the key findings?",
+  stream:   false,
+});`,
+                  "sdk-quickstart",
+                )}
+            >
+              {copiedId === "sdk-quickstart" ? "✓ copied" : "copy"}
+            </button>
+          </div>
+          <pre><code
+              ><span class="ck">import</span> {"{ KyroClient }"} <span
+                class="ck">from</span
+              > <span class="cs">"kyro-sdk"</span>;
+
+<span class="ck">const</span> kyro = <span class="ck">new</span> <span
+                class="cs">KyroClient</span
+              >({"{"} 
+  baseURL: <span class="cs">"http://localhost:3000/api/v2"</span>,
+  apiKey:  <span class="cs">"kyro_live_..."</span>,
+{"}"});
+
+<span class="c-comment">// Upload a file</span>
+<span class="ck">const</span> file = <span class="ck">await</span
+              > kyro.files.<span class="cs">upload</span>(blob, <span class="cs"
+                >"report.pdf"</span
+              >);
+
+<span class="c-comment">// Ask a question (non-streaming)</span>
+<span class="ck">const</span> {"{ answer, sources }"} = <span class="ck"
+                >await</span
+              > kyro.files.<span class="cs">ask</span>({"{"} 
+  question: <span class="cs">"What are the key findings?"</span>,
+  stream:   <span class="ck">false</span>,
+{"}"});</code
+            ></pre>
+        </div>
+
+        <h3 class="sdk-subheading" style="margin-top: 32px">
+          Typical workflow
+        </h3>
+        <p class="section-desc">End-to-end: upload → tag → embed → ask.</p>
+
+        <div class="code-block">
+          <div class="code-toolbar">
+            <span class="code-lang">typescript</span>
+            <button
+              class="copy-btn"
+              onclick={() =>
+                copy(
+                  `// 1. Upload
+const file = await kyro.files.upload(pdfBlob, "agreement.pdf");
+
+// 2. Tag with metadata
+await kyro.files.setMetadata(file.id, {
+  document_type: "contract",
+  matter_number: "M-2024-001",
+});
+
+// 3. Add to a collection
+await kyro.collections.addFiles(collectionId, { fileIds: [file.id] });
+
+// 4. Poll until embedded
+let status = (await kyro.files.getText(file.id)).extractionStatus;
+while (status !== "completed") {
+  await new Promise(r => setTimeout(r, 2000));
+  status = (await kyro.files.getText(file.id)).extractionStatus;
+}
+await kyro.files.embed(file.id);
+
+// 5. Ask questions
+const { answer } = await kyro.files.ask({
+  question:     "What are the termination conditions?",
+  collectionId: collectionId,
+  stream:       false,
+});`,
+                  "sdk-workflow",
+                )}
+            >
+              {copiedId === "sdk-workflow" ? "✓ copied" : "copy"}
+            </button>
+          </div>
+          <pre><code
+              ><span class="c-comment">// 1. Upload</span>
+<span class="ck">const</span> file = <span class="ck">await</span
+              > kyro.files.<span class="cs">upload</span>(pdfBlob, <span
+                class="cs">"agreement.pdf"</span
+              >);
+
+<span class="c-comment">// 2. Tag with metadata</span>
+<span class="ck">await</span> kyro.files.<span class="cs">setMetadata</span
+              >(file.id, {"{"} 
+  document_type: <span class="cs">"contract"</span>,
+  matter_number: <span class="cs">"M-2024-001"</span>,
+{"}"});
+
+<span class="c-comment">// 3. Add to a collection</span>
+<span class="ck">await</span> kyro.collections.<span class="cs">addFiles</span
+              >(collectionId, {"{"} fileIds: [file.id] {"}"});
+
+<span class="c-comment">// 4. Poll until embedded</span>
+<span class="ck">let</span> status = (<span class="ck">await</span
+              > kyro.files.<span class="cs">getText</span
+              >(file.id)).extractionStatus;
+<span class="ck">while</span> (status !== <span class="cs">"completed"</span
+              >) {"{"} 
+  <span class="ck">await new</span> Promise(r => <span class="cs"
+                >setTimeout</span
+              >(r, <span class="cs">2000</span>));
+  status = (<span class="ck">await</span> kyro.files.<span class="cs"
+                >getText</span
+              >(file.id)).extractionStatus;
+{"}"}
+<span class="ck">await</span> kyro.files.<span class="cs">embed</span>(file.id);
+
+<span class="c-comment">// 5. Ask questions</span>
+<span class="ck">const</span> {"{ answer }"} = <span class="ck">await</span
+              > kyro.files.<span class="cs">ask</span>({"{"} 
+  question:     <span class="cs">"What are the termination conditions?"</span>,
+  collectionId: collectionId,
+  stream:       <span class="ck">false</span>,
+{"}"});</code
+            ></pre>
+        </div>
+      </section>
+
+      <!-- SDK FILES -->
+      <section id="sdk-files" class="doc-section">
+        <h2 class="section-title">SDK · Files</h2>
+        <p class="section-desc">
+          All file operations live on <code>kyro.files</code>.
+        </p>
+
+        <div class="sdk-method-list">
+          {#each [{ name: "kyro.files.upload(blob, filename)", desc: "Upload a file. Returns the file record including its ID and initial extractionStatus. Supported types: PDF, DOCX, TXT — others are stored but not extracted.", example: `const file = await kyro.files.upload(blob, "contract.pdf");\n// file.id, file.extractionStatus` }, { name: "kyro.files.list(limit?, cursor?)", desc: "Paginated file list. Pass pagination.nextCursor as the cursor argument to fetch the next page.", example: `const { data, pagination } = await kyro.files.list(50);\nif (pagination.hasMore) {\n  const next = await kyro.files.list(50, pagination.nextCursor);\n}` }, { name: "kyro.files.download(fileId)", desc: "Download the original file as a Blob.", example: `const blob = await kyro.files.download(fileId);` }, { name: "kyro.files.delete(fileId)", desc: "Soft-delete a file and remove it from disk.", example: `await kyro.files.delete(fileId);` }, { name: "kyro.files.getText(fileId)", desc: "Get extraction status and extracted text. Poll this after upload to know when the file is ready to embed.", example: `const { extractionStatus, extractedText } = await kyro.files.getText(fileId);\n// extractionStatus: "pending" | "processing" | "completed" | "failed" | "skipped"` }, { name: "kyro.files.triggerExtraction(fileId)", desc: "Manually trigger text extraction. Extraction runs automatically on upload when Redis is available — use this to re-trigger failed or skipped files.", example: `await kyro.files.triggerExtraction(fileId);` }, { name: "kyro.files.embed(fileId)", desc: "Chunk and embed a file via your local Ollama model. Requires extractionStatus to be 'completed' first.", example: `const { chunksCreated } = await kyro.files.embed(fileId);` }, { name: "kyro.files.setMetadata(fileId, meta)", desc: "Upsert arbitrary key-value metadata on a file. Non-destructive — keys not in the payload are left untouched.", example: `await kyro.files.setMetadata(fileId, {\n  matter_number: "M-2024-001",\n  document_type: "contract",\n});` }, { name: "kyro.files.getMetadata(fileId)", desc: "Return all metadata keys and values for a file.", example: `const meta = await kyro.files.getMetadata(fileId);` }, { name: "kyro.files.deleteMetadataKey(fileId, key)", desc: "Remove a single metadata key.", example: `await kyro.files.deleteMetadataKey(fileId, "counterparty");` }, { name: "kyro.files.search(query, limit?)", desc: "Full-text BM25 keyword search. Returns file-level results with highlighted snippets.", example: `const { data } = await kyro.files.search("indemnification clause");\n// data[i].headline — snippet with <mark> highlights` }, { name: "kyro.files.semanticSearch({ query, ... })", desc: "Hybrid BM25 + vector search with RRF. Scope to a collection, specific files, or the whole org.", example: `const { data } = await kyro.files.semanticSearch({\n  query:        "force majeure clause",\n  collectionId: collectionId,\n  limit:        10,\n});\n// data[i]: { fileId, fileName, chunkIndex, content, rrfScore }` }] as method}
+            <div class="sdk-entry">
+              <div class="sdk-entry-header">
+                <code class="sdk-sig">{method.name}</code>
+              </div>
+              <p class="sdk-entry-desc">{method.desc}</p>
+              <div class="code-block">
+                <div class="code-toolbar">
+                  <span class="code-lang">typescript</span>
+                  <button
+                    class="copy-btn"
+                    onclick={() =>
+                      copy(method.example, `sdk-file-${method.name}`)}
+                  >
+                    {copiedId === `sdk-file-${method.name}` ? "✓" : "copy"}
+                  </button>
+                </div>
+                <pre><code>{method.example}</code></pre>
+              </div>
+            </div>
+          {/each}
+        </div>
+      </section>
+
+      <!-- SDK COLLECTIONS -->
+      <section id="sdk-collections" class="doc-section">
+        <h2 class="section-title">SDK · Collections</h2>
+        <p class="section-desc">
+          All collection operations live on <code>kyro.collections</code>. A
+          collection is a named group of files — scope search and
+          <code>/ask</code> to it by passing its ID.
+        </p>
+
+        <div class="sdk-method-list">
+          {#each [{ name: "kyro.collections.create({ name, description? })", desc: "Create a new collection. Name must be unique within your org.", example: `const col = await kyro.collections.create({\n  name:        "Q4 Contracts",\n  description: "All contracts signed in Q4 2024",\n});` }, { name: "kyro.collections.list()", desc: "List all collections. Each item includes fileCount, embeddedCount, pendingCount, and failedCount.", example: `const collections = await kyro.collections.list();` }, { name: "kyro.collections.get(collectionId)", desc: "Get a collection with full status. col.queryReady is true when all files are embedded.", example: `const col = await kyro.collections.get(collectionId);\n// col.queryReady — true when ready to search` }, { name: "kyro.collections.update(collectionId, { name?, description? })", desc: "Update collection name or description.", example: `await kyro.collections.update(collectionId, { name: "Q4 Agreements" });` }, { name: "kyro.collections.delete(collectionId)", desc: "Delete a collection. Does not delete the files themselves.", example: `await kyro.collections.delete(collectionId);` }, { name: "kyro.collections.addFiles(collectionId, { fileIds })", desc: "Add up to 100 files to a collection in one call.", example: `await kyro.collections.addFiles(collectionId, {\n  fileIds: [fileId1, fileId2],\n});` }, { name: "kyro.collections.listFiles(collectionId)", desc: "List files in a collection with per-file embedding status.", example: `const { data } = await kyro.collections.listFiles(collectionId);\n// data[i].embeddingStatus` }, { name: "kyro.collections.removeFile(collectionId, fileId)", desc: "Remove a file from a collection without deleting it.", example: `await kyro.collections.removeFile(collectionId, fileId);` }] as method}
+            <div class="sdk-entry">
+              <div class="sdk-entry-header">
+                <code class="sdk-sig">{method.name}</code>
+              </div>
+              <p class="sdk-entry-desc">{method.desc}</p>
+              <div class="code-block">
+                <div class="code-toolbar">
+                  <span class="code-lang">typescript</span>
+                  <button
+                    class="copy-btn"
+                    onclick={() =>
+                      copy(method.example, `sdk-col-${method.name}`)}
+                  >
+                    {copiedId === `sdk-col-${method.name}` ? "✓" : "copy"}
+                  </button>
+                </div>
+                <pre><code>{method.example}</code></pre>
+              </div>
+            </div>
+          {/each}
+        </div>
+      </section>
+
+      <!-- SDK ASK & SEARCH -->
+      <section id="sdk-ask" class="doc-section">
+        <h2 class="section-title">SDK · Ask & Search</h2>
+
+        <div class="sdk-method-list">
+          <div class="sdk-entry">
+            <div class="sdk-entry-header">
+              <code class="sdk-sig">kyro.files.ask(options)</code>
+            </div>
+            <p class="sdk-entry-desc">
+              Ask a natural language question and get an answer grounded in your
+              documents, with source citations. Set <code>stream: false</code>
+              for a single resolved value, or use <code>askStream</code> for token-by-token
+              output.
+            </p>
+
+            <div class="code-block" style="margin-bottom: 12px">
+              <div class="code-toolbar">
+                <span class="code-lang">non-streaming</span>
+                <button
+                  class="copy-btn"
+                  onclick={() =>
+                    copy(
+                      `const { answer, sources } = await kyro.files.ask({\n  question:     "What is the total contract value?",\n  collectionId: collectionId,\n  stream:       false,\n});\n\n// sources[i]: { fileId, fileName, chunkIndex, content, rrfScore }`,
+                      "sdk-ask-nonstream",
+                    )}
+                >
+                  {copiedId === "sdk-ask-nonstream" ? "✓" : "copy"}
+                </button>
+              </div>
+              <pre><code
+                  ><span class="ck">const</span> {"{ answer, sources }"} = <span
+                    class="ck">await</span
+                  > kyro.files.<span class="cs">ask</span>({"{"} 
+  question:     <span class="cs">"What is the total contract value?"</span>,
+  collectionId: collectionId,
+  stream:       <span class="ck">false</span>,
+{"}"});
+
+<span class="c-comment"
+                    >// sources[i]: {"{ fileId, fileName, chunkIndex, content, rrfScore }"}</span
+                  ></code
+                ></pre>
+            </div>
+
+            <div class="code-block" style="margin-bottom: 12px">
+              <div class="code-toolbar">
+                <span class="code-lang">streaming</span>
+                <button
+                  class="copy-btn"
+                  onclick={() =>
+                    copy(
+                      `for await (const event of kyro.files.askStream({ question: "Summarise the risks." })) {\n  switch (event.type) {\n    case "sources": console.log(event.sources); break;\n    case "chunk":   process.stdout.write(event.text); break;\n    case "done":    console.log("\\nDone"); break;\n    case "error":   console.error(event.message); break;\n  }\n}`,
+                      "sdk-ask-stream",
+                    )}
+                >
+                  {copiedId === "sdk-ask-stream" ? "✓" : "copy"}
+                </button>
+              </div>
+              <pre><code
+                  ><span class="ck">for await</span> (<span class="ck"
+                    >const</span
+                  > event <span class="ck">of</span> kyro.files.<span class="cs"
+                    >askStream</span
+                  >({"{"} question: <span class="cs"
+                    >"Summarise the risks."</span
+                  > {"}"})) {"{"} 
+  <span class="ck">switch</span> (event.type) {"{"} 
+    <span class="ck">case</span> <span class="cs">"sources"</span
+                  >: console.<span class="cs">log</span>(event.sources); <span
+                    class="ck">break</span
+                  >;
+    <span class="ck">case</span> <span class="cs">"chunk"</span
+                  >:   process.stdout.<span class="cs">write</span
+                  >(event.text); <span class="ck">break</span>;
+    <span class="ck">case</span> <span class="cs">"done"</span
+                  >:    console.<span class="cs">log</span>(<span class="cs"
+                    >"\nDone"</span
+                  >); <span class="ck">break</span>;
+    <span class="ck">case</span> <span class="cs">"error"</span
+                  >:   console.<span class="cs">error</span
+                  >(event.message); <span class="ck">break</span>;
+  {"}"}
+{"}"}</code
+                ></pre>
+            </div>
+
+            <div class="table-scroll">
+              <table class="ref-table">
+                <thead
+                  ><tr
+                    ><th>Option</th><th>Type</th><th>Default</th><th
+                      >Description</th
+                    ></tr
+                  ></thead
+                >
+                <tbody>
+                  {#each [["question", "string", "—", "The question to answer"], ["collectionId", "string", "—", "Scope to a collection. Mutually exclusive with fileIds"], ["fileIds", "string[]", "—", "Scope to specific files. Mutually exclusive with collectionId"], ["filters", "object", "—", "Metadata key-value filters. AND across keys, OR across values"], ["topK", "number", "8", "Number of chunks to retrieve (max 20)"], ["minScore", "number", "0", "Minimum RRF score threshold"], ["model", "string", "server default", "Ollama model override"], ["stream", "boolean", "true", "Whether to stream the response as SSE"]] as row}
+                    <tr
+                      >{#each row as cell}<td>{cell}</td>{/each}</tr
+                    >
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SDK ERRORS -->
+      <section id="sdk-errors" class="doc-section">
+        <h2 class="section-title">SDK · Error Handling</h2>
+        <p class="section-desc">
+          All SDK methods throw typed errors. Import the specific class you want
+          to catch — each maps to a distinct HTTP status code.
+        </p>
+
+        <div class="code-block" style="margin-bottom: 24px">
+          <div class="code-toolbar">
+            <span class="code-lang">typescript</span>
+            <button
+              class="copy-btn"
+              onclick={() =>
+                copy(
+                  `import {\n  KyroApiError,\n  KyroAuthError,\n  KyroNotFoundError,\n  KyroRateLimitError,\n  KyroQuotaError,\n  KyroValidationError,\n} from "kyro-sdk";\n\ntry {\n  await kyro.files.upload(blob, "file.pdf");\n} catch (err) {\n  if (err instanceof KyroAuthError)      { /* 401 — invalid or missing API key */ }\n  if (err instanceof KyroQuotaError)     { /* 403 — storage quota exceeded */ }\n  if (err instanceof KyroNotFoundError)  { /* 404 — resource not found */ }\n  if (err instanceof KyroRateLimitError) { /* 429 — slow down */ setTimeout(retry, err.retryAfter * 1000); }\n  if (err instanceof KyroValidationError){ /* 400 — bad input */ console.error(err.details); }\n  if (err instanceof KyroApiError)       { /* catch-all */ console.error(err.status, err.message); }\n}`,
+                  "sdk-errors-ex",
+                )}
+            >
+              {copiedId === "sdk-errors-ex" ? "✓ copied" : "copy"}
+            </button>
+          </div>
+          <pre><code
+              ><span class="ck">import</span> {"{"}
+  KyroApiError, KyroAuthError, KyroNotFoundError,
+  KyroRateLimitError, KyroQuotaError, KyroValidationError,
+{"}"} <span class="ck">from</span> <span class="cs">"kyro-sdk"</span>;
+
+<span class="ck">try</span> {"{"} 
+  <span class="ck">await</span> kyro.files.<span class="cs">upload</span
+              >(blob, <span class="cs">"file.pdf"</span>);
+{"}"} <span class="ck">catch</span> (err) {"{"} 
+  <span class="ck">if</span> (err <span class="ck">instanceof</span
+              > KyroAuthError)       {"{"} <span class="c-comment"
+                >/* 401 — invalid or missing API key */</span
+              > {"}"}
+  <span class="ck">if</span> (err <span class="ck">instanceof</span
+              > KyroQuotaError)      {"{"} <span class="c-comment"
+                >/* 403 — storage quota exceeded */</span
+              > {"}"}
+  <span class="ck">if</span> (err <span class="ck">instanceof</span
+              > KyroNotFoundError)   {"{"} <span class="c-comment"
+                >/* 404 — resource not found */</span
+              > {"}"}
+  <span class="ck">if</span> (err <span class="ck">instanceof</span
+              > KyroRateLimitError)  {"{"} <span class="c-comment"
+                >/* 429 — check err.retryAfter */</span
+              >
+    <span class="cs">setTimeout</span>(retry, err.retryAfter * <span class="cs"
+                >1000</span
+              >); {"}"}
+  <span class="ck">if</span> (err <span class="ck">instanceof</span
+              > KyroValidationError) {"{"} <span class="c-comment"
+                >/* 400 — err.details has field errors */</span
+              > {"}"}
+  <span class="ck">if</span> (err <span class="ck">instanceof</span
+              > KyroApiError)        {"{"} <span class="c-comment"
+                >/* catch-all */</span
+              > {"}"}
+{"}"}</code
+            ></pre>
+        </div>
+
+        <div class="table-scroll">
+          <table class="ref-table">
+            <thead
+              ><tr
+                ><th>Class</th><th>HTTP status</th><th>When it's thrown</th></tr
+              ></thead
+            >
+            <tbody>
+              {#each [["KyroAuthError", "401", "Missing or invalid API key"], ["KyroQuotaError", "403", "Storage quota exceeded"], ["KyroNotFoundError", "404", "File, collection, or resource not found"], ["KyroValidationError", "400", "Bad input — err.details has per-field messages"], ["KyroRateLimitError", "429", "Rate limit hit — err.retryAfter is seconds to wait"], ["KyroApiError", "any", "Catch-all for any other API error — err.status and err.code available"]] as row}
+                <tr
+                  >{#each row as cell}<td>{cell}</td>{/each}</tr
+                >
+              {/each}
+            </tbody>
+          </table>
         </div>
       </section>
 
@@ -2877,6 +3492,202 @@ for await (const event of parseSSE(res)) {
   .c-comment {
     color: var(--text-ghost);
     font-style: italic;
+  }
+
+  /* ── Access methods grid ── */
+  .access-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-top: 24px;
+  }
+
+  .access-card {
+    padding: 24px 22px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: border-color 0.15s;
+  }
+
+  .access-card:hover {
+    border-color: var(--border2);
+  }
+
+  .access-card-featured {
+    border-color: rgba(61, 214, 140, 0.2);
+  }
+
+  .access-card-featured:hover {
+    border-color: rgba(61, 214, 140, 0.4);
+  }
+
+  .access-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .access-num {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--green);
+    letter-spacing: 0.06em;
+  }
+
+  .access-badge {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 2px 7px;
+    border-radius: 3px;
+    background: var(--bg4);
+    color: var(--text-ghost);
+    border: 1px solid var(--border);
+  }
+
+  .access-badge-green {
+    background: var(--green-dim);
+    color: var(--green);
+    border-color: rgba(61, 214, 140, 0.2);
+  }
+
+  .access-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.01em;
+  }
+
+  .access-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.7;
+    flex: 1;
+  }
+
+  .access-desc code {
+    font-size: 11px;
+    background: var(--bg3);
+    padding: 1px 5px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border2);
+    color: var(--text-dim);
+  }
+
+  .access-link {
+    font-size: 11px;
+    color: var(--green);
+    text-decoration: none;
+    font-weight: 600;
+    transition: opacity 0.1s;
+  }
+
+  .access-link:hover {
+    opacity: 0.7;
+  }
+
+  /* ── Callout box ── */
+  .callout {
+    display: flex;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: var(--radius);
+    font-size: 12px;
+    line-height: 1.7;
+  }
+
+  .callout-info {
+    background: var(--blue-dim);
+    border: 1px solid rgba(91, 156, 246, 0.2);
+    color: var(--text-muted);
+  }
+
+  .callout strong {
+    color: var(--text-dim);
+    display: block;
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+
+  .callout-icon {
+    font-size: 13px;
+    color: var(--blue);
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  /* ── SDK method list ── */
+  .sdk-method-list {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+  }
+
+  .sdk-entry {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sdk-entry:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .sdk-entry-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .sdk-sig {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text);
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    padding: 4px 12px;
+    border-radius: var(--radius-sm);
+    word-break: break-all;
+  }
+
+  .sdk-entry-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.7;
+    max-width: 640px;
+  }
+
+  .sdk-entry-desc code {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    background: var(--bg3);
+    padding: 1px 5px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border2);
+    color: var(--text-dim);
+  }
+
+  .sdk-subheading {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.01em;
+    margin-bottom: 8px;
+  }
+
+  @media (max-width: 860px) {
+    .access-grid {
+      grid-template-columns: 1fr;
+    }
   }
 
   @media (min-width: 900px) {

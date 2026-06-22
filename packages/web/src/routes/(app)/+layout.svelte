@@ -157,17 +157,21 @@
 <style>
 	.app-layout {
 		display: flex;
-		min-height: 100vh;
+        height: 100vh;
 	}
 
 	/* ── Sidebar ── */
 	.sidebar {
-		width: 196px;
-		background: var(--color-bg);
-		border-right: 1px solid var(--color-border);
-		display: flex;
-		flex-direction: column;
-		flex-shrink: 0;
+         width: 196px;
+    background: var(--color-bg);
+    border-right: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+   position: sticky;
+   top: 0;
+   height: 100vh;
+   overflow-y: auto;
 	}
 
 	.sidebar-header {
@@ -379,6 +383,7 @@
 		display: flex;
 		flex-direction: column;
 		min-width: 0;
+        overflow-y: auto;
 	}
 
 	.topbar {
@@ -473,6 +478,7 @@
 	}
 
 	.main-content {
+        overflow-y: auto;
 		flex: 1;
 		padding: var(--space-5) var(--space-6);
 		overflow-y: auto;
