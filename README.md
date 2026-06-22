@@ -7,6 +7,8 @@ Built for teams that can't send their data to third-party AI providers.
 
 [Website](https://kyro-henna.vercel.app/) · [TypeScript SDK](https://github.com/kyro/kyro-sdk-typescript) · [SDK Docs](https://kyro.io/docs/sdk)
 
+![Kyro Dashboard](as/dashboard.png)
+
 ## Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) and Docker Compose
