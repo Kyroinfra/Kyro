@@ -1,12 +1,14 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { goto } from "$app/navigation";
+  import { page } from "$app/stores";
   import Chart from "chart.js/auto";
-  import Button from "$lib/components/ui/Button.svelte";
   import Card from "$lib/components/ui/Card.svelte";
   import { formatBytes, formatNumber } from "$lib/utils/format";
 
   interface Props {
     data: {
+      range: string;
       stats: {
         totalRequests: number;
         totalBytesIn: number;
@@ -27,28 +29,31 @@
 
   let chartCanvas: HTMLCanvasElement;
   let chart: Chart | null = null;
-  let selectedRange = $state<"7" | "30" | "90">("30");
 
-  // FIX 1: $derived should not wrap a function — it IS the reactive value
-  const filteredData = $derived(
-    data.daily.slice(0, parseInt(selectedRange)).reverse(),
-  );
+  // selectedRange is derived from the server-loaded range so it always
+  // stays in sync after navigation.
+  let selectedRange = $derived(data.range as "7" | "30" | "90");
 
-  // FIX 4: removed unused `totalBandwidth` derived
+  function changeRange(r: "7" | "30" | "90") {
+    goto(`?range=${r}`, { keepFocus: true });
+  }
 
   function renderChart() {
     if (chart) {
       chart.destroy();
+      chart = null;
     }
 
-    const ctx = chartCanvas.getContext("2d");
+    const ctx = chartCanvas?.getContext("2d");
     if (!ctx) return;
 
-    // FIX 1 (cont.): use filteredData directly, not filteredData()
+    // Data arrives pre-filtered from the server; just reverse to chronological order
+    const displayData = [...data.daily].reverse();
+
     chart = new Chart(ctx, {
       type: "line",
       data: {
-        labels: filteredData.map((d) => {
+        labels: displayData.map((d) => {
           const date = new Date(d.date);
           return date.toLocaleDateString("en-US", {
             month: "short",
@@ -58,7 +63,7 @@
         datasets: [
           {
             label: "Requests",
-            data: filteredData.map((d) => d.requests),
+            data: displayData.map((d) => d.requests),
             borderColor: "#ffffff",
             backgroundColor: "rgba(255, 255, 255, 0.05)",
             fill: true,
@@ -123,10 +128,11 @@
     };
   });
 
-  // FIX 2: let $derived track selectedRange properly via filteredData,
-  // no need to manually "touch" selectedRange inside the effect
+  // Re-render whenever the server sends fresh data (i.e. after range navigation)
   $effect(() => {
-    if (chartCanvas && filteredData) renderChart();
+    // Touch data.daily so the effect tracks it
+    void data.daily;
+    if (chartCanvas) renderChart();
   });
 </script>
 
@@ -209,37 +215,25 @@
     <div class="chart-header">
       <span class="chart-title">// Request History</span>
       <div class="range-selector">
-        <button
-          class="range-btn"
-          class:active={selectedRange === "7"}
-          onclick={() => (selectedRange = "7")}
-        >
-          <span class="range-marker">[</span>7d<span class="range-marker"
-            >]</span
+        {#each (["7", "30", "90"] as const) as r}
+          <button
+            class="range-btn"
+            class:active={selectedRange === r}
+            onclick={() => changeRange(r)}
           >
-        </button>
-        <button
-          class="range-btn"
-          class:active={selectedRange === "30"}
-          onclick={() => (selectedRange = "30")}
-        >
-          <span class="range-marker">[</span>30d<span class="range-marker"
-            >]</span
-          >
-        </button>
-        <button
-          class="range-btn"
-          class:active={selectedRange === "90"}
-          onclick={() => (selectedRange = "90")}
-        >
-          <span class="range-marker">[</span>90d<span class="range-marker"
-            >]</span
-          >
-        </button>
+            <span class="range-marker">[</span>{r}d<span class="range-marker">]</span>
+          </button>
+        {/each}
       </div>
     </div>
     <div class="chart-container">
-      <canvas bind:this={chartCanvas}></canvas>
+      {#if data.daily.length === 0}
+        <div class="chart-empty">
+          <span class="chart-empty-text">// no data for this period</span>
+        </div>
+      {:else}
+        <canvas bind:this={chartCanvas}></canvas>
+      {/if}
     </div>
   </Card>
 </div>
@@ -361,6 +355,19 @@
   .chart-container {
     height: 300px;
     position: relative;
+  }
+
+  .chart-empty {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .chart-empty-text {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-ghost);
   }
 
   @media (max-width: 640px) {
