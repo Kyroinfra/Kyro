@@ -74,7 +74,7 @@ Ollama runs separately and is referenced via `OLLAMA_URL`. For production, a ded
 
 ## Using the API
 
-Create an account and generate an API key via the REST API, then use the [TypeScript SDK](https://github.com/kyro/kyro-sdk-typescript) or call the API directly.
+Create an account and generate an API key via the REST API, then use the [TypeScript SDK](https://github.com/Kyroinfra/kyro-sdk-typescript) or call the API directly.
 
 ```bash
 # Health check
