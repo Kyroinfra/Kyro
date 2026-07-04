@@ -1242,7 +1242,7 @@ admin  — full access including key management</code
           </div>
           <div class="info-card">
             <span class="info-label">Install</span>
-            <code class="info-value">npm install kyro-sdk</code>
+            <code class="info-value">npm i @kyroinfra/kyro</code>
           </div>
           <div class="info-card">
             <span class="info-label">Environments</span>
@@ -1259,12 +1259,12 @@ admin  — full access including key management</code
             <span class="code-lang">shell</span>
             <button
               class="copy-btn"
-              onclick={() => copy("npm install kyro-sdk", "sdk-install")}
+              onclick={() => copy("npm i @kyroinfra/kyro", "sdk-install")}
             >
               {copiedId === "sdk-install" ? "✓ copied" : "copy"}
             </button>
           </div>
-          <pre><code>npm install kyro-sdk</code></pre>
+          <pre><code>npm i @kyroinfra/kyro</code></pre>
         </div>
 
         <div class="code-block">
