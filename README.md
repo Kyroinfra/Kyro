@@ -20,17 +20,6 @@
 
 > **WIP**
 
-![Kyro Dashboard](as/dashboard.png)
-# Kyro
-
-Self-hosted document storage and RAG API. Upload files, extract text, embed chunks, and ask questions across your documents — all running on your own infrastructure.
-
-Built for teams that can't send their data to third-party AI providers.
-
-[Docs](https://kyro-henna.vercel.app/) · [TypeScript SDK](https://github.com/Kyroinfra/kyro-sdk-typescript) · [SDK Docs](https://kyro-henna.vercel.app/docs#sdk)
-
-![Kyro Dashboard](as/dashboard.png)
-
 ## Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) and Docker Compose
