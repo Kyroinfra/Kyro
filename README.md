@@ -18,8 +18,6 @@
   <a href="https://kyro-henna.vercel.app/docs#sdk">SDK Docs</a>
 </p>
 
-> **WIP**
-
 ![Kyro Dashboard](as/dashboard.png)
 
 ## Prerequisites
@@ -106,3 +104,5 @@ curl http://localhost/health
 Create a Scoped API key to use with SDK
 
 For the full API reference and SDK documentation visit [docs](https://kyro-henna.vercel.app/docs).
+
+> **WIP**
