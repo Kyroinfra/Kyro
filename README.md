@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="as/logo.png" alt="Kyro Logo" width="160" />
+  <img src="as/logo.svg" alt="Kyro Logo" width="160" />
 </p>
 
 <h1 align="center">Kyro</h1>
