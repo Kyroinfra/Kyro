@@ -1,4 +1,26 @@
-> WIP
+<p align="center">
+  <img src="as/logo.png" alt="Kyro Logo" width="160" />
+</p>
+
+<h1 align="center">Kyro</h1>
+
+<p align="center">
+  Self-hosted document storage and RAG API. Upload files, extract text, embed chunks, and ask questions across your documents — all running on your own infrastructure.
+</p>
+
+<p align="center">
+  Built for teams that can't send their data to third-party AI providers.
+</p>
+
+<p align="center">
+  <a href="https://kyro-henna.vercel.app/">Docs</a> ·
+  <a href="https://github.com/Kyroinfra/kyro-sdk-typescript">TypeScript SDK</a> ·
+  <a href="https://kyro-henna.vercel.app/docs#sdk">SDK Docs</a>
+</p>
+
+> **WIP**
+
+![Kyro Dashboard](as/dashboard.png)
 # Kyro
 
 Self-hosted document storage and RAG API. Upload files, extract text, embed chunks, and ask questions across your documents — all running on your own infrastructure.
