@@ -20,6 +20,8 @@
 
 > **WIP**
 
+![Kyro Dashboard](as/dashboard.png)
+
 ## Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) and Docker Compose
