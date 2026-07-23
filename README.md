@@ -13,9 +13,9 @@
 </p>
 
 <p align="center">
-  <a href="https://kyro-henna.vercel.app/">Docs</a> ·
+  <a href="https://kyro.nyxox.dev/">Docs</a> ·
   <a href="https://github.com/Kyroinfra/kyro-sdk-typescript">TypeScript SDK</a> ·
-  <a href="https://kyro-henna.vercel.app/docs#sdk">SDK Docs</a>
+  <a href="https://kyro.nyxox.dev/docs#sdk">SDK Docs</a>
 </p>
 
 ![Kyro Dashboard](as/dashboard.png)
@@ -103,6 +103,6 @@ curl http://localhost/health
 ```
 Create a Scoped API key to use with SDK
 
-For the full API reference and SDK documentation visit [docs](https://kyro-henna.vercel.app/docs).
+For the full API reference and SDK documentation visit [docs](https://kyro.nyxox.dev/docs).
 
 > **WIP**
