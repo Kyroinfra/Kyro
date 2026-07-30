@@ -72,6 +72,15 @@ services:
       - ./packages/api/src:/app/packages/api/src
       - ./packages/shared:/app/packages/shared
       - uploads_data:/app/uploads
+
+      - type: bind
+        source: ./dev-company-data
+        target: /sources
+        read_only: true
+        bind:
+          create_host_path: false
+
+
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
