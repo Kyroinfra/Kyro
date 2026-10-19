@@ -1,6 +1,8 @@
 import { Router, type Request, type Response } from 'express';
-import { query } from '../../db';
+import { db } from '../../db';
+import { usageLogs, files, apiKeys } from '../../db/schema';
 import { authMiddleware } from '../../middleware/auth';
+import { and, eq, gte, lte, desc, sql, type SQL } from 'drizzle-orm';
 import config from '../../config';
 
 const router = Router();
@@ -20,56 +22,49 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
     // consistent with how /usage/daily handles them.
     const { start_date, end_date } = req.query;
 
-    let dateFilter = '';
-    const usageParams: any[] = [orgId];
-
+    const timeFilter: SQL[] = [];
     if (start_date && end_date) {
-      dateFilter = 'AND created_at >= $2 AND created_at <= $3';
-      usageParams.push(start_date, end_date);
+      timeFilter.push(
+        gte(usageLogs.createdAt, new Date(String(start_date))),
+        lte(usageLogs.createdAt, new Date(String(end_date))),
+      );
     } else if (start_date) {
-      dateFilter = 'AND created_at >= $2';
-      usageParams.push(start_date);
+      timeFilter.push(gte(usageLogs.createdAt, new Date(String(start_date))));
     } else if (end_date) {
-      dateFilter = 'AND created_at <= $2';
-      usageParams.push(end_date);
+      timeFilter.push(lte(usageLogs.createdAt, new Date(String(end_date))));
     }
 
-    const usageResult = await query<{
-      total_requests: string;
-      total_bytes_in: string;
-      total_bytes_out: string;
-    }>(
-      `SELECT 
-        COUNT(*) as total_requests,
-        COALESCE(SUM(bytes_in), 0) as total_bytes_in,
-        COALESCE(SUM(bytes_out), 0) as total_bytes_out
-       FROM usage_logs
-       WHERE org_id = $1 ${dateFilter}`,
-      usageParams
-    );
+    const [usageRow] = await db
+      .select({
+        totalRequests: sql<number>`COUNT(*)`.mapWith(Number),
+        totalBytesIn:  sql<number>`COALESCE(SUM(${usageLogs.bytesIn}), 0)`.mapWith(Number),
+        totalBytesOut: sql<number>`COALESCE(SUM(${usageLogs.bytesOut}), 0)`.mapWith(Number),
+      })
+      .from(usageLogs)
+      .where(and(eq(usageLogs.orgId, orgId), ...timeFilter));
 
     // Storage and API key counts are not time-scoped — they reflect current state
-    const storageResult = await query<{ total_storage: string }>(
-      `SELECT COALESCE(SUM(size_bytes), 0) as total_storage
-       FROM files
-       WHERE org_id = $1 AND deleted_at IS NULL`,
-      [orgId]
-    );
+    const [storageRow] = await db
+      .select({
+        totalStorage: sql<number>`COALESCE(SUM(${files.sizeBytes}), 0)`.mapWith(Number),
+      })
+      .from(files)
+      .where(and(eq(files.orgId, orgId), sql`${files.deletedAt} IS NULL`));
 
-    const apiKeysResult = await query<{ active_keys: string }>(
-      `SELECT COUNT(*) as active_keys
-       FROM api_keys
-       WHERE org_id = $1 AND revoked_at IS NULL`,
-      [orgId]
-    );
+    const [keysRow] = await db
+      .select({
+        activeKeys: sql<number>`COUNT(*)`.mapWith(Number),
+      })
+      .from(apiKeys)
+      .where(and(eq(apiKeys.orgId, orgId), sql`${apiKeys.revokedAt} IS NULL`));
 
     res.json({
-      total_requests: parseInt(usageResult[0]?.total_requests || '0', 10),
-      total_bytes_in: parseInt(usageResult[0]?.total_bytes_in || '0', 10),
-      total_bytes_out: parseInt(usageResult[0]?.total_bytes_out || '0', 10),
-      total_storage: parseInt(storageResult[0]?.total_storage || '0', 10),
-      active_api_keys: parseInt(apiKeysResult[0]?.active_keys || '0', 10),
-      storage_limit: config.storageLimit,
+      total_requests:  usageRow?.totalRequests ?? 0,
+      total_bytes_in:  usageRow?.totalBytesIn ?? 0,
+      total_bytes_out: usageRow?.totalBytesOut ?? 0,
+      total_storage:   storageRow?.totalStorage ?? 0,
+      active_api_keys: keysRow?.activeKeys ?? 0,
+      storage_limit:   config.storageLimit,
     });
   } catch (error) {
     console.error('Error getting usage:', error);
@@ -89,33 +84,36 @@ router.get('/daily', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
-    let dateFilter = '';
-    const params: any[] = [orgId];
-
+    const timeFilter: SQL[] = [];
     if (start_date && end_date) {
-      dateFilter = 'AND created_at >= $2 AND created_at <= $3';
-      params.push(start_date, end_date);
+      timeFilter.push(
+        gte(usageLogs.createdAt, new Date(String(start_date))),
+        lte(usageLogs.createdAt, new Date(String(end_date))),
+      );
     } else {
       const defaultStart = new Date();
       defaultStart.setDate(defaultStart.getDate() - 30);
-      dateFilter = 'AND created_at >= $2';
-      params.push(defaultStart);
+      timeFilter.push(gte(usageLogs.createdAt, defaultStart));
     }
 
-    const result = await query(
-      `SELECT 
-        DATE(created_at) as date,
-        COUNT(*) as requests,
-        COALESCE(SUM(bytes_in), 0) as bytes_in,
-        COALESCE(SUM(bytes_out), 0) as bytes_out
-       FROM usage_logs
-       WHERE org_id = $1 ${dateFilter}
-       GROUP BY DATE(created_at)
-       ORDER BY date DESC`,
-      params
-    );
+    const result = await db
+      .select({
+        date:     sql<string>`DATE(${usageLogs.createdAt})::text`,
+        requests: sql<number>`COUNT(*)`.mapWith(Number),
+        bytesIn:  sql<number>`COALESCE(SUM(${usageLogs.bytesIn}), 0)`.mapWith(Number),
+        bytesOut: sql<number>`COALESCE(SUM(${usageLogs.bytesOut}), 0)`.mapWith(Number),
+      })
+      .from(usageLogs)
+      .where(and(eq(usageLogs.orgId, orgId), ...timeFilter))
+      .groupBy(sql`DATE(${usageLogs.createdAt})`)
+      .orderBy(desc(sql`DATE(${usageLogs.createdAt})`));
 
-    res.json(result);
+    res.json(result.map(r => ({
+      date:     r.date,
+      requests: String(r.requests),
+      bytes_in: r.bytesIn,
+      bytes_out: r.bytesOut,
+    })));
   } catch (error) {
     console.error('Error getting daily usage:', error);
     res.status(500).json({ error: 'Failed to get daily usage' });

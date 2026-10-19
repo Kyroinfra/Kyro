@@ -8,9 +8,9 @@
 //     embedOne) are unchanged.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import pool, { db } from '../db';
+import { db } from '../db';
 import { fileChunks, files } from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import {
   dispatchWebhookEvent,
   dispatchCollectionEmbeddingEvents,
@@ -252,38 +252,35 @@ export async function embedFile(opts: EmbedFileOptions): Promise<EmbedFileResult
   }
 
   // ── Persist chunks ─────────────────────────────────────────────────────────
-  // Uses raw pool — Drizzle cannot bind vector arrays correctly for bulk
-  // inserts with ON CONFLICT DO UPDATE that reference the vector column.
+  // Drizzle handles the vector values through the `vector` customType in the
+  // schema (number[] → pgvector literal string before binding).
   const INSERT_BATCH = 100;
   try {
     for (let i = 0; i < chunks.length; i += INSERT_BATCH) {
       const batchChunks     = chunks.slice(i, i + INSERT_BATCH);
       const batchEmbeddings = allEmbeddings.slice(i, i + INSERT_BATCH);
 
-      const valuePlaceholders: string[] = [];
-      const values: unknown[]           = [];
-      let   paramIdx = 1;
-
-      for (let j = 0; j < batchChunks.length; j++) {
-        const chunk  = batchChunks[j];
-        const vecLit = `[${batchEmbeddings[j].join(',')}]`;
-        valuePlaceholders.push(
-          `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, '${vecLit}'::vector, $${paramIdx++})`
-        );
-        values.push(fileId, orgId, chunk.index, chunk.content, chunk.tokenCount);
-      }
-
-      const insertSql = `
-        INSERT INTO file_chunks (file_id, org_id, chunk_index, content, embedding, token_count)
-        VALUES ${valuePlaceholders.join(', ')}
-        ON CONFLICT (file_id, chunk_index)
-        DO UPDATE SET
-          content     = EXCLUDED.content,
-          embedding   = EXCLUDED.embedding,
-          token_count = EXCLUDED.token_count
-      `;
-
-      await pool.query(insertSql, values);
+      await db
+        .insert(fileChunks)
+        .values(
+          batchChunks.map((chunk, j) => ({
+            fileId:     fileId,
+            orgId:      orgId,
+            chunkIndex: chunk.index,
+            content:    chunk.content,
+            embedding:  batchEmbeddings[j],
+            tokenCount: chunk.tokenCount,
+          })),
+        )
+        // (file_id, chunk_index) — Postgres infers the composite uniqueIndex.
+        .onConflictDoUpdate({
+          target: [fileChunks.fileId, fileChunks.chunkIndex],
+          set: {
+            content:    sql`excluded.content`,
+            embedding:  sql`excluded.embedding`,
+            tokenCount: sql`excluded.token_count`,
+          },
+        });
     }
   } catch (persistErr: any) {
     await db.update(files)

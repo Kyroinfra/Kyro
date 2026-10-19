@@ -1,5 +1,4 @@
 import {
-  migrations,
   organisations,
   users,
   apiKeys,
@@ -9,10 +8,6 @@ import {
 } from '../../src/db/schema';
 
 describe('Drizzle Schema Exports', () => {
-  it('should export migrations table', () => {
-    expect(migrations).toBeDefined();
-  });
-
   it('should export organisations table', () => {
     expect(organisations).toBeDefined();
   });

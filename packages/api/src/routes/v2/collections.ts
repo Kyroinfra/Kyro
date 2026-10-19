@@ -1,9 +1,9 @@
 // routes/v2/collections.ts
 
 import { Router, type Response } from 'express';
-import pool, { db } from '../../db';
-import { collections, collectionFiles, apiKeys } from '../../db/schema';
-import { eq, and } from 'drizzle-orm';
+import { db } from '../../db';
+import { collections, collectionFiles, apiKeys, files } from '../../db/schema';
+import { eq, and, isNull, inArray, sql, desc } from 'drizzle-orm';
 import { apiKeyAuthMiddleware, requireScope, type ApiKeyRequest } from '../../middleware/apiKeyAuth';
 import { z } from 'zod';
 
@@ -60,38 +60,27 @@ router.get('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) 
   try {
     const orgId = req.orgId!;
 
-    const result = await pool.query<{
-      id: string;
-      name: string;
-      description: string | null;
-      slug: string;
-      createdAt: Date;
-      updatedAt: Date;
-      fileCount: number;
-      embeddedCount: number;
-      pendingCount: number;
-      failedCount: number;
-    }>(`
-      SELECT
-        c.id,
-        c.name,
-        c.description,
-        c.slug,
-        c.created_at    AS "createdAt",
-        c.updated_at    AS "updatedAt",
-        COUNT(cf.file_id)::int                                             AS "fileCount",
-        COUNT(CASE WHEN f.embedding_status = 'completed' THEN 1 END)::int AS "embeddedCount",
-        COUNT(CASE WHEN f.embedding_status = 'pending'   THEN 1 END)::int AS "pendingCount",
-        COUNT(CASE WHEN f.embedding_status = 'failed'    THEN 1 END)::int AS "failedCount"
-      FROM collections c
-      LEFT JOIN collection_files cf ON cf.collection_id = c.id
-      LEFT JOIN files f ON f.id = cf.file_id AND f.deleted_at IS NULL
-      WHERE c.org_id = $1
-      GROUP BY c.id
-      ORDER BY c.created_at DESC
-    `, [orgId]);
+    const rows = await db
+      .select({
+        id:            collections.id,
+        name:          collections.name,
+        description:   collections.description,
+        slug:          collections.slug,
+        createdAt:     collections.createdAt,
+        updatedAt:     collections.updatedAt,
+        fileCount:     sql<number>`COUNT(${collectionFiles.fileId})::int`.mapWith(Number),
+        embeddedCount: sql<number>`COUNT(CASE WHEN ${files.embeddingStatus} = 'completed' THEN 1 END)::int`.mapWith(Number),
+        pendingCount:  sql<number>`COUNT(CASE WHEN ${files.embeddingStatus} = 'pending' THEN 1 END)::int`.mapWith(Number),
+        failedCount:   sql<number>`COUNT(CASE WHEN ${files.embeddingStatus} = 'failed' THEN 1 END)::int`.mapWith(Number),
+      })
+      .from(collections)
+      .leftJoin(collectionFiles, eq(collectionFiles.collectionId, collections.id))
+      .leftJoin(files, and(eq(files.id, collectionFiles.fileId), isNull(files.deletedAt)))
+      .where(eq(collections.orgId, orgId))
+      .groupBy(collections.id)
+      .orderBy(desc(collections.createdAt));
 
-    res.json(result.rows);
+    res.json(rows);
   } catch (error) {
     console.error('Error listing collections:', error);
     res.status(500).json({ error: 'Failed to list collections' });
@@ -139,49 +128,36 @@ router.get('/:id', requireScope('read'), async (req: ApiKeyRequest, res: Respons
     const orgId = req.orgId!;
     const id = req.params.id as string;
 
-    const result = await pool.query<{
-      id: string;
-      name: string;
-      description: string | null;
-      slug: string;
-      createdAt: Date;
-      updatedAt: Date;
-      fileCount: number;
-      embeddedCount: number;
-      pendingCount: number;
-      failedCount: number;
-      skippedCount: number;
-      queryReady: boolean;
-    }>(`
-      SELECT
-        c.id,
-        c.name,
-        c.description,
-        c.slug,
-        c.created_at    AS "createdAt",
-        c.updated_at    AS "updatedAt",
-        COUNT(cf.file_id)::int                                                AS "fileCount",
-        COUNT(CASE WHEN f.embedding_status = 'completed' THEN 1 END)::int    AS "embeddedCount",
-        COUNT(CASE WHEN f.embedding_status = 'pending'   THEN 1 END)::int    AS "pendingCount",
-        COUNT(CASE WHEN f.embedding_status = 'failed'    THEN 1 END)::int    AS "failedCount",
-        COUNT(CASE WHEN f.embedding_status = 'skipped'   THEN 1 END)::int    AS "skippedCount",
-        (
-          COUNT(cf.file_id) > 0 AND
-          COUNT(CASE WHEN f.embedding_status IN ('pending', 'embedding', 'failed') THEN 1 END) = 0
-        ) AS "queryReady"
-      FROM collections c
-      LEFT JOIN collection_files cf ON cf.collection_id = c.id
-      LEFT JOIN files f ON f.id = cf.file_id AND f.deleted_at IS NULL
-      WHERE c.id = $1 AND c.org_id = $2
-      GROUP BY c.id
-    `, [id, orgId]);
+    const [row] = await db
+      .select({
+        id:           collections.id,
+        name:         collections.name,
+        description:  collections.description,
+        slug:         collections.slug,
+        createdAt:    collections.createdAt,
+        updatedAt:    collections.updatedAt,
+        fileCount:    sql<number>`COUNT(${collectionFiles.fileId})::int`.mapWith(Number),
+        embeddedCount: sql<number>`COUNT(CASE WHEN ${files.embeddingStatus} = 'completed' THEN 1 END)::int`.mapWith(Number),
+        pendingCount:  sql<number>`COUNT(CASE WHEN ${files.embeddingStatus} = 'pending' THEN 1 END)::int`.mapWith(Number),
+        failedCount:   sql<number>`COUNT(CASE WHEN ${files.embeddingStatus} = 'failed' THEN 1 END)::int`.mapWith(Number),
+        skippedCount:  sql<number>`COUNT(CASE WHEN ${files.embeddingStatus} = 'skipped' THEN 1 END)::int`.mapWith(Number),
+        queryReady: sql<boolean>`
+          COUNT(${collectionFiles.fileId}) > 0 AND
+          COUNT(CASE WHEN ${files.embeddingStatus} IN ('pending', 'embedding', 'failed') THEN 1 END) = 0
+        `.mapWith(Boolean),
+      })
+      .from(collections)
+      .leftJoin(collectionFiles, eq(collectionFiles.collectionId, collections.id))
+      .leftJoin(files, and(eq(files.id, collectionFiles.fileId), isNull(files.deletedAt)))
+      .where(and(eq(collections.id, id), eq(collections.orgId, orgId)))
+      .groupBy(collections.id);
 
-    if (result.rows.length === 0) {
+    if (!row) {
       res.status(404).json({ error: 'Collection not found' });
       return;
     }
 
-    res.json(result.rows[0]);
+    res.json(row);
   } catch (error) {
     console.error('Error getting collection:', error);
     res.status(500).json({ error: 'Failed to get collection' });
@@ -278,39 +254,35 @@ router.get('/:id/files', requireScope('read'), async (req: ApiKeyRequest, res: R
     const limit  = Math.min(parseInt(req.query.limit  as string || '100', 10), 100);
     const offset = Math.max(parseInt(req.query.offset as string || '0',   10), 0);
 
-    const [rowsResult, countResult] = await Promise.all([
-      pool.query<{
-        id: string; name: string; mimeType: string; sizeBytes: number;
-        embeddingStatus: string; createdAt: Date; addedAt: Date;
-      }>(`
-        SELECT
-          f.id,
-          f.name,
-          f.mime_type        AS "mimeType",
-          f.size_bytes       AS "sizeBytes",
-          f.embedding_status AS "embeddingStatus",
-          f.created_at       AS "createdAt",
-          cf.added_at        AS "addedAt"
-        FROM collection_files cf
-        JOIN files f ON f.id = cf.file_id
-        WHERE cf.collection_id = $1 AND f.deleted_at IS NULL
-        ORDER BY cf.added_at DESC
-        LIMIT $2 OFFSET $3
-      `, [id, limit, offset]),
-
-      pool.query<{ total: number }>(`
-        SELECT COUNT(*)::int AS total
-        FROM collection_files cf
-        JOIN files f ON f.id = cf.file_id
-        WHERE cf.collection_id = $1 AND f.deleted_at IS NULL
-      `, [id]),
+    const [filesRow, [countRow]] = await Promise.all([
+      db
+        .select({
+          id:              files.id,
+          name:            files.name,
+          mimeType:        files.mimeType,
+          sizeBytes:       files.sizeBytes,
+          embeddingStatus: files.embeddingStatus,
+          createdAt:       files.createdAt,
+          addedAt:         collectionFiles.addedAt,
+        })
+        .from(collectionFiles)
+        .innerJoin(files, eq(files.id, collectionFiles.fileId))
+        .where(and(eq(collectionFiles.collectionId, id), isNull(files.deletedAt)))
+        .orderBy(desc(collectionFiles.addedAt))
+        .limit(limit)
+        .offset(offset),
+      db
+        .select({ total: sql<number>`COUNT(*)::int`.mapWith(Number) })
+        .from(collectionFiles)
+        .innerJoin(files, eq(files.id, collectionFiles.fileId))
+        .where(and(eq(collectionFiles.collectionId, id), isNull(files.deletedAt))),
     ]);
 
-    const total = countResult.rows[0]?.total ?? 0;
+    const total = countRow?.total ?? 0;
 
     res.json({
-      data: rowsResult.rows,
-      pagination: { total, limit, offset, hasMore: offset + rowsResult.rows.length < total },
+      data: filesRow,
+      pagination: { total, limit, offset, hasMore: offset + filesRow.length < total },
     });
   } catch (error) {
     console.error('Error listing collection files:', error);
@@ -341,12 +313,12 @@ router.post('/:id/files', requireScope('write'), async (req: ApiKeyRequest, res:
       return;
     }
 
-    const ownedFilesResult = await pool.query<{ id: string }>(
-      'SELECT id FROM files WHERE org_id = $1 AND id = ANY($2::uuid[]) AND deleted_at IS NULL',
-      [orgId, parsed.data.fileIds],
-    );
+    const ownedFiles = await db
+      .select({ id: files.id })
+      .from(files)
+      .where(and(eq(files.orgId, orgId), inArray(files.id, parsed.data.fileIds), isNull(files.deletedAt)));
 
-    const ownedIds = new Set(ownedFilesResult.rows.map(f => f.id));
+    const ownedIds = new Set(ownedFiles.map(f => f.id));
     const unowned  = parsed.data.fileIds.filter(fid => !ownedIds.has(fid));
 
     if (unowned.length > 0) {

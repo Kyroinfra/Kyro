@@ -1,5 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
-import { query } from '../db';
+import { db } from '../db';
+import { apiKeys } from '../db/schema';
+import { and, eq, isNull } from 'drizzle-orm';
 import { hashApiKey } from '../lib/apiKey';
 
 export interface ApiKeyRequest extends Request {
@@ -23,15 +25,14 @@ export async function apiKeyAuthMiddleware(
   const hash = hashApiKey(rawKey);
 
   try {
-    const result = await query<{
-      id: string;
-      org_id: string;
-      scopes: string[];
-    }>(
-      `SELECT id, org_id, scopes FROM api_keys 
-       WHERE key_hash = $1 AND revoked_at IS NULL`,
-      [hash]
-    );
+    const result = await db
+      .select({
+        id:     apiKeys.id,
+        orgId:  apiKeys.orgId,
+        scopes: apiKeys.scopes,
+      })
+      .from(apiKeys)
+      .where(and(eq(apiKeys.keyHash, hash), isNull(apiKeys.revokedAt)));
 
     if (result.length === 0) {
       res.status(401).json({ error: 'Invalid API key' });
@@ -39,14 +40,14 @@ export async function apiKeyAuthMiddleware(
     }
 
     const apiKey = result[0];
-    req.orgId = apiKey.org_id;
+    req.orgId = apiKey.orgId;
     req.apiKeyId = apiKey.id;
     req.apiKeyScopes = apiKey.scopes || ['read'];
 
-    await query(
-      'UPDATE api_keys SET last_used_at = NOW() WHERE id = $1',
-      [apiKey.id]
-    );
+    await db
+      .update(apiKeys)
+      .set({ lastUsedAt: new Date() })
+      .where(eq(apiKeys.id, apiKey.id));
 
     next();
   } catch (error) {
