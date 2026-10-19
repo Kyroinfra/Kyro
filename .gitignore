@@ -12,6 +12,12 @@ web/.svelte-kit
 web/build
 web/dist
 
+# Compiled test output (ts-jest emits .js/.d.ts/.map next to the .ts sources)
+packages/api/tests/unit/*.js
+packages/api/tests/unit/*.js.map
+packages/api/tests/unit/*.d.ts
+packages/api/tests/unit/*.d.ts.map
+
 # Environment variables
 .env
 .env.dev

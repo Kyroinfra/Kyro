@@ -1,9 +1,5 @@
 import multer from 'multer';
-import path from 'path';
-import { randomUUID } from 'crypto';
 import { Request } from 'express';
-
-const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(process.cwd(), 'uploads');
 
 const storage = multer.memoryStorage();
 
@@ -40,9 +36,3 @@ export const upload = multer({
   },
   fileFilter,
 });
-
-export function generateFileId(): string {
-  return randomUUID();
-}
-
-export { UPLOAD_DIR };

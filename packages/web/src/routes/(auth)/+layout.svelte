@@ -9,7 +9,6 @@
 </script>
 
 <div class="auth-layout">
-	<div class="scanlines"></div>
 	<div class="auth-container">
 		{@render children()}
 	</div>

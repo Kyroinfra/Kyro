@@ -209,20 +209,6 @@
 		text-transform: lowercase;
 	}
 
-	.logo-mark {
-		width: 22px;
-		height: 22px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background: var(--color-text);
-		color: var(--color-bg);
-		border-radius: var(--radius-sm);
-		font-weight: 700;
-		font-size: 12px;
-		flex-shrink: 0;
-	}
-
 	/* ── Nav ── */
 	.sidebar-nav {
 		flex: 1;

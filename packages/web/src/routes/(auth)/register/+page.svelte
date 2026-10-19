@@ -87,19 +87,6 @@
 		text-transform: lowercase;
 	}
 
-	.logo-mark {
-		width: 28px;
-		height: 28px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background: var(--color-text);
-		color: var(--color-bg);
-		border-radius: var(--radius-sm);
-		font-weight: 700;
-		font-size: var(--font-size-base);
-	}
-
 	.auth-prompt {
 		display: flex;
 		align-items: center;
