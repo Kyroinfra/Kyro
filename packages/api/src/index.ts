@@ -1,37 +1,9 @@
-import express from 'express';
-import cors from 'cors';
+// src/index.ts — process entry point: startup jobs + server lifecycle.
+import app from './app';
 import config from './config';
-import { requestLogger } from './middleware/requestLogger';
-import { errorHandler, notFoundHandler } from './middleware/errorHandler';
-import healthRouter from './routes/health';
-import v1Router from './routes/v1';
-import v2Router from './routes/v2';
-// import { runMigrations } from './db/migrate';
 import { recoverInterruptedPipelines } from './lib/pipeline';
 
-const app = express();
-
-// Trust NGINX proxy only 
-app.set('trust proxy', 1);
-
-app.use(cors());
-app.use(express.json());
-app.use(requestLogger);
-app.use('/health', healthRouter);
-app.use('/api/v1', v1Router);
-app.use('/api/v2', v2Router);
-app.use(notFoundHandler);
-app.use(errorHandler);
-
 async function start() {
-  // try {
-  //   await runMigrations();
-  //   console.log('Database migrations completed');
-  // } catch (error) {
-  //   console.error('Failed to run migrations:', error);
-  //   process.exit(1);
-  // }
-
   await recoverInterruptedPipelines();
 
   const server = app.listen(config.port, () => {
@@ -51,4 +23,3 @@ start().catch((err) => {
   console.error('Fatal error:', err);
   process.exit(1);
 });
-export default app;
