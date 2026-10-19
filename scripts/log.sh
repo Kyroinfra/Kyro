@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -e
+
+docker compose \
+  -f compose.yml \
+  -f compose.dev.yml \
+  --env-file .env.dev \
+  logs -f --tail=100 "$1"
