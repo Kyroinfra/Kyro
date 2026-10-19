@@ -64,6 +64,13 @@
       "when": 1792419748452,
       "tag": "0008_drop-saas-columns",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792421567701,
+      "tag": "0009_drop-migrations-table",
+      "breakpoints": true
     }
   ]
 }

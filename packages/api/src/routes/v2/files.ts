@@ -1,5 +1,5 @@
 import { Router, type Response } from 'express';
-import pool, { db } from '../../db';
+import { db } from '../../db';
 import { apiKeys, files, textExtractionJobs, fileMetadata } from '../../db/schema';
 import { eq, and, isNull, inArray, sql } from 'drizzle-orm';
 import { requireScope, type ApiKeyRequest } from '../../middleware/apiKeyAuth';
@@ -472,24 +472,17 @@ router.put('/:id/metadata', requireScope('write'), async (req: ApiKeyRequest, re
       return;
     }
 
-    // Build a raw upsert — Drizzle's onConflictDoUpdate requires a unique()
-    // constraint (not just a uniqueIndex()) for composite targets. Since the
-    // schema uses uniqueIndex(), we use a raw query referencing the index name.
-    const placeholders: string[] = [];
-    const values: unknown[]      = [];
-    let   p = 1;
-
-    for (const [key, value] of entries) {
-      placeholders.push(`($${p++}::uuid, $${p++}::uuid, $${p++}, $${p++})`);
-      values.push(id, orgId, key, value);
-    }
-
-    await pool.query(
-      `INSERT INTO file_metadata (file_id, org_id, key, value)
-       VALUES ${placeholders.join(', ')}
-       ON CONFLICT (file_id, key) DO UPDATE SET value = EXCLUDED.value`,
-      values,
-    );
+    await db
+      .insert(fileMetadata)
+      .values(
+        entries.map(([key, value]) => ({ fileId: id, orgId, key, value })),
+      )
+      // Drizzle emits `ON CONFLICT (file_id, key)` — Postgres infers the
+      // composite uniqueIndex, which is exactly the target we want.
+      .onConflictDoUpdate({
+        target: [fileMetadata.fileId, fileMetadata.key],
+        set:    { value: sql`excluded.value` },
+      });
 
     res.json(parsed.data);
   } catch (error) {

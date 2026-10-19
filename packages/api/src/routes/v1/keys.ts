@@ -1,5 +1,7 @@
 import { Router, type Request, type Response } from 'express';
-import { query } from '../../db';
+import { db } from '../../db';
+import { apiKeys } from '../../db/schema';
+import { eq, and, isNull, desc, sql } from 'drizzle-orm';
 import { generateApiKey } from '../../lib/apiKey';
 import { authMiddleware, requireRole } from '../../middleware/auth';
 import { z } from 'zod';
@@ -32,21 +34,23 @@ router.post('/', authMiddleware, requireRole('owner', 'admin'), async (req: Requ
     const { name, scopes } = parseResult.data;
     const { raw, hash, prefix } = generateApiKey();
 
-    const result = await query<{
-      id: string;
-      name: string;
-      key_prefix: string;
-      scopes: string[];
-      created_at: Date;
-    }>(
-      `INSERT INTO api_keys (org_id, user_id, name, key_hash, key_prefix, scopes)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, name, key_prefix, scopes, created_at`,
-      [orgId, userId, name, hash, prefix, scopes]
-    );
+    const [created] = await db
+      .insert(apiKeys)
+      .values({ orgId, userId, name, keyHash: hash, keyPrefix: prefix, scopes })
+      .returning({
+        id:        apiKeys.id,
+        name:      apiKeys.name,
+        keyPrefix: apiKeys.keyPrefix,
+        scopes:    apiKeys.scopes,
+        createdAt: apiKeys.createdAt,
+      });
 
     res.status(201).json({
-      ...result[0],
+      id:        created.id,
+      name:      created.name,
+      key_prefix: created.keyPrefix,
+      scopes:    created.scopes,
+      created_at: created.createdAt,
       key: raw,
     });
   } catch (error) {
@@ -65,23 +69,43 @@ router.get('/', authMiddleware, requireRole('owner', 'admin', 'member'), async (
     const limit = Math.min(parseInt(req.query.limit as string || '50', 10), 100);
     const offset = Math.max(parseInt(req.query.offset as string || '0', 10), 0);
 
-    const [rows, countRows] = await Promise.all([
-      query<{ id: string; name: string; key_prefix: string; scopes: string[]; last_used_at: Date | null; revoked_at: Date | null; created_at: Date }>(
-        `SELECT id, name, key_prefix, scopes, last_used_at, revoked_at, created_at
-         FROM api_keys WHERE org_id = $1
-         ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
-        [orgId, limit, offset]
-      ),
-      query<{ count: string }>('SELECT COUNT(*) as count FROM api_keys WHERE org_id = $1', [orgId]),
+    const [rows, [{ count }]] = await Promise.all([
+      db
+        .select({
+          id:         apiKeys.id,
+          name:       apiKeys.name,
+          keyPrefix:  apiKeys.keyPrefix,
+          scopes:     apiKeys.scopes,
+          lastUsedAt: apiKeys.lastUsedAt,
+          revokedAt:  apiKeys.revokedAt,
+          createdAt:  apiKeys.createdAt,
+        })
+        .from(apiKeys)
+        .where(eq(apiKeys.orgId, orgId))
+        .orderBy(desc(apiKeys.createdAt))
+        .limit(limit)
+        .offset(offset),
+      db
+        .select({ count: sql<number>`COUNT(*)`.mapWith(Number) })
+        .from(apiKeys)
+        .where(eq(apiKeys.orgId, orgId)),
     ]);
 
     res.json({
-      data: rows,
+      data: rows.map(k => ({
+        id:           k.id,
+        name:         k.name,
+        key_prefix:   k.keyPrefix,
+        scopes:       k.scopes,
+        last_used_at: k.lastUsedAt,
+        revoked_at:   k.revokedAt,
+        created_at:   k.createdAt,
+      })),
       pagination: {
-        total: parseInt(countRows[0]?.count || '0', 10),
+        total: count,
         limit,
         offset,
-        hasMore: offset + rows.length < parseInt(countRows[0]?.count || '0', 10),
+        hasMore: offset + rows.length < count,
       },
     });
   } catch (error) {
@@ -95,21 +119,20 @@ router.get('/', authMiddleware, requireRole('owner', 'admin', 'member'), async (
 router.delete('/:id', authMiddleware, requireRole('owner', 'admin'), async (req: Request, res: Response) => {
   try {
     const orgId = req.user?.orgId;
-    const { id } = req.params;
+    const id = req.params.id as string;
 
     if (!orgId) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
 
-    const result = await query<{ id: string }>(
-      `UPDATE api_keys SET revoked_at = NOW()
-       WHERE id = $1 AND org_id = $2 AND revoked_at IS NULL
-       RETURNING id`,
-      [id, orgId]
-    );
+    const [revoked] = await db
+      .update(apiKeys)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(apiKeys.id, id), eq(apiKeys.orgId, orgId), isNull(apiKeys.revokedAt)))
+      .returning({ id: apiKeys.id });
 
-    if (result.length === 0) {
+    if (!revoked) {
       res.status(404).json({ error: 'API key not found or already revoked' });
       return;
     }

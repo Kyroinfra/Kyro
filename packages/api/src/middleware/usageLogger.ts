@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
-import { query } from '../db';
+import { db } from '../db';
+import { usageLogs } from '../db/schema';
 import type { ApiKeyRequest } from '../middleware/apiKeyAuth';
 
 export function usageLoggerMiddleware(req: Request, res: Response, next: NextFunction): void {
@@ -16,11 +17,16 @@ export function usageLoggerMiddleware(req: Request, res: Response, next: NextFun
         const bytesIn = parseInt(req.headers['content-length'] as string || '0', 10);
         const bytesOut = res.getHeader('Content-Length') ? parseInt(res.getHeader('Content-Length') as string, 10) : 0;
 
-        await query(
-          `INSERT INTO usage_logs (org_id, api_key_id, endpoint, method, status_code, response_ms, bytes_in, bytes_out)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-          [orgId, apiKeyId, req.originalUrl || req.url, req.method, res.statusCode, responseTime, bytesIn, bytesOut]
-        );
+        await db.insert(usageLogs).values({
+          orgId:      orgId!, // set for every keyed route; absent → DB rejects, caught below
+          apiKeyId:   apiKeyId ?? null,
+          endpoint:   req.originalUrl || req.url,
+          method:     req.method,
+          statusCode: res.statusCode,
+          responseMs: responseTime,
+          bytesIn:    bytesIn,
+          bytesOut:   bytesOut,
+        });
       } catch (error) {
         console.error('Failed to log usage:', error);
       }

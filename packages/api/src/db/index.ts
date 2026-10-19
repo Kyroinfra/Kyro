@@ -1,9 +1,16 @@
 import { Pool } from 'pg';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import config from '../config';
-import type * as schema from './schema';
+import * as schema from './schema';
 
-const pool = new Pool({
+/**
+ * The one raw pg connection handle in the codebase.
+ *
+ * Per the Drizzle-everywhere rule (#26), ONLY the hybrid retrieval module
+ * (lib/retrieval.ts — the tsvector/vector-specific query) may import this.
+ * Everyone else goes through the typed `db` below.
+ */
+export const pool = new Pool({
   connectionString: config.databaseUrl,
   max: 20,
   idleTimeoutMillis: 30000,
@@ -14,21 +21,7 @@ pool.on('error', (err) => {
   console.error('Unexpected error on idle client', err);
 });
 
-export const db: NodePgDatabase<typeof schema> = drizzle(pool);
-
-export async function query<T = any>(text: string, params?: any[]): Promise<T[]> {
-  const result = await pool.query(text, params);
-  return result.rows as T[];
-}
-
-export async function queryOne<T = any>(text: string, params?: any[]): Promise<T | null> {
-  const rows = await query<T>(text, params);
-  return rows[0] || null;
-}
-
-export async function getClient() {
-  return pool.connect();
-}
+export const db: NodePgDatabase<typeof schema> = drizzle(pool, { schema });
 
 export async function healthCheck(): Promise<boolean> {
   try {
@@ -38,5 +31,3 @@ export async function healthCheck(): Promise<boolean> {
     return false;
   }
 }
-
-export default pool;

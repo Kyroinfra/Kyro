@@ -35,9 +35,14 @@
 //   only genuinely similar chunks (distance < threshold) enter RRF. Chunks
 //   that are too far from the query vector are excluded before ranking.
 //   The BM25 arm is unaffected — it already self-filters via @@ tsquery.
+//
+// NOTE — this is the ONLY module permitted to use the raw pg handle (see the
+// comment in db/index.ts): the RRF SQL is tsvector/vector-specific and is not
+// expressible with the Drizzle query builder. Re-established as the explicit
+// whitelist by #26.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import pool from '../db';
+import { pool } from '../db';
 import config from '../config';
 import { embedQuery } from './embeddings';
 import { rerank, type RerankCandidate } from './rerank';

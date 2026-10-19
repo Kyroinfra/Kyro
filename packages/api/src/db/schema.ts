@@ -10,7 +10,6 @@ import {
   date,
   index,
   uniqueIndex,
-  serial,
   integer,
   boolean,
   customType,
@@ -37,12 +36,6 @@ const vector = customType<{ data: number[]; driverData: string }>({
 });
 
 // ── Tables ─────────────────────────────────────────────────────────────────────
-
-export const migrations = pgTable('_migrations', {
-  id:    serial('id').primaryKey(),
-  name:  varchar('name', { length: 255 }).notNull(),
-  runAt: timestamp('run_at').defaultNow(),
-});
 
 export const organisations = pgTable('organisations', {
   id:        uuid('id').defaultRandom().primaryKey(),

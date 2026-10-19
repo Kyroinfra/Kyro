@@ -1,5 +1,7 @@
 import { Router, type Request, type Response } from 'express';
-import { query, getClient } from '../../db';
+import { db } from '../../db';
+import { organisations, users } from '../../db/schema';
+import { eq, sql } from 'drizzle-orm';
 import { hashPassword, verifyPassword } from '../../lib/password';
 import { signJWT } from '../../lib/auth';
 import { authMiddleware } from '../../middleware/auth';
@@ -16,12 +18,12 @@ function generateSlug(name: string): string {
 }
 
 async function findUniqueSlug(slug: string): Promise<string> {
-  const existing = await query<{ id: string }>(
-    'SELECT id FROM organisations WHERE slug = $1',
-    [slug]
-  );
+  const [existing] = await db
+    .select({ id: organisations.id })
+    .from(organisations)
+    .where(eq(organisations.slug, slug));
 
-  if (existing.length === 0) {
+  if (!existing) {
     return slug;
   }
 
@@ -33,10 +35,10 @@ router.post('/register', async (req: Request, res: Response) => {
   try {
     const input = registerSchema.parse(req.body) as RegisterInput;
 
-    const existingUser = await query<{ id: string }>(
-      'SELECT id FROM users WHERE email = $1',
-      [input.email]
-    );
+    const existingUser = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, input.email));
 
     if (existingUser.length > 0) {
       return res.status(400).json({ error: 'Email already registered' });
@@ -47,46 +49,36 @@ router.post('/register', async (req: Request, res: Response) => {
 
     const passwordHash = await hashPassword(input.password);
 
-    const client = await getClient();
+    // Org + owner user are created atomically.
+    const { user, orgId } = await db.transaction(async (tx) => {
+      const [org] = await tx
+        .insert(organisations)
+        .values({ name: input.orgName, slug })
+        .returning({ id: organisations.id });
 
-    try {
-      await client.query('BEGIN');
+      const [newUser] = await tx
+        .insert(users)
+        .values({ orgId: org.id, email: input.email, passwordHash, role: 'owner' })
+        .returning({ id: users.id, email: users.email, role: users.role });
 
-      const orgResult = await client.query(
-        'INSERT INTO organisations (name, slug) VALUES ($1, $2) RETURNING id',
-        [input.orgName, slug]
-      );
-      const orgId = orgResult.rows[0].id;
+      return { user: newUser, orgId: org.id };
+    });
 
-      const userResult = await client.query(
-        'INSERT INTO users (org_id, email, password_hash, role) VALUES ($1, $2, $3, \'owner\') RETURNING id, email, role',
-        [orgId, input.email, passwordHash]
-      );
+    const token = signJWT({
+      userId: user.id,
+      orgId: orgId,
+      role: user.role as 'owner' | 'admin' | 'member',
+    });
 
-      await client.query('COMMIT');
-
-      const user = userResult.rows[0];
-      const token = signJWT({
-        userId: user.id,
-        orgId: orgId,
+    res.status(201).json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
         role: user.role,
-      });
-
-      res.status(201).json({
-        token,
-        user: {
-          id: user.id,
-          email: user.email,
-          role: user.role,
-          orgId: orgId,
-        },
-      });
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
-    }
+        orgId: orgId,
+      },
+    });
   } catch (error: any) {
     if (error.name === 'ZodError') {
       return res.status(400).json({ error: 'Invalid input', details: error.errors });
@@ -102,24 +94,22 @@ router.post('/login', async (req: Request, res: Response) => {
   try {
     const input = loginSchema.parse(req.body) as LoginInput;
 
-    const users = await query<{
-      id: string;
-      org_id: string;
-      email: string;
-      password_hash: string;
-      role: string;
-    }>(
-      `SELECT u.id, u.org_id, u.email, u.password_hash, u.role 
-       FROM users u WHERE u.email = $1`,
-      [input.email]
-    );
+    const [user] = await db
+      .select({
+        id:           users.id,
+        orgId:        users.orgId,
+        email:        users.email,
+        passwordHash: users.passwordHash,
+        role:         users.role,
+      })
+      .from(users)
+      .where(eq(users.email, input.email));
 
-    if (users.length === 0) {
+    if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const user = users[0];
-    const valid = await verifyPassword(input.password, user.password_hash);
+    const valid = await verifyPassword(input.password, user.passwordHash);
 
     if (!valid) {
       return res.status(401).json({ error: 'Invalid credentials' });
@@ -127,7 +117,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
     const token = signJWT({
       userId: user.id,
-      orgId: user.org_id,
+      orgId: user.orgId,
       role: user.role as 'owner' | 'admin' | 'member',
     });
 
@@ -137,7 +127,7 @@ router.post('/login', async (req: Request, res: Response) => {
         id: user.id,
         email: user.email,
         role: user.role,
-        orgId: user.org_id,
+        orgId: user.orgId,
       },
     });
   } catch (error: any) {
@@ -153,26 +143,25 @@ router.post('/login', async (req: Request, res: Response) => {
 
 router.get('/me', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const users = await query<{
-      id: string;
-      email: string;
-      role: string;
-      org_id: string;
-    }>(
-      'SELECT id, email, role, org_id FROM users WHERE id = $1',
-      [req.user!.userId]
-    );
+    const [user] = await db
+      .select({
+        id:    users.id,
+        email: users.email,
+        role:  users.role,
+        orgId: users.orgId,
+      })
+      .from(users)
+      .where(eq(users.id, req.user!.userId));
 
-    if (users.length === 0) {
+    if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const user = users[0];
     res.json({
       id: user.id,
       email: user.email,
       role: user.role,
-      orgId: user.org_id,
+      orgId: user.orgId,
     });
   } catch (error) {
     console.error('Get me error:', error);
@@ -181,13 +170,11 @@ router.get('/me', authMiddleware, async (req: Request, res: Response) => {
 });
 
 
-// routes/v1/auth.ts — add this route
 router.get('/setup-status', async (req: Request, res: Response) => {
 	try {
-		const result = await query<{ count: string }>(
-			'SELECT COUNT(*) as count FROM organisations'
-		);
-		const count = parseInt(result[0]?.count || '0', 10);
+		const [{ count }] = await db
+			.select({ count: sql<number>`COUNT(*)`.mapWith(Number) })
+			.from(organisations);
 		res.json({ configured: count > 0 });
 	} catch {
 		res.status(500).json({ configured: false });

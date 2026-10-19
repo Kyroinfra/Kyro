@@ -14,16 +14,15 @@
 // Each key becomes a correlated EXISTS sub-select, which Postgres can satisfy
 // using the idx_file_metadata_org_key_value covering index.
 //
-// NOTE on ANY() binding:
-// Drizzle's sql`` tag binds array values as scalar parameters, which causes
-// Postgres to reject ANY(($N)::text[]) when $N arrives as a plain string.
-// The fix is to inline the array as a literal ARRAY['v1','v2'] directly in
-// the SQL string rather than binding it as a parameter. Values are sanitised
-// by escaping single quotes (doubling them) before inlining — the standard
-// SQL escaping approach. Keys are always bound as parameters.
-// ─────────────────────────────────────────────────────────────────────────────
+// Fully Drizzle: keys and values are bound as parameters (inArray generates a
+// param list — the old hand-rolled `ARRAY['...']` literal + quote-escaping
+// hack is gone). Slated for deletion in #38 anyway, which moves metadata to a
+// jsonb column on files.
+// ────────────────────────────────────────────────────────────────────────────
 
-import pool from '../db';
+import { db } from '../db';
+import { files, fileMetadata } from '../db/schema';
+import { eq, and, exists, inArray, sql, type SQL } from 'drizzle-orm';
 
 /**
  * Returns the IDs of all non-deleted files in `orgId` that match every
@@ -44,44 +43,30 @@ export async function resolveMetadataFilter(
     return [];
   }
 
-  // $1 is always orgId. Keys are bound as subsequent parameters so they are
-  // never interpolated into the SQL string. Values are inlined as ARRAY
-  // literals because pg's wire protocol does not have a native array binding
-  // that works with ANY() when the client sends a plain string scalar.
-  const params: unknown[] = [orgId];
-
-  const existsClauses = entries.map(([key, val]) => {
+  // One EXISTS per key — ANDed at the top level; multiple values per key are
+  // matched with an IN list (values are bound as parameters, never inlined).
+  const keyConditions: SQL[] = entries.map(([key, val]) => {
     const values = Array.isArray(val) ? val : [val];
 
-    // Escape single quotes in each value by doubling them — this is the
-    // standard SQL string literal escaping rule and is safe here because
-    // the value is always wrapped in single quotes in the ARRAY literal.
-    const arrayLiteral = `ARRAY[${
-      values.map(v => `'${String(v).replace(/'/g, '\'\'')}'`).join(', ')
-    }]`;
-
-    // Bind the key as a parameter — never interpolate user-supplied key names.
-    params.push(key);
-    const P_KEY = params.length;
-
-    return `EXISTS (
-      SELECT 1
-      FROM   file_metadata fm
-      WHERE  fm.file_id = f.id
-        AND  fm.org_id  = $1
-        AND  fm.key     = $${P_KEY}
-        AND  fm.value   = ANY(${arrayLiteral})
-    )`;
+    return exists(
+      db
+        .select({ one: sql`1` })
+        .from(fileMetadata)
+        .where(
+          and(
+            eq(fileMetadata.fileId, files.id),
+            eq(fileMetadata.orgId, orgId),
+            eq(fileMetadata.key, key),
+            inArray(fileMetadata.value, values),
+          ),
+        ),
+    );
   });
 
-  const querySql = `
-    SELECT f.id
-    FROM   files f
-    WHERE  f.org_id     = $1
-      AND  f.deleted_at IS NULL
-      AND  ${existsClauses.join('\n      AND  ')}
-  `;
+  const rows = await db
+    .select({ id: files.id })
+    .from(files)
+    .where(and(eq(files.orgId, orgId), ...keyConditions));
 
-  const result = await pool.query<{ id: string }>(querySql, params);
-  return result.rows.map(r => r.id);
+  return rows.map(r => r.id);
 }

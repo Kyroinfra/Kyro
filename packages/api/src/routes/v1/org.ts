@@ -1,5 +1,7 @@
 import { Router, type Request, type Response } from 'express';
-import { query } from '../../db';
+import { db } from '../../db';
+import { organisations, users } from '../../db/schema';
+import { eq, and, sql } from 'drizzle-orm';
 import { hashPassword } from '../../lib/password';
 import { authMiddleware, requireRole } from '../../middleware/auth';
 import { inviteSchema, type InviteInput } from '../../validations/auth';
@@ -10,26 +12,25 @@ const router = Router();
 
 router.get('/', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const orgs = await query<{
-      id: string;
-      name: string;
-      slug: string;
-      created_at: string;
-    }>(
-      'SELECT id, name, slug, created_at FROM organisations WHERE id = $1',
-      [req.user!.orgId]
-    );
+    const [org] = await db
+      .select({
+        id:        organisations.id,
+        name:      organisations.name,
+        slug:      organisations.slug,
+        createdAt: organisations.createdAt,
+      })
+      .from(organisations)
+      .where(eq(organisations.id, req.user!.orgId));
 
-    if (orgs.length === 0) {
+    if (!org) {
       return res.status(404).json({ error: 'Organisation not found' });
     }
 
-    const org = orgs[0];
     res.json({
       id: org.id,
       name: org.name,
       slug: org.slug,
-      createdAt: org.created_at,
+      createdAt: org.createdAt,
     });
   } catch (error) {
     console.error('Get org error:', error);
@@ -44,22 +45,32 @@ router.get('/members', authMiddleware, async (req: Request, res: Response) => {
     const limit = Math.min(parseInt(req.query.limit as string || '50', 10), 100);
     const offset = Math.max(parseInt(req.query.offset as string || '0', 10), 0);
 
-    const [rows, countRows] = await Promise.all([
-      query<{ id: string; email: string; role: string; created_at: string }>(
-        `SELECT id, email, role, created_at FROM users
-         WHERE org_id = $1 ORDER BY created_at LIMIT $2 OFFSET $3`,
-        [req.user!.orgId, limit, offset]
-      ),
-      query<{ count: string }>('SELECT COUNT(*) as count FROM users WHERE org_id = $1', [req.user!.orgId]),
+    const [rows, [{ count }]] = await Promise.all([
+      db
+        .select({
+          id:        users.id,
+          email:     users.email,
+          role:      users.role,
+          createdAt: users.createdAt,
+        })
+        .from(users)
+        .where(eq(users.orgId, req.user!.orgId))
+        .orderBy(users.createdAt)
+        .limit(limit)
+        .offset(offset),
+      db
+        .select({ count: sql<number>`COUNT(*)`.mapWith(Number) })
+        .from(users)
+        .where(eq(users.orgId, req.user!.orgId)),
     ]);
 
     res.json({
-      data: rows.map(u => ({ id: u.id, email: u.email, role: u.role, createdAt: u.created_at })),
+      data: rows,
       pagination: {
-        total: parseInt(countRows[0]?.count || '0', 10),
+        total: count,
         limit,
         offset,
-        hasMore: offset + rows.length < parseInt(countRows[0]?.count || '0', 10),
+        hasMore: offset + rows.length < count,
       },
     });
   } catch (error) {
@@ -68,29 +79,28 @@ router.get('/members', authMiddleware, async (req: Request, res: Response) => {
   }
 });
 
-// POST /members - invites/creates a member with a password 
+// POST /members - invites/creates a member with a password
 
 router.post('/members', authMiddleware, requireRole('owner'), async (req: Request, res: Response) => {
   try {
     const input = inviteSchema.parse(req.body) as InviteInput;
 
-    const existing = await query<{ id: string }>(
-      'SELECT id FROM users WHERE email = $1',
-      [input.email]
-    );
+    const [existing] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, input.email));
 
-    if (existing.length > 0) {
+    if (existing) {
       return res.status(400).json({ error: 'Email already in use' });
     }
 
     const passwordHash = await hashPassword(input.password);
 
-    const result = await query<{ id: string; email: string; role: string }>(
-      'INSERT INTO users (org_id, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, email, role',
-      [req.user!.orgId, input.email, passwordHash, input.role]
-    );
+    const [user] = await db
+      .insert(users)
+      .values({ orgId: req.user!.orgId, email: input.email, passwordHash, role: input.role })
+      .returning({ id: users.id, email: users.email, role: users.role });
 
-    const user = result[0];
     res.status(201).json({
       id: user.id,
       email: user.email,
@@ -109,18 +119,16 @@ router.post('/members', authMiddleware, requireRole('owner'), async (req: Reques
 
 router.delete('/members/:id', authMiddleware, requireRole('owner', 'admin'), async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
 
-    const members = await query<{ id: string; role: string }>(
-      'SELECT id, role FROM users WHERE id = $1 AND org_id = $2',
-      [id, req.user!.orgId]
-    );
+    const [member] = await db
+      .select({ id: users.id, role: users.role })
+      .from(users)
+      .where(and(eq(users.id, id), eq(users.orgId, req.user!.orgId)));
 
-    if (members.length === 0) {
+    if (!member) {
       return res.status(404).json({ error: 'Member not found' });
     }
-
-    const member = members[0];
 
     if (member.role === 'owner') {
       return res.status(403).json({ error: 'Cannot remove owner' });
@@ -130,7 +138,7 @@ router.delete('/members/:id', authMiddleware, requireRole('owner', 'admin'), asy
       return res.status(403).json({ error: 'Cannot remove admin' });
     }
 
-    await query('DELETE FROM users WHERE id = $1', [id]);
+    await db.delete(users).where(eq(users.id, id));
 
     res.status(204).send();
   } catch (error) {
