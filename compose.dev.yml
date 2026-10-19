@@ -29,7 +29,7 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - JWT_SECRET=${JWT_SECRET:-dev-secret}
       - UPLOAD_DIR=/app/uploads
-      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
+      - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text}
       - CHAT_MODEL=${CHAT_MODEL:-llama3.2}
     volumes:
@@ -45,6 +45,31 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      ollama:
+        condition: service_healthy
+    networks:
+      - kyro-net
+
+  # Containerized Ollama for the dev stack. Bind-mounts the host's existing
+  # model store read-only, so downloaded models are reused, never re-downloaded,
+  # and the host `ollama serve` config stays untouched (still binds 127.0.0.1).
+  # Blobs are content-addressed and immutable at inference time — sharing the
+  # store read-only between the host daemon and this container is safe, and
+  # models pulled via the host CLI appear here immediately.
+  # No ports published: reachable only from inside the compose network.
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      # Override via .env for installs that store models elsewhere
+      # (e.g. user-installed Ollama uses ~/.ollama/models).
+      - ${OLLAMA_MODELS_DIR:-/usr/share/ollama/.ollama/models}:/root/.ollama/models:ro
+    healthcheck:
+      test: ["CMD-SHELL", "ollama ls >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
     networks:
       - kyro-net
 
