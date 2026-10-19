@@ -15,7 +15,7 @@ export function getRedis(): Redis | null {
       connectTimeout: 5000,
       commandTimeout: 3000,
       retryStrategy(times: number) {
-        if (times > 3) return null;
+        if (times > 3) {return null;}
         return Math.min(times * 500, 2000);
       },
     });
@@ -68,7 +68,7 @@ export async function closeRedis(): Promise<void> {
 export async function healthCheck(): Promise<boolean> {
   try {
     const r = getRedis();
-    if (!r) return false;
+    if (!r) {return false;}
     const result = await Promise.race([
       r.ping(),
       new Promise<string>((_, reject) =>

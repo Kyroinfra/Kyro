@@ -1,5 +1,5 @@
-import { Request, Response, NextFunction } from 'express';
-import { verifyJWT, JWTPayload } from '../lib/auth';
+import type { Request, Response, NextFunction } from 'express';
+import { verifyJWT, type JWTPayload } from '../lib/auth';
 
 declare global {
   namespace Express {
@@ -22,7 +22,7 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction) 
     const payload = verifyJWT(token);
     req.user = payload;
     next();
-  } catch (error) {
+  } catch {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 }

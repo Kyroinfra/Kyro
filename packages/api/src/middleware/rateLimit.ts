@@ -1,6 +1,6 @@
-import { RateLimiterRedis, RateLimiterMemory, RateLimiterRes } from 'rate-limiter-flexible';
+import { RateLimiterRedis, RateLimiterMemory, type RateLimiterRes } from 'rate-limiter-flexible';
 import { getRedis, isRedisAvailable } from '../db/redis';
-import { Request, Response, NextFunction } from 'express';
+import type { Request, Response, NextFunction } from 'express';
 
 let rateLimiter: RateLimiterRedis | RateLimiterMemory | null = null;
 let useMemoryFallback = false;
@@ -40,7 +40,7 @@ export function getRateLimiter(): RateLimiterRedis | RateLimiterMemory {
         duration: 60,
         blockDuration: 0,
       });
-    } catch (error) {
+    } catch {
       console.warn('Failed to create Redis rate limiter, using memory fallback');
       useMemoryFallback = true;
       rateLimiter = new RateLimiterMemory({

@@ -137,7 +137,7 @@ fs.writeFileSync(yamlPath, yaml.stringify(specs));
 
 const pathsCount = Object.keys(specs.paths || {}).length;
 
-console.log(`✅ OpenAPI spec generated:`);
+console.log('✅ OpenAPI spec generated:');
 console.log(`   - JSON: ${jsonPath}`);
 console.log(`   - YAML: ${yamlPath}`);
 console.log(`   - Paths: ${pathsCount}`);

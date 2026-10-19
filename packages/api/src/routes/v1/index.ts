@@ -4,7 +4,7 @@ import orgRouter from './org';
 import keysRouter from './keys';
 import filesRouter from './files';
 import usageRouter from './usage';
-import webhookRouter from './webhook'
+import webhookRouter from './webhook';
 import { usageLoggerMiddleware } from '../../middleware/usageLogger';
 import { rateLimitMiddleware } from '../../middleware/rateLimit';
 

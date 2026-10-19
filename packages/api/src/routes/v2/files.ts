@@ -1,8 +1,8 @@
-import { Router, Response } from 'express';
+import { Router, type Response } from 'express';
 import pool, { db } from '../../db';
 import { apiKeys, organisations, files, textExtractionJobs, fileMetadata } from '../../db/schema';
 import { eq, and, isNull, inArray, sql } from 'drizzle-orm';
-import { apiKeyAuthMiddleware, ApiKeyRequest, requireScope } from '../../middleware/apiKeyAuth';
+import { requireScope, type ApiKeyRequest } from '../../middleware/apiKeyAuth';
 import { upload } from '../../middleware/upload';
 import { saveFile, deleteFile, getFilePath } from '../../lib/storage';
 import { textExtractionQueue } from '../../lib/queue';

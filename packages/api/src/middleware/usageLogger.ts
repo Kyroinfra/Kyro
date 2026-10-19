@@ -1,6 +1,6 @@
-import { Request, Response, NextFunction } from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import { query } from '../db';
-import { ApiKeyRequest } from '../middleware/apiKeyAuth';
+import type { ApiKeyRequest } from '../middleware/apiKeyAuth';
 
 export function usageLoggerMiddleware(req: Request, res: Response, next: NextFunction): void {
   const startTime = Date.now();

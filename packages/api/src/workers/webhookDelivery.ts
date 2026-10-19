@@ -1,9 +1,9 @@
-import { Worker, UnrecoverableError } from 'bullmq';
+import { Worker } from 'bullmq';
 import { getBullMQRedis } from '../db/redis';
 import { db } from '../db';
 import { webhookDeliveries } from '../db/schema';
 import { eq, sql } from 'drizzle-orm';
-import { signPayload, WebhookPayload } from '../lib/webhook';
+import { signPayload, type WebhookPayload } from '../lib/webhook';
 
 interface DeliveryJobData {
   deliveryId: string;
@@ -80,7 +80,7 @@ async function start() {
   });
 
   worker.on('failed', async (job, error) => {
-    if (!job) return;
+    if (!job) {return;}
     const isFinal = job.attemptsMade >= (job.opts.attempts ?? 5);
     console.error(
       `Webhook: delivery ${job.data.deliveryId} attempt ${job.attemptsMade} failed: ${error.message}`,
@@ -107,4 +107,7 @@ async function start() {
   process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
-start();
+start().catch((err) => {
+  console.error('Fatal webhook worker error:', err);
+  process.exit(1);
+});

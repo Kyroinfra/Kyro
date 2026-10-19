@@ -132,7 +132,7 @@ export async function rerank<T extends RerankCandidate>(
 ): Promise<RerankResult<T>[]> {
   const { tolerateErrors = true } = opts;
 
-  if (candidates.length === 0) return [];
+  if (candidates.length === 0) {return [];}
 
   // Score candidates sequentially to avoid overwhelming Ollama.
   // Parallelism here would only help if Ollama is running on a GPU with enough

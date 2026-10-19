@@ -1,8 +1,8 @@
-import { Router, Request, Response } from 'express';
-import { query, getClient } from '../../db';
+import { Router, type Request, type Response } from 'express';
+import { query } from '../../db';
 import { hashPassword } from '../../lib/password';
 import { authMiddleware, requireRole } from '../../middleware/auth';
-import { inviteSchema, InviteInput } from '../../validations/auth';
+import { inviteSchema, type InviteInput } from '../../validations/auth';
 
 const router = Router();
 
@@ -17,7 +17,7 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
       plan: string;
       created_at: string;
     }>(
-      `SELECT id, name, slug, plan, created_at FROM organisations WHERE id = $1`,
+      'SELECT id, name, slug, plan, created_at FROM organisations WHERE id = $1',
       [req.user!.orgId]
     );
 
@@ -52,7 +52,7 @@ router.get('/members', authMiddleware, async (req: Request, res: Response) => {
          WHERE org_id = $1 ORDER BY created_at LIMIT $2 OFFSET $3`,
         [req.user!.orgId, limit, offset]
       ),
-      query<{ count: string }>(`SELECT COUNT(*) as count FROM users WHERE org_id = $1`, [req.user!.orgId]),
+      query<{ count: string }>('SELECT COUNT(*) as count FROM users WHERE org_id = $1', [req.user!.orgId]),
     ]);
 
     res.json({
@@ -88,7 +88,7 @@ router.post('/members', authMiddleware, requireRole('owner'), async (req: Reques
     const passwordHash = await hashPassword(input.password);
 
     const result = await query<{ id: string; email: string; role: string }>(
-      `INSERT INTO users (org_id, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, email, role`,
+      'INSERT INTO users (org_id, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, email, role',
       [req.user!.orgId, input.email, passwordHash, input.role]
     );
 

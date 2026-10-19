@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { db } from '../db';
 import { webhooks, webhookDeliveries, collectionFiles, collections, files } from '../db/schema';
-import { eq, and, inArray, notInArray } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { getWebhookDeliveryQueue } from './webhookQueue';
 
 export type WebhookEvent =
@@ -57,7 +57,7 @@ export async function dispatchWebhookEvent(
         .where(and(eq(webhooks.orgId, orgId), eq(webhooks.enabled, true)));
 
     for (const webhook of targets) {
-        if (!webhook.events.includes(event)) continue;
+        if (!webhook.events.includes(event)) {continue;}
 
         const [delivery] = await db
             .insert(webhookDeliveries)
@@ -102,7 +102,7 @@ export async function dispatchCollectionEmbeddingEvents(
         .from(collectionFiles)
         .where(eq(collectionFiles.fileId, fileId));
 
-    if (memberships.length === 0) return;
+    if (memberships.length === 0) {return;}
 
     const collectionIds = memberships.map(m => m.collectionId);
 
@@ -113,7 +113,7 @@ export async function dispatchCollectionEmbeddingEvents(
             .from(collections)
             .where(and(eq(collections.id, collectionId), eq(collections.orgId, orgId)));
 
-        if (!collection) continue;
+        if (!collection) {continue;}
 
         // 3. Load all files in this collection with their current embedding status
         const memberFiles = await db
@@ -132,9 +132,6 @@ export async function dispatchCollectionEmbeddingEvents(
                     //  should not be blocked waiting for them)
                 ),
             );
-
-        const SETTLED = ['completed', 'skipped', 'failed'] as const;
-        const IN_FLIGHT = ['pending', 'embedding'] as const;
 
         const statusCounts = {
             completed: 0,

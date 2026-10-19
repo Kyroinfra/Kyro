@@ -1,11 +1,10 @@
 // routes/v2/collections.ts
 
-import { Router, Response } from 'express';
-import { db } from '../../db';
-import pool from '../../db';
-import { collections, collectionFiles, files, apiKeys } from '../../db/schema';
+import { Router, type Response } from 'express';
+import pool, { db } from '../../db';
+import { collections, collectionFiles, apiKeys } from '../../db/schema';
 import { eq, and } from 'drizzle-orm';
-import { apiKeyAuthMiddleware, ApiKeyRequest, requireScope } from '../../middleware/apiKeyAuth';
+import { apiKeyAuthMiddleware, requireScope, type ApiKeyRequest } from '../../middleware/apiKeyAuth';
 import { z } from 'zod';
 
 const router = Router();
@@ -33,7 +32,7 @@ function toSlug(name: string): string {
     .substring(0, 100);
 }
 
-async function uniqueSlug(orgId: string, base: string, excludeId?: string): Promise<string> {
+async function uniqueSlug(orgId: string, base: string, _excludeId?: string): Promise<string> {
   const existing = await db
     .select({ slug: collections.slug })
     .from(collections)
@@ -42,7 +41,7 @@ async function uniqueSlug(orgId: string, base: string, excludeId?: string): Prom
   const taken = new Set(existing.map(r => r.slug));
   let slug = base;
   let i = 2;
-  while (taken.has(slug)) slug = `${base}-${i++}`;
+  while (taken.has(slug)) {slug = `${base}-${i++}`;}
   return slug;
 }
 
@@ -343,7 +342,7 @@ router.post('/:id/files', requireScope('write'), async (req: ApiKeyRequest, res:
     }
 
     const ownedFilesResult = await pool.query<{ id: string }>(
-      `SELECT id FROM files WHERE org_id = $1 AND id = ANY($2::uuid[]) AND deleted_at IS NULL`,
+      'SELECT id FROM files WHERE org_id = $1 AND id = ANY($2::uuid[]) AND deleted_at IS NULL',
       [orgId, parsed.data.fileIds],
     );
 

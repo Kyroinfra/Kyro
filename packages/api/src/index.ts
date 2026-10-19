@@ -44,5 +44,8 @@ async function start() {
   });
 }
 
-start();
+start().catch((err) => {
+  console.error('Fatal error:', err);
+  process.exit(1);
+});
 export default app;

@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, type Request, type Response } from 'express';
 import config from '../config';
 import { healthCheck as dbHealthCheck } from '../db';
 import { healthCheck as redisHealthCheck } from '../db/redis';
@@ -19,7 +19,7 @@ router.get('/', async (req: Request, res: Response) => {
   res.status(statusCode).json({
     status,
     uptime: Math.floor((Date.now() - startTime) / 1000),
-    test: "Kyro",
+    test: 'Kyro',
     timestamp: new Date().toISOString(),
     database: dbHealthy ? 'connected' : 'disconnected',
     redis: redisConfigured ? (redisHealthy ? 'connected' : 'disconnected') : 'optional',
