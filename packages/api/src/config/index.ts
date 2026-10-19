@@ -25,12 +25,6 @@ const configSchema = z.object({
   DATABASE_URL: z.string().min(1),
   JWT_SECRET: z.string().min(1),
 
-  /** Optional — rate limiting / queues degrade gracefully without it for now. */
-  REDIS_URL: z
-    .string()
-    .optional()
-    .transform((v) => v ?? ''),
-
   /** Storage root for uploaded files. */
   UPLOAD_DIR: z
     .string()
@@ -75,7 +69,6 @@ const config = {
   nodeEnv: env.NODE_ENV,
   databaseUrl: env.DATABASE_URL,
   jwtSecret: env.JWT_SECRET,
-  redisUrl: env.REDIS_URL,
   uploadDir: env.UPLOAD_DIR,
   ollamaUrl: env.OLLAMA_URL,
   embeddingModel: env.EMBEDDING_MODEL,

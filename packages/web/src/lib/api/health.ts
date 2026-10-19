@@ -3,10 +3,8 @@ import { request, ApiError } from './client';
 export interface HealthResponse {
 	status: 'ok' | 'degraded';
 	uptime: number;
-	test: string;
 	timestamp: string;
 	database: 'connected' | 'disconnected';
-	redis: 'connected' | 'disconnected';
 }
 
 export async function getHealth(): Promise<HealthResponse> {

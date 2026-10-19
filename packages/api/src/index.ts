@@ -7,6 +7,7 @@ import healthRouter from './routes/health';
 import v1Router from './routes/v1';
 import v2Router from './routes/v2';
 // import { runMigrations } from './db/migrate';
+import { recoverInterruptedPipelines } from './lib/pipeline';
 
 const app = express();
 
@@ -30,6 +31,8 @@ async function start() {
   //   console.error('Failed to run migrations:', error);
   //   process.exit(1);
   // }
+
+  await recoverInterruptedPipelines();
 
   const server = app.listen(config.port, () => {
     console.log(`[${config.nodeEnv}] Server running on port ${config.port}`);

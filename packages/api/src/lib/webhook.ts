@@ -1,8 +1,7 @@
-import crypto from 'crypto';
 import { db } from '../db';
 import { webhooks, webhookDeliveries, collectionFiles, collections, files } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
-import { getWebhookDeliveryQueue } from './webhookQueue';
+import { deliverWebhook } from './webhookDelivery';
 
 export type WebhookEvent =
     // ── Extraction ──────────────────────────────────────────────────────────
@@ -18,18 +17,6 @@ export type WebhookEvent =
     | 'collection.embedding_completed'   // all files in collection settled
     | 'collection.embedding_failed';
 
-export interface WebhookPayload {
-    id: string;           // delivery ID — consumer uses this to deduplicate
-    event: WebhookEvent;
-    createdAt: string;
-    data: Record<string, unknown>;
-}
-
-export function signPayload(secret: string, body: string): string {
-    return 'sha256=' + crypto.createHmac('sha256', secret).update(body).digest('hex');
-}
-
-
 /**
  * Enqueues a delivery job for every enabled webhook in the org that
  * subscribes to the given event.
@@ -40,12 +27,6 @@ export async function dispatchWebhookEvent(
     event: WebhookEvent,
     data: Record<string, unknown>,
 ): Promise<void> {
-    const queue = getWebhookDeliveryQueue();
-    if (!queue) {
-        console.warn(`Webhook dispatch skipped for ${event}: queue unavailable`);
-        return;
-    }
-
     const targets = await db
         .select({
             id: webhooks.id,
@@ -69,7 +50,7 @@ export async function dispatchWebhookEvent(
             })
             .returning({ id: webhookDeliveries.id });
 
-        await queue.add('deliver', {
+        deliverWebhook({
             deliveryId: delivery.id,
             webhookId: webhook.id,
             url: webhook.url,

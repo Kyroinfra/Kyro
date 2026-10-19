@@ -1,7 +1,6 @@
 import { extractPdf } from './pdf';
 import { extractDocx } from './docx';
 import { extractTxt } from './txt';
-import { UnrecoverableError } from 'bullmq';
 
 export const SUPPORTED_MIME_TYPES: Record<string, (filePath: string) => Promise<string>> = {
   'application/pdf': extractPdf,
@@ -15,7 +14,7 @@ export async function extractText(mimeType: string, filePath: string): Promise<s
   const extractor = SUPPORTED_MIME_TYPES[mimeType];
 
   if (!extractor) {
-    throw new UnrecoverableError(
+    throw new Error(
       `Unsupported file type: ${mimeType}. Supported types: PDF, DOCX, TXT`
     );
   }

@@ -5,9 +5,8 @@ import { eq, and, isNull, inArray, sql } from 'drizzle-orm';
 import { requireScope, type ApiKeyRequest } from '../../middleware/apiKeyAuth';
 import { upload } from '../../middleware/upload';
 import { saveFile, deleteFile, getFilePath } from '../../lib/storage';
-import { textExtractionQueue } from '../../lib/queue';
-import { extractText, SUPPORTED_MIME_TYPES_LIST } from '../../lib/extractors';
-import { isRedisAvailable } from '../../db/redis';
+import { SUPPORTED_MIME_TYPES_LIST } from '../../lib/extractors';
+import { runPipeline } from '../../lib/pipeline';
 import fs from 'fs';
 import { z } from 'zod';
 
@@ -84,47 +83,26 @@ router.post(
         return;
       }
 
-      if (isRedisAvailable()) {
-        const job = await db.transaction(async (tx) => {
-          const [newJob] = await tx
-            .insert(textExtractionJobs)
-            .values({ fileId: fileRecord.id, status: 'pending' })
-            .returning({ id: textExtractionJobs.id });
+      const [job] = await db
+        .insert(textExtractionJobs)
+        .values({ fileId: fileRecord.id, status: 'pending' })
+        .returning({ id: textExtractionJobs.id });
 
-          await tx
-            .update(files)
-            .set({ extractionJobId: newJob.id })
-            .where(eq(files.id, fileRecord.id));
+      await db
+        .update(files)
+        .set({ extractionJobId: job.id })
+        .where(eq(files.id, fileRecord.id));
 
-          return newJob;
-        });
+      runPipeline({
+        fileId:     fileRecord.id,
+        storageKey,
+        mimeType:   req.file.mimetype ?? '',
+        jobId:      job.id,
+        orgId,
+      });
 
-        await textExtractionQueue.add('extract', {
-          fileId:     fileRecord.id,
-          storageKey,
-          mimeType:   req.file.mimetype,
-          jobId:      job.id,
-          orgId,
-        });
-
-        res.status(201).json({ ...fileRecord, extractionStatus: 'pending' });
-        return;
-      }
-
-      try {
-        const filePath      = getFilePath(storageKey);
-        const extractedText = await extractText(req.file.mimetype ?? '', filePath);
-
-        await db
-          .update(files)
-          .set({ extractedText })
-          .where(eq(files.id, fileRecord.id));
-
-        res.status(201).json({ ...fileRecord, extractionStatus: 'completed', extractedText });
-      } catch (extractErr) {
-        console.error('Synchronous extraction failed:', extractErr);
-        res.status(201).json({ ...fileRecord, extractionStatus: 'failed' });
-      }
+      res.status(201).json({ ...fileRecord, extractionStatus: 'pending' });
+      return;
     } catch (error) {
       console.error('Error uploading file (v2):', error);
       res.status(500).json({ error: 'Failed to upload file' });
@@ -387,59 +365,45 @@ router.post('/:id/extract', requireScope('write'), async (req: ApiKeyRequest, re
       }
     }
 
-    if (isRedisAvailable()) {
-      const job = await db.transaction(async (tx) => {
-        const [newJob] = await tx
-          .insert(textExtractionJobs)
-          .values({ fileId: file.id, status: 'pending' })
-          .onConflictDoUpdate({
-            target: textExtractionJobs.fileId,
-            set: {
-              status:      'pending',
-              attempts:    0,
-              error:       null,
-              startedAt:   null,
-              completedAt: null,
-              createdAt:   new Date(),
-            },
-          })
-          .returning({ id: textExtractionJobs.id });
+    const job = await db.transaction(async (tx) => {
+      const [newJob] = await tx
+        .insert(textExtractionJobs)
+        .values({ fileId: file.id, status: 'pending' })
+        .onConflictDoUpdate({
+          target: textExtractionJobs.fileId,
+          set: {
+            status:      'pending',
+            attempts:    0,
+            error:       null,
+            startedAt:   null,
+            completedAt: null,
+            createdAt:   new Date(),
+          },
+        })
+        .returning({ id: textExtractionJobs.id });
 
-        await tx
-          .update(files)
-          .set({ extractionJobId: newJob.id })
-          .where(eq(files.id, file.id));
+      await tx
+        .update(files)
+        .set({ extractionJobId: newJob.id })
+        .where(eq(files.id, file.id));
 
-        return newJob;
-      });
+      return newJob;
+    });
 
-      await textExtractionQueue.add('extract', {
-        fileId:     file.id,
-        storageKey: file.storageKey,
-        mimeType:   file.mimeType,
-        jobId:      job.id,
-        orgId,
-      });
+    runPipeline({
+      fileId:     file.id,
+      storageKey: file.storageKey,
+      mimeType:   file.mimeType ?? '',
+      jobId:      job.id,
+      orgId,
+    });
 
-      res.status(202).json({
-        fileId:           file.id,
-        extractionStatus: 'pending',
-        message:          'Extraction queued. Poll GET /files/:id/text for status.',
-      });
-      return;
-    }
-
-    try {
-      const filePath      = getFilePath(file.storageKey);
-      const extractedText = await extractText(file.mimeType ?? '', filePath);
-
-      await db.update(files).set({ extractedText }).where(eq(files.id, file.id));
-
-      res.json({ fileId: file.id, extractionStatus: 'completed', extractedText });
-    } catch (extractErr) {
-      console.error('Synchronous extraction failed:', extractErr);
-      res.status(500).json({ error: 'Extraction failed', extractionStatus: 'failed' });
-    }
+    res.status(202).json({
+      fileId:           file.id,
+      extractionStatus: 'pending',
+      message:          'Extraction queued. Poll GET /files/:id/text for status.',
+    });
+    return;
   } catch (error) {
     console.error('Error triggering extraction (v2):', error);
     res.status(500).json({ error: 'Failed to trigger extraction' });
