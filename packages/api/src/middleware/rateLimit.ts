@@ -1,70 +1,60 @@
-import { RateLimiterRedis, RateLimiterMemory, type RateLimiterRes } from 'rate-limiter-flexible';
-import { getRedis, isRedisAvailable } from '../db/redis';
+/**
+ * In-memory sliding-window rate limiter.
+ *
+ * 100 requests per key per minute — the same budget the old Redis-backed
+ * limiter used. Per process by design: replicas do not share a budget
+ * (documented trade-off of the no-Redis architecture, RFC #49 decision).
+ */
 import type { Request, Response, NextFunction } from 'express';
 
-let rateLimiter: RateLimiterRedis | RateLimiterMemory | null = null;
-let useMemoryFallback = false;
+const WINDOW_MS = 60_000;
+const MAX_REQUESTS = 100;
+/** Prune stale keys opportunistically; the map is otherwise self-draining. */
+const PRUNE_THRESHOLD = 10_000;
 
-export function getRateLimiter(): RateLimiterRedis | RateLimiterMemory {
-  const redisAvailable = isRedisAvailable();
+const hits = new Map<string, number[]>();
 
-  if (useMemoryFallback) {
-    if (!rateLimiter || rateLimiter instanceof RateLimiterRedis) {
-      rateLimiter = new RateLimiterMemory({
-        keyPrefix: 'rl:',
-        points: 100,
-        duration: 60,
-      });
+let requestCount = 0;
+
+function pruneStale(now: number): void {
+  for (const [key, timestamps] of hits) {
+    while (timestamps.length > 0 && timestamps[0] <= now - WINDOW_MS) {
+      timestamps.shift();
     }
-    return rateLimiter;
-  }
-
-  if (!redisAvailable) {
-    console.warn('Redis unavailable, using memory rate limiter');
-    useMemoryFallback = true;
-    rateLimiter = new RateLimiterMemory({
-      keyPrefix: 'rl:',
-      points: 100,
-      duration: 60,
-    });
-    return rateLimiter;
-  }
-
-  if (!rateLimiter) {
-    try {
-      const redis = getRedis();
-      rateLimiter = new RateLimiterRedis({
-        storeClient: redis,
-        keyPrefix: 'rl:',
-        points: 100,
-        duration: 60,
-        blockDuration: 0,
-      });
-    } catch {
-      console.warn('Failed to create Redis rate limiter, using memory fallback');
-      useMemoryFallback = true;
-      rateLimiter = new RateLimiterMemory({
-        keyPrefix: 'rl:',
-        points: 100,
-        duration: 60,
-      });
+    if (timestamps.length === 0) {
+      hits.delete(key);
     }
   }
-  return rateLimiter;
 }
 
 export function rateLimitMiddleware(req: Request, res: Response, next: NextFunction): void {
   const key = (req as any).apiKeyId || req.ip || 'unknown';
-  const limiter = getRateLimiter();
+  const now = Date.now();
 
-  limiter.consume(key)
-    .then(() => {
-      next();
-    })
-    .catch((rejRes: RateLimiterRes) => {
-      res.status(429).json({
-        error: 'Too many requests',
-        retryAfter: rejRes.msBeforeNext / 1000,
-      });
+  requestCount++;
+  if (requestCount % 1000 === 0 && hits.size > PRUNE_THRESHOLD) {
+    pruneStale(now);
+  }
+
+  let timestamps = hits.get(key);
+  if (!timestamps) {
+    timestamps = [];
+    hits.set(key, timestamps);
+  }
+
+  while (timestamps.length > 0 && timestamps[0] <= now - WINDOW_MS) {
+    timestamps.shift();
+  }
+
+  if (timestamps.length >= MAX_REQUESTS) {
+    const retryAfterSec = Math.ceil((timestamps[0] + WINDOW_MS - now) / 1000);
+    res.status(429).json({
+      error: 'Too many requests',
+      retryAfter: retryAfterSec,
     });
+    return;
+  }
+
+  timestamps.push(now);
+  next();
 }

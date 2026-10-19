@@ -97,18 +97,6 @@
 					<p class="muted">PostgreSQL connection</p>
 				</div>
 			</Card>
-
-			<Card>
-				<div class="detail-card">
-					<h3>Redis</h3>
-					<p class="detail-value">
-						<Badge variant={health.redis === 'connected' ? 'success' : 'danger'}>
-							{health.redis}
-						</Badge>
-					</p>
-					<p class="muted">Redis connection</p>
-				</div>
-			</Card>
 		</div>
 	{/if}
 </div>
