@@ -18,7 +18,6 @@ export const load: PageServerLoad = async ({ locals }) => {
 				id: org.id,
 				name: org.name,
 				slug: org.slug,
-				plan: org.plan,
 				createdAt: org.createdAt
 			},
 			members: members.map(m => ({

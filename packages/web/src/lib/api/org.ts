@@ -4,7 +4,6 @@ export interface Org {
 	id: string;
 	name: string;
 	slug: string;
-	plan: string;
 	createdAt: string;
 }
 
@@ -41,7 +40,6 @@ export async function getOrg(token: string): Promise<Org> {
 		id: string;
 		name: string;
 		slug: string;
-		plan: string;
 		createdAt: string;
 	}>('/api/v1/org', { method: 'GET', token });
 
@@ -49,7 +47,6 @@ export async function getOrg(token: string): Promise<Org> {
 		id: data.id,
 		name: data.name,
 		slug: data.slug,
-		plan: data.plan,
 		createdAt: data.createdAt
 	};
 }

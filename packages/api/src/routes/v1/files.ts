@@ -1,11 +1,12 @@
 import { Router, type Response } from 'express';
 import fs from 'node:fs';
 import { db } from '../../db';
-import { apiKeys, organisations, files } from '../../db/schema';
+import { apiKeys, files } from '../../db/schema';
 import { eq, and, isNull, sql } from 'drizzle-orm';
 import { apiKeyAuthMiddleware, requireScope, type ApiKeyRequest } from '../../middleware/apiKeyAuth';
 import { upload } from '../../middleware/upload';
 import { saveFile, deleteFile, getFilePath } from '../../lib/storage';
+import config from '../../config';
 
 const router = Router();
 
@@ -28,20 +29,19 @@ router.post('/', requireScope('write'), upload.single('file'), async (req: ApiKe
       .where(eq(apiKeys.id, apiKeyId));
     const userId = keyResult[0]?.userId;
 
-    const orgResult = await db.select({ storageLimit: organisations.storageLimit })
-      .from(organisations)
-      .where(eq(organisations.id, orgId));
-    const storageLimit = orgResult[0]?.storageLimit || 1073741824;
-
-    const usageResult = await db.select({
-      used: sql`COALESCE(SUM(${files.sizeBytes}), 0)`.mapWith(Number)
-    })
+    // Deployment-wide disk-safety cap from config — not a per-org quota.
+    const [storageRow] = await db
+      .select({ used: sql`COALESCE(SUM(${files.sizeBytes}), 0)`.mapWith(Number) })
       .from(files)
-      .where(and(eq(files.orgId, orgId), isNull(files.deletedAt)));
-    const usedStorage = usageResult[0]?.used || 0;
+      .where(isNull(files.deletedAt));
+    const usedStorage = storageRow?.used ?? 0;
 
-    if (usedStorage + req.file.size > storageLimit) {
-      res.status(403).json({ error: 'Storage quota exceeded' });
+    if (usedStorage + req.file.size > config.storageLimit) {
+      res.status(507).json({
+        error:      'Storage limit reached',
+        limitBytes: config.storageLimit,
+        usedBytes:  usedStorage,
+      });
       return;
     }
 

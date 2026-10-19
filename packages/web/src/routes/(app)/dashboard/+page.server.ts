@@ -31,7 +31,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 				totalBytesOut: usage.total_bytes_out,
 				activeApiKeys: activeKeys.length,
 				totalMembers: members.length,
-				storageLimit: 1073741824 // 1 GB default; shown as context
+				storageLimit: usage.storage_limit // deployment cap from the API
 			},
 			recentKeys: keys.slice(0, 4).map(k => ({
 				id: k.id,
@@ -58,7 +58,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 				totalBytesOut: 0,
 				activeApiKeys: 0,
 				totalMembers: 1,
-				storageLimit: 1073741824
+				storageLimit: 10737418240 // 10 GiB default cap; matches API STORAGE_LIMIT default
 			},
 			recentKeys: [],
 			members: []

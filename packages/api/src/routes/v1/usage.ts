@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { query } from '../../db';
 import { authMiddleware } from '../../middleware/auth';
+import config from '../../config';
 
 const router = Router();
 
@@ -68,6 +69,7 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
       total_bytes_out: parseInt(usageResult[0]?.total_bytes_out || '0', 10),
       total_storage: parseInt(storageResult[0]?.total_storage || '0', 10),
       active_api_keys: parseInt(apiKeysResult[0]?.active_keys || '0', 10),
+      storage_limit: config.storageLimit,
     });
   } catch (error) {
     console.error('Error getting usage:', error);

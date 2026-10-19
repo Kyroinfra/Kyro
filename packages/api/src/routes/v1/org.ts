@@ -14,10 +14,9 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
       id: string;
       name: string;
       slug: string;
-      plan: string;
       created_at: string;
     }>(
-      'SELECT id, name, slug, plan, created_at FROM organisations WHERE id = $1',
+      'SELECT id, name, slug, created_at FROM organisations WHERE id = $1',
       [req.user!.orgId]
     );
 
@@ -30,7 +29,6 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
       id: org.id,
       name: org.name,
       slug: org.slug,
-      plan: org.plan,
       createdAt: org.created_at,
     });
   } catch (error) {

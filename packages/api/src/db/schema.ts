@@ -45,12 +45,10 @@ export const migrations = pgTable('_migrations', {
 });
 
 export const organisations = pgTable('organisations', {
-  id:           uuid('id').defaultRandom().primaryKey(),
-  name:         varchar('name', { length: 255 }).notNull(),
-  slug:         varchar('slug', { length: 100 }).notNull().unique(),
-  plan:         varchar('plan', { length: 50 }).default('free'),
-  storageLimit: bigint('storage_limit', { mode: 'number' }).default(1073741824),
-  createdAt:    timestamp('created_at').defaultNow(),
+  id:        uuid('id').defaultRandom().primaryKey(),
+  name:      varchar('name', { length: 255 }).notNull(),
+  slug:      varchar('slug', { length: 100 }).notNull().unique(),
+  createdAt: timestamp('created_at').defaultNow(),
 });
 
 export const users = pgTable('users', {

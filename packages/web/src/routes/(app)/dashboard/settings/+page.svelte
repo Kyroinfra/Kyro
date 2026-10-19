@@ -14,7 +14,6 @@
         id: string;
         name: string;
         slug: string;
-        plan: string;
         createdAt: string;
       } | null;
       members: Array<{
@@ -97,10 +96,6 @@
           <div class="org-field">
             <label>Slug</label>
             <span>{org.slug}</span>
-          </div>
-          <div class="org-field">
-            <label>Plan</label>
-            <Badge>{org.plan}</Badge>
           </div>
           <div class="org-field">
             <label>Created</label>

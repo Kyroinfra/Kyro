@@ -59,7 +59,6 @@ const options: swaggerJsdoc.Options = {
             id: { type: 'string', format: 'uuid' },
             name: { type: 'string' },
             slug: { type: 'string' },
-            plan: { type: 'string', enum: ['free', 'pro', 'enterprise'] },
             createdAt: { type: 'string', format: 'date-time' }
           }
         },
@@ -92,7 +91,8 @@ const options: swaggerJsdoc.Options = {
             total_bytes_in: { type: 'integer' },
             total_bytes_out: { type: 'integer' },
             total_storage: { type: 'integer' },
-            active_api_keys: { type: 'integer' }
+            active_api_keys: { type: 'integer' },
+            storage_limit: { type: 'integer' }
           }
         },
         Member: {
