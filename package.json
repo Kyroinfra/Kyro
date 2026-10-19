@@ -1,6 +1,7 @@
 {
   "name": "kyro",
   "private": true,
+  "packageManager": "pnpm@11.28.4",
   "scripts": {
     "generate:openapi": "pnpm --filter kyro-api generate:openapi",
     "dev:api": "pnpm --filter kyro-api dev",
