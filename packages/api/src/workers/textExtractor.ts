@@ -10,6 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { Worker, UnrecoverableError } from 'bullmq';
+import config from '../config';
 import { db } from '../db';
 import { files, textExtractionJobs } from '../db/schema';
 import { eq, inArray, sql } from 'drizzle-orm';
@@ -89,12 +90,12 @@ async function processTextExtractionJob(job: { data: TextExtractionJobData; atte
   console.log(`Worker: Text extraction completed for file ${fileId} (${extractedText.length} chars)`);
 
   // ── Step 2: Embed chunks ───────────────────────────────────────────────────
-  // FIX: skip whenever OLLAMA_URL is not set — not just in production.
-  // Previously `!process.env.OLLAMA_URL && process.env.NODE_ENV === 'production'`
-  // meant dev without Ollama would still try to call http://localhost:11434
-  // and silently fail, leaving embeddingStatus as 'failed'.
-  if (!process.env.OLLAMA_URL) {
-    console.warn(`Worker: OLLAMA_URL not set — skipping embedding for file ${fileId}`);
+  // Skip whenever RAG is disabled (OLLAMA_URL unset) — not just in production.
+  // Previously the guard was the OLLAMA_URL check ANDed with production NODE_ENV,
+  // which meant dev without Ollama would still try to hit
+  // http://localhost:11434 and silently fail, leaving embeddingStatus 'failed'.
+  if (!config.ragEnabled) {
+    console.warn(`Worker: RAG disabled (OLLAMA_URL not set) — skipping embedding for file ${fileId}`);
     await db.update(files)
       .set({ embeddingStatus: 'skipped' })
       .where(eq(files.id, fileId));

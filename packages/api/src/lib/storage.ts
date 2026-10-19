@@ -1,8 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
+import config from '../config';
 
-const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(process.cwd(), 'uploads');
+const UPLOAD_DIR = config.uploadDir;
 
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });

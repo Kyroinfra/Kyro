@@ -14,7 +14,7 @@ export default tseslint.config(
           // tests/ uses tsconfig.test.json (not referenced by the primary
           // tsconfig.json) and root-level config files live outside any
           // tsconfig — give both a default project without type-lookup pain.
-          allowDefaultProject: ['*.ts', 'tests/unit/*.ts'],
+          allowDefaultProject: ['*.ts', 'tests/*.ts', 'tests/unit/*.ts'],
         },
         tsconfigRootDir: import.meta.dirname,
       },
