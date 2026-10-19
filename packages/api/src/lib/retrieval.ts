@@ -38,6 +38,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import pool from '../db';
+import config from '../config';
 import { embedQuery } from './embeddings';
 import { rerank, type RerankCandidate } from './rerank';
 
@@ -62,7 +63,7 @@ const RERANK_INPUT_LIMIT = 50;
 // 0.5 is a deliberately generous cutoff — it admits anything with any
 // directional similarity while excluding pure noise. Tighten to 0.3–0.4
 // if you want stricter relevance filtering.
-const VECTOR_DISTANCE_THRESHOLD = 0.5;
+const VECTOR_DISTANCE_THRESHOLD = config.vectorDistanceThreshold;
 
 // ── Shared result shape ───────────────────────────────────────────────────────
 
@@ -249,7 +250,7 @@ export async function hybridSearch(opts: HybridSearchOptions): Promise<Retrieval
 
   if (candidates.length === 0) {return [];}
 
-  if (!process.env.OLLAMA_URL) {
+  if (!config.ragEnabled) {
     return candidates.slice(0, limit);
   }
 

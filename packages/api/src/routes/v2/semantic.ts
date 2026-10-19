@@ -43,8 +43,9 @@ router.use((req, res, next) => {
   next();
 });
 
-const OLLAMA_URL = process.env.OLLAMA_URL ?? 'http://localhost:11434';
-const CHAT_MODEL = process.env.CHAT_MODEL ?? 'llama3.2';
+import config from '../../config';
+
+const { ollamaUrl: OLLAMA_URL, chatModel: CHAT_MODEL, ragEnabled: RAG_ENABLED } = config;
 
 // ── Helper: resolve a collection to its file IDs ──────────────────────────────
 
@@ -89,7 +90,7 @@ router.get('/semantic-search', requireScope('read'), async (req: ApiKeyRequest, 
       return;
     }
 
-    if (!process.env.OLLAMA_URL) {
+    if (!RAG_ENABLED) {
       res.status(400).json({ error: 'OLLAMA_URL must be configured for semantic search' });
       return;
     }
@@ -183,7 +184,7 @@ router.post('/ask', requireScope('read'), async (req: ApiKeyRequest, res: Respon
       return;
     }
 
-    if (!process.env.OLLAMA_URL) {
+    if (!RAG_ENABLED) {
       res.status(400).json({ error: 'OLLAMA_URL must be configured to use the /ask endpoint' });
       return;
     }
@@ -412,7 +413,7 @@ router.post('/:id/embed', requireScope('write'), async (req: ApiKeyRequest, res:
     const orgId = req.orgId!;
     const id    = req.params.id as string;
 
-    if (!process.env.OLLAMA_URL) {
+    if (!RAG_ENABLED) {
       res.status(400).json({ error: 'OLLAMA_URL must be configured to use embeddings' });
       return;
     }

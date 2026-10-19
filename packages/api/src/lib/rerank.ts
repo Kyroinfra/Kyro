@@ -28,8 +28,9 @@
 //   after the fast hybrid stage has already narrowed the field.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const OLLAMA_URL    = process.env.OLLAMA_URL    ?? 'http://localhost:11434';
-const RERANK_MODEL  = process.env.RERANK_MODEL  ?? 'llama3.2';
+import config from '../config';
+
+const { ollamaUrl: OLLAMA_URL, rerankModel: RERANK_MODEL } = config;
 
 // How many characters of a chunk to send to the cross-encoder.
 // Longer = more accurate but slower. 512 chars (~128 tokens) is a good default.

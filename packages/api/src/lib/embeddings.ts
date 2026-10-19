@@ -8,7 +8,8 @@
 //     embedOne) are unchanged.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import pool, { db } from '../db';import { fileChunks, files } from '../db/schema';
+import pool, { db } from '../db';
+import { fileChunks, files } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import {
   dispatchWebhookEvent,
@@ -18,8 +19,8 @@ import { hybridSearch } from './retrieval';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const OLLAMA_URL      = process.env.OLLAMA_URL      ?? 'http://localhost:11434';
-const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL ?? 'nomic-embed-text';
+import config from '../config';
+const { ollamaUrl: OLLAMA_URL, embeddingModel: EMBEDDING_MODEL } = config;
 
 // Chunking thresholds (characters, not tokens)
 const CHUNK_TARGET_CHARS  = 1200; // aim for this size per chunk
