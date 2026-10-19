@@ -1,5 +1,6 @@
 import multer from 'multer';
 import type { Request } from 'express';
+import { createError } from './errorHandler';
 
 const storage = multer.memoryStorage();
 
@@ -25,7 +26,9 @@ const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilt
   if (allowedMimes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Invalid file type'));
+    // Typed error with statusCode 415 — surfaces through multer's next(err)
+    // into errorHandler as 415, not 500.
+    cb(createError(`Unsupported file type: ${file.mimetype}`, 415));
   }
 };
 
