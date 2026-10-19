@@ -1,8 +1,7 @@
-import { Router, Response, Request } from 'express';
+import { Router, type Request, type Response } from 'express';
 import { query } from '../../db';
 import { generateApiKey } from '../../lib/apiKey';
-import { authMiddleware } from '../../middleware/auth';
-import { requireRole } from '../../middleware/auth';
+import { authMiddleware, requireRole } from '../../middleware/auth';
 import { z } from 'zod';
 
 const router = Router();
@@ -73,7 +72,7 @@ router.get('/', authMiddleware, requireRole('owner', 'admin', 'member'), async (
          ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
         [orgId, limit, offset]
       ),
-      query<{ count: string }>(`SELECT COUNT(*) as count FROM api_keys WHERE org_id = $1`, [orgId]),
+      query<{ count: string }>('SELECT COUNT(*) as count FROM api_keys WHERE org_id = $1', [orgId]),
     ]);
 
     res.json({

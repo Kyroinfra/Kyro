@@ -1,6 +1,5 @@
-import { Queue, QueueOptions } from 'bullmq';
-import { getRedis, isRedisAvailable } from '../db/redis';
-import { getBullMQRedis } from '../db/redis';
+import { Queue, type QueueOptions } from 'bullmq';
+import { isRedisAvailable, getBullMQRedis } from '../db/redis';
 
 let queueInstance: Queue | null = null;
 

@@ -143,7 +143,7 @@ async function start() {
   });
 
   worker.on('failed', async (job, error) => {
-    if (!job) return;
+    if (!job) {return;}
     const maxAttempts = job.opts.attempts ?? 3;
     const isFinal     = job.attemptsMade >= maxAttempts;
 
@@ -186,4 +186,7 @@ async function start() {
   process.on('SIGINT',  () => shutdown('SIGINT'));
 }
 
-start();
+start().catch((err) => {
+  console.error('Fatal worker error:', err);
+  process.exit(1);
+});

@@ -26,13 +26,11 @@
 //     unchanged.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { Router, Response } from 'express';
+import { Router, type Response } from 'express';
 import { db } from '../../db';
-import pool from '../../db';
-import { collections, collectionFiles } from '../../db/schema';
-import { files, fileChunks } from '../../db/schema';
+import { collections, collectionFiles, files } from '../../db/schema';
 import { eq, and, isNull, inArray } from 'drizzle-orm';
-import { ApiKeyRequest, requireScope } from '../../middleware/apiKeyAuth';
+import { requireScope, type ApiKeyRequest } from '../../middleware/apiKeyAuth';
 import { embedFile } from '../../lib/embeddings';
 import { hybridSearch } from '../../lib/retrieval';
 import { z } from 'zod';
@@ -59,7 +57,7 @@ async function resolveCollectionToFileIds(
     .from(collections)
     .where(and(eq(collections.id, collectionId), eq(collections.orgId, orgId)));
 
-  if (!col) return null;
+  if (!col) {return null;}
 
   const rows = await db
     .select({ fileId: collectionFiles.fileId })
@@ -354,18 +352,18 @@ Rules:
 
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {break;}
 
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split('\n');
           buffer = lines.pop() ?? '';
 
           for (const line of lines) {
-            if (!line.trim()) continue;
+            if (!line.trim()) {continue;}
             try {
               const json = JSON.parse(line) as { message?: { content?: string }; done?: boolean };
-              if (json.message?.content) sendEvent({ type: 'chunk', text: json.message.content });
-              if (json.done) sendEvent({ type: 'done' });
+              if (json.message?.content) {sendEvent({ type: 'chunk', text: json.message.content });}
+              if (json.done) {sendEvent({ type: 'done' });}
             } catch { /* malformed line — skip */ }
           }
         }
@@ -373,7 +371,7 @@ Rules:
         if (buffer.trim()) {
           try {
             const json = JSON.parse(buffer) as { message?: { content?: string } };
-            if (json.message?.content) sendEvent({ type: 'chunk', text: json.message.content });
+            if (json.message?.content) {sendEvent({ type: 'chunk', text: json.message.content });}
           } catch { /* ignore */ }
         }
 

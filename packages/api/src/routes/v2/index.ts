@@ -11,7 +11,6 @@ import collectionsRouter  from './collections';
 import { usageLoggerMiddleware } from '../../middleware/usageLogger';
 import { apiKeyAuthMiddleware } from '../../middleware/apiKeyAuth';
 import { rateLimitMiddleware }   from '../../middleware/rateLimit';
-import { authMiddleware } from '../../middleware/auth';
 
 const v2Router = Router();
 
@@ -20,7 +19,7 @@ v2Router.use('/org',      orgRouter);
 v2Router.use('/keys',     keysRouter);
 v2Router.use('/usage',    usageRouter);
 v2Router.use('/webhooks', webhookRouter);
-v2Router.use('/collections', collectionsRouter)
+v2Router.use('/collections', collectionsRouter);
 
 
 v2Router.use((req, res, next) => {

@@ -1,11 +1,10 @@
 import { Queue } from 'bullmq';
-import { getBullMQRedis } from '../db/redis';
-import { isRedisAvailable } from '../db/redis';
+import { getBullMQRedis, isRedisAvailable } from '../db/redis';
 
 let queueInstance: Queue | null = null;
 
 export function getWebhookDeliveryQueue(): Queue | null {
-  if (!isRedisAvailable()) return null;
+  if (!isRedisAvailable()) {return null;}
 
   if (!queueInstance) {
     queueInstance = new Queue('webhook-delivery', {

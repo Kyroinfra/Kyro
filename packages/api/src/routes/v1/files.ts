@@ -1,8 +1,9 @@
-import { Router, Response, Request } from 'express';
+import { Router, type Response } from 'express';
+import fs from 'node:fs';
 import { db } from '../../db';
 import { apiKeys, organisations, files } from '../../db/schema';
 import { eq, and, isNull, sql } from 'drizzle-orm';
-import { apiKeyAuthMiddleware, ApiKeyRequest, requireScope } from '../../middleware/apiKeyAuth';
+import { apiKeyAuthMiddleware, requireScope, type ApiKeyRequest } from '../../middleware/apiKeyAuth';
 import { upload } from '../../middleware/upload';
 import { saveFile, deleteFile, getFilePath } from '../../lib/storage';
 
@@ -158,7 +159,7 @@ router.get('/:id', requireScope('read'), async (req: ApiKeyRequest, res: Respons
     res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
     res.setHeader('Content-Length', file.sizeBytes);
 
-    const stream = require('fs').createReadStream(filePath);
+    const stream = fs.createReadStream(filePath);
     stream.pipe(res);
   } catch (error) {
     console.error('Error downloading file:', error);

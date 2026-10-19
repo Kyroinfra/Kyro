@@ -1,9 +1,9 @@
-import { Router, Request, Response } from 'express';
+import { Router, type Request, type Response } from 'express';
 import { query, getClient } from '../../db';
 import { hashPassword, verifyPassword } from '../../lib/password';
 import { signJWT } from '../../lib/auth';
 import { authMiddleware } from '../../middleware/auth';
-import { registerSchema, loginSchema, RegisterInput, LoginInput } from '../../validations/auth';
+import { registerSchema, loginSchema, type RegisterInput, type LoginInput } from '../../validations/auth';
 
 const router = Router();
 
@@ -53,13 +53,13 @@ router.post('/register', async (req: Request, res: Response) => {
       await client.query('BEGIN');
 
       const orgResult = await client.query(
-        `INSERT INTO organisations (name, slug) VALUES ($1, $2) RETURNING id`,
+        'INSERT INTO organisations (name, slug) VALUES ($1, $2) RETURNING id',
         [input.orgName, slug]
       );
       const orgId = orgResult.rows[0].id;
 
       const userResult = await client.query(
-        `INSERT INTO users (org_id, email, password_hash, role) VALUES ($1, $2, $3, 'owner') RETURNING id, email, role`,
+        'INSERT INTO users (org_id, email, password_hash, role) VALUES ($1, $2, $3, \'owner\') RETURNING id, email, role',
         [orgId, input.email, passwordHash]
       );
 
@@ -159,7 +159,7 @@ router.get('/me', authMiddleware, async (req: Request, res: Response) => {
       role: string;
       org_id: string;
     }>(
-      `SELECT id, email, role, org_id FROM users WHERE id = $1`,
+      'SELECT id, email, role, org_id FROM users WHERE id = $1',
       [req.user!.userId]
     );
 

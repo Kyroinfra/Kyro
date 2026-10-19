@@ -1,7 +1,6 @@
 import type { Config } from 'jest';
 
 const config: Config = {
-  preset: 'ts-jest',
   testEnvironment: 'node',
   roots: ['<rootDir>/tests'],
   testMatch: ['**/*.test.ts'],
@@ -10,10 +9,8 @@ const config: Config = {
     'src/**/*.ts',
     '!src/index.ts'
   ],
-  globals: {
-    'ts-jest': {
-      tsconfig: 'tsconfig.test.json'
-    }
+  transform: {
+    '^.+\\.ts$': ['ts-jest', { tsconfig: 'tsconfig.test.json' }]
   }
 };
 

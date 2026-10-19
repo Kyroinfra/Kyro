@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, type Request, type Response } from 'express';
 import { db } from '../../db';
 import { webhooks, webhookDeliveries } from '../../db/schema';
 import { eq, and, desc } from 'drizzle-orm';

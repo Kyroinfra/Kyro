@@ -57,7 +57,7 @@ export async function resolveMetadataFilter(
     // standard SQL string literal escaping rule and is safe here because
     // the value is always wrapped in single quotes in the ARRAY literal.
     const arrayLiteral = `ARRAY[${
-      values.map(v => `'${String(v).replace(/'/g, "''")}'`).join(', ')
+      values.map(v => `'${String(v).replace(/'/g, '\'\'')}'`).join(', ')
     }]`;
 
     // Bind the key as a parameter — never interpolate user-supplied key names.

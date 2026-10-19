@@ -1,4 +1,3 @@
-import fs from 'fs';
 import mammoth from 'mammoth';
 
 export async function extractDocx(filePath: string): Promise<string> {

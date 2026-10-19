@@ -8,9 +8,7 @@
 //     embedOne) are unchanged.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { db } from '../db';
-import pool from '../db';            // raw pg Pool (default export)
-import { fileChunks, files } from '../db/schema';
+import pool, { db } from '../db';import { fileChunks, files } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import {
   dispatchWebhookEvent,
@@ -40,7 +38,7 @@ export interface TextChunk {
 }
 
 export function chunkText(text: string): TextChunk[] {
-  if (!text.trim()) return [];
+  if (!text.trim()) {return [];}
 
   // ── 1. Split on paragraph boundaries ──────────────────────────────────────
   // Handles \n\n, \r\n\r\n, or any line that is entirely whitespace.
@@ -89,7 +87,7 @@ export function chunkText(text: string): TextChunk[] {
 
     for (const sentence of sentences) {
       const s = sentence.trim();
-      if (!s) continue;
+      if (!s) {continue;}
 
       if (current.length > 0 && current.length + 1 + s.length > CHUNK_TARGET_CHARS) {
         sized.push(current.trim());
@@ -228,7 +226,7 @@ export async function embedFile(opts: EmbedFileOptions): Promise<EmbedFileResult
   });
 
   // ── Embed in batches ───────────────────────────────────────────────────────
-  let allEmbeddings: number[][] = [];
+  const allEmbeddings: number[][] = [];
   try {
     for (let i = 0; i < chunks.length; i += EMBED_BATCH_SIZE) {
       const batch      = chunks.slice(i, i + EMBED_BATCH_SIZE);

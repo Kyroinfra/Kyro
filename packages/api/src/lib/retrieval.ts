@@ -38,8 +38,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import pool from '../db';
-import { rerank, RerankCandidate } from './rerank';
 import { embedQuery } from './embeddings';
+import { rerank, type RerankCandidate } from './rerank';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -247,7 +247,7 @@ export async function hybridSearch(opts: HybridSearchOptions): Promise<Retrieval
     minScore: minRrfScore,
   });
 
-  if (candidates.length === 0) return [];
+  if (candidates.length === 0) {return [];}
 
   if (!process.env.OLLAMA_URL) {
     return candidates.slice(0, limit);
