@@ -119,7 +119,7 @@
           <span class="bracket">[</span><span class="value">{formatBytes(data.stats.totalStorage)}</span><span class="bracket">]</span>
         </div>
         <div class="stat-sub storage-sub" style="color: {storageColor}">
-          {storageUsedPct}% of {formatBytes(data.stats.storageLimit)} used
+          {storageUsedPct}% of the {formatBytes(data.stats.storageLimit)} deployment cap
         </div>
         <div class="storage-bar">
           <div class="storage-fill" style="width: {storageUsedPct}%; background: {storageColor}"></div>
@@ -213,7 +213,7 @@
           </div>
           <div class="storage-footer">
             <span class="storage-pct" style="color: {storageColor}">{storageUsedPct}% used</span>
-            <span class="storage-free">{formatBytes(data.stats.storageLimit - data.stats.totalStorage)} free</span>
+            <span class="storage-free">{formatBytes(Math.max(0, data.stats.storageLimit - data.stats.totalStorage))} left of cap</span>
           </div>
         </div>
       </div>

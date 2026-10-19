@@ -33,7 +33,6 @@ export interface OrgResponse {
 	id: string;
 	name: string;
 	slug: string;
-	plan: string;
 }
 
 export async function register(data: RegisterInput): Promise<AuthResponse> {

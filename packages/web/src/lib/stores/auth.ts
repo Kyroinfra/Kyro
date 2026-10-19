@@ -8,14 +8,12 @@ export interface User {
 	role: UserRole;
 	orgId: string;
 	orgName?: string;
-	plan?: string;
 }
 
 export interface Org {
 	id: string;
 	name: string;
 	slug: string;
-	plan: string;
 }
 
 export const user = writable<User | null>(null);

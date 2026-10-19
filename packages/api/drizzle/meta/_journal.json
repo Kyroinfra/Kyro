@@ -57,6 +57,13 @@
       "when": 1780990459407,
       "tag": "0007_dizzy_titania",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792419748452,
+      "tag": "0008_drop-saas-columns",
+      "breakpoints": true
     }
   ]
 }

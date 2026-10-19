@@ -49,6 +49,17 @@ const configSchema = z.object({
   RERANK_ENABLED: booleanish,
   /** Max cosine distance for a chunk to enter the vector arm of RRF. */
   VECTOR_DISTANCE_THRESHOLD: z.coerce.number().gte(0).default(0.5),
+
+  /**
+   * Deployment-wide storage cap in bytes — a disk-safety net, not a billing
+   * quota. Applies across all organisations; uploads are rejected (507) once
+   * total stored bytes reach it. Default 10 GiB.
+   */
+  STORAGE_LIMIT: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(10_737_418_240),
 });
 
 const parsed = configSchema.safeParse(process.env);
@@ -77,6 +88,7 @@ const config = {
   rerankModel: env.RERANK_MODEL,
   rerankEnabled: env.RERANK_ENABLED,
   vectorDistanceThreshold: env.VECTOR_DISTANCE_THRESHOLD,
+  storageLimit: env.STORAGE_LIMIT,
 
   /** Derived: RAG features (embedding, semantic search, ask) are active. */
   ragEnabled: env.OLLAMA_URL !== '',

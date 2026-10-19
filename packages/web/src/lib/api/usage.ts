@@ -6,6 +6,7 @@ export interface UsageStats {
 	total_bytes_out: number;
 	total_storage: number;
 	active_api_keys: number;
+	storage_limit: number;
 }
 
 export interface DailyUsage {
