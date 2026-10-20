@@ -7,7 +7,6 @@ import {
   text,
   timestamp,
   bigint,
-  date,
   index,
   uniqueIndex,
   integer,

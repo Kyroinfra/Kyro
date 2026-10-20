@@ -10,8 +10,7 @@
  * `../db` is mocked to capture inserts; the captured buffer is cleared
  * between tests via the mock's own control surface.
  */
-import express from 'express';
-import type { Express } from 'express';
+import express, { type Express } from 'express';
 import type { Server } from 'http';
 import { usageLoggerMiddleware } from '../../src/middleware/usageLogger';
 
@@ -50,7 +49,7 @@ const dbControl = async (): Promise<DbControl> => {
   return m as DbControl;
 };
 
-const settle = (ms = 30) => new Promise((r) => setTimeout(r, ms));
+const settle = (ms = 75) => new Promise((r) => setTimeout(r, ms));
 
 let app: Express;
 let server: Server;
@@ -73,8 +72,11 @@ beforeEach(async () => {
 afterEach(
   () =>
     new Promise<void>((resolve) => {
-      if (server) server.close(() => resolve());
-      else resolve();
+      if (server) {
+        server.close(() => resolve());
+      } else {
+        resolve();
+      }
     }),
 );
 
