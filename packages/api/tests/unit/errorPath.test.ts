@@ -44,7 +44,7 @@ describe('async route rejections reach the error handler (Express 5 forwarding)'
     expect(res.body.error.message).toBeDefined();
   });
 
-  it('requests with no token still get an explicit 401 (no crash path change)', async () => {
+  it('requests with no credentials still get an explicit 401 (no crash path change)', async () => {
     const { default: request } = await import('supertest');
 
     const res = await request(app)
@@ -52,7 +52,7 @@ describe('async route rejections reach the error handler (Express 5 forwarding)'
       .send({});
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toBe('No token provided');
+    expect(res.body.error).toBe('Authentication required');
   });
 
   it('unknown route stays 404 via notFoundHandler (single error path intact)', async () => {

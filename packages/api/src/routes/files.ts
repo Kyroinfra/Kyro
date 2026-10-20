@@ -1,8 +1,8 @@
 import { Router, type Response } from 'express';
 import { db } from '../db';
-import { apiKeys, files, textExtractionJobs, fileMetadata } from '../db/schema';
+import { files, textExtractionJobs, fileMetadata } from '../db/schema';
 import { eq, and, isNull, inArray, sql } from 'drizzle-orm';
-import { requireScope, type ApiKeyRequest } from '../middleware/apiKeyAuth';
+import { requireScope, resolveUserId, type AuthedRequest } from '../middleware/auth';
 import { upload } from '../middleware/upload';
 import { saveFile, deleteFile, getFilePath } from '../lib/storage';
 import { SUPPORTED_MIME_TYPES_LIST } from '../lib/extractors';
@@ -22,20 +22,22 @@ router.post(
   '/',
   requireScope('write'),
   upload.single('file'),
-  async (req: ApiKeyRequest, res: Response) => {
-    const orgId    = req.orgId!;
-    const apiKeyId = req.apiKeyId!;
+  async (req: AuthedRequest, res: Response) => {
+    const orgId = req.orgId!;
 
     if (!req.file) {
       res.status(400).json({ error: 'No file uploaded' });
       return;
     }
 
-    const keyResult = await db
-      .select({ userId: apiKeys.userId })
-      .from(apiKeys)
-      .where(eq(apiKeys.id, apiKeyId));
-    const userId = keyResult[0]?.userId;
+    // Works for both credentials: session JWTs attribute directly, API keys
+    // attribute to the key's owning user.
+    const userId = await resolveUserId(req);
+
+    if (!userId) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
 
     // Deployment-wide disk-safety cap from config — not a per-org quota.
     const [storageRow] = await db
@@ -109,7 +111,7 @@ router.post(
 
 // ── GET / — list files ────────────────────────────────────────────────────────
 
-router.get('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
+router.get('/', requireScope('read'), async (req: AuthedRequest, res: Response) => {
   const orgId  = req.orgId!;
   const limit  = Math.min(parseInt((req.query.limit as string) || '100', 10), 100);
   const cursor = req.query.cursor as string | undefined;
@@ -186,7 +188,7 @@ router.get('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) 
 // IMPORTANT: /:id/text, /:id/metadata*, /:id/reprocess and /:id/embed must all
 // be registered BEFORE /:id, otherwise Express matches /:id first.
 
-router.get('/:id/text', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
+router.get('/:id/text', requireScope('read'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
   const id    = req.params.id as string;
 
@@ -237,7 +239,7 @@ router.get('/:id/text', requireScope('read'), async (req: ApiKeyRequest, res: Re
 // Queues extraction (and the pipeline continues into embedding) again for an
 // already-uploaded file. Fine-grained scoping (e.g. embed-only) is #33's job.
 
-router.post('/:id/reprocess', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
+router.post('/:id/reprocess', requireScope('write'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
   const id    = req.params.id as string;
 
@@ -318,7 +320,7 @@ router.post('/:id/reprocess', requireScope('write'), async (req: ApiKeyRequest, 
 
 // ── GET /:id/metadata ─────────────────────────────────────────────────────────
 
-router.get('/:id/metadata', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
+router.get('/:id/metadata', requireScope('read'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
   const id    = req.params.id as string;
 
@@ -346,7 +348,7 @@ router.get('/:id/metadata', requireScope('read'), async (req: ApiKeyRequest, res
 // Upserts metadata keys. Non-destructive: keys not present in the body are
 // left untouched. Send { "key": null } via DELETE /:id/metadata/:key to remove.
 
-router.put('/:id/metadata', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
+router.put('/:id/metadata', requireScope('write'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
   const id    = req.params.id as string;
 
@@ -389,7 +391,7 @@ router.put('/:id/metadata', requireScope('write'), async (req: ApiKeyRequest, re
 
 // ── DELETE /:id/metadata/:key ─────────────────────────────────────────────────
 
-router.delete('/:id/metadata/:key', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
+router.delete('/:id/metadata/:key', requireScope('write'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
   const { id, key } = req.params as { id: string; key: string };
 
@@ -419,7 +421,7 @@ router.delete('/:id/metadata/:key', requireScope('write'), async (req: ApiKeyReq
 
 // ── POST /:id/embed ───────────────────────────────────────────────────────────
 
-router.post('/:id/embed', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
+router.post('/:id/embed', requireScope('write'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
   const id    = req.params.id as string;
 
@@ -461,7 +463,7 @@ router.post('/:id/embed', requireScope('write'), async (req: ApiKeyRequest, res:
 
 // ── GET /:id ──────────────────────────────────────────────────────────────────
 
-router.get('/:id', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
+router.get('/:id', requireScope('read'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
   const id    = req.params.id as string;
 
@@ -498,7 +500,7 @@ router.get('/:id', requireScope('read'), async (req: ApiKeyRequest, res: Respons
 
 // ── DELETE /:id ───────────────────────────────────────────────────────────────
 
-router.delete('/:id', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
+router.delete('/:id', requireScope('write'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
   const id    = req.params.id as string;
 

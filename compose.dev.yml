@@ -82,7 +82,8 @@ services:
       - PORT=3001
       - JWT_SECRET=${JWT_SECRET:-dev-secret}
       - INTERNAL_API_URL=http://api:3000
-      - PUBLIC_API_URL=http://localhost:3000
+      # PUBLIC_API_URL stays UNSET: the browser goes same-origin through the
+      # SvelteKit catch-all proxy at /api (cors removed, #29).
     volumes:
       - ./packages/web/src:/app/packages/web/src
       - ./packages/web/static:/app/packages/web/static
