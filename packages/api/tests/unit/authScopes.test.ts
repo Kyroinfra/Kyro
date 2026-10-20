@@ -6,14 +6,14 @@
  * DB-backed credential paths (JWT lookup, API-key hash) are covered by the
  * live stack sweep, since no unit harness has a real Postgres.
  */
+import type { Response } from 'express';
 import { scopesForRole, requireScope, type AuthedRequest } from '../../src/middleware/auth';
 
-function mockRes() {
-  const res: any = {
+function mockRes(): Response {
+  return {
     status: jest.fn().mockReturnThis(),
     json: jest.fn().mockReturnThis(),
-  };
-  return res;
+  } as unknown as Response;
 }
 
 describe('scopesForRole (role read from the DB, not the token)', () => {
