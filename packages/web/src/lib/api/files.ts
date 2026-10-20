@@ -23,6 +23,7 @@ export interface UploadResponse {
 	mimeType: string;
 	sizeBytes: number;
 	createdAt: string;
+	status: FileStatus;
 }
 
 export interface PaginatedFiles {
@@ -95,7 +96,8 @@ export async function uploadFile(
 					name: data.name,
 					mimeType: data.mimeType,
 					sizeBytes: data.sizeBytes,
-					createdAt: data.createdAt
+					createdAt: data.createdAt,
+					status: data.status
 				});
 			} else {
 				try {
@@ -128,11 +130,11 @@ export function getDownloadUrl(id: string, apiKey: string): string {
 // ── Extracted-text / enrichment endpoints (former files-v2.ts) ───────────────
 // All paths are the single /api/v1 surface since the v1/v2 flatten (#28).
 
-export type ExtractionStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
-export type EmbeddingStatus = 'pending' | 'embedding' | 'completed' | 'failed' | 'skipped';
+// One pipeline status (#33): the file's whole ingest position.
+export type FileStatus = 'pending' | 'processing' | 'ready' | 'failed' | 'skipped';
 
 export type FileItemV2 = FileItem & {
-	extractionStatus: ExtractionStatus;
+	status: FileStatus;
 };
 
 export interface PaginatedFilesV2 {
@@ -163,7 +165,7 @@ export async function getFilesV2(
 
 export interface ExtractedTextResponse {
 	fileId: string;
-	extractionStatus: ExtractionStatus;
+	status: FileStatus;
 	extractedText: string | null;
 	error?: string;
 }
@@ -172,23 +174,13 @@ export async function getFileText(apiKey: string, id: string): Promise<Extracted
 	return request<ExtractedTextResponse>(`/api/v1/files/${id}/text`, { method: 'GET', apiKey });
 }
 
+// POST /files/:id/reprocess — re-runs the whole pipeline (extract → embed).
+// The separate /:id/embed step is gone with the second status (#33).
 export async function triggerExtraction(
 	apiKey: string,
 	id: string
-): Promise<{ fileId: string; extractionStatus: ExtractionStatus; message?: string; extractedText?: string }> {
-	// POST /files/:id/reprocess — renamed from /:id/extract in #28 (#33 scopes
-	// fine-grained reprocessing variants).
+): Promise<{ fileId: string; status: FileStatus; message?: string }> {
 	return request(`/api/v1/files/${id}/reprocess`, { method: 'POST', apiKey });
-}
-
-export interface EmbedResponse {
-	fileId: string;
-	embeddingStatus: EmbeddingStatus;
-	chunksCreated: number;
-}
-
-export async function embedFileV2(apiKey: string, id: string): Promise<EmbedResponse> {
-	return request<EmbedResponse>(`/api/v1/files/${id}/embed`, { method: 'POST', apiKey });
 }
 
 export async function getFileMetadata(

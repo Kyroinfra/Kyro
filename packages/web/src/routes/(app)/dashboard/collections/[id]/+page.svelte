@@ -179,9 +179,9 @@
   }
 
   function embedBadgeVariant(status: string): "success" | "warning" | "danger" | "default" {
-    if (status === "completed") return "success";
+    if (status === "ready") return "success";
     if (status === "failed") return "danger";
-    if (status === "pending" || status === "embedding") return "warning";
+    if (status === "pending" || status === "processing") return "warning";
     return "default";
   }
 </script>
@@ -287,8 +287,8 @@
                   <div class="file-info">
                     <div class="file-name-row">
                       <span class="file-name">{file.name}</span>
-                      <Badge variant={embedBadgeVariant(file.embeddingStatus)}>
-                        {file.embeddingStatus}
+                      <Badge variant={embedBadgeVariant(file.status)}>
+                        {file.status}
                       </Badge>
                     </div>
                     <div class="file-meta">

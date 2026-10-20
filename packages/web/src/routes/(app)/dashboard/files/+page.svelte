@@ -17,10 +17,9 @@
   } from "$lib/api/files";
   import {
     getFilesV2,
-    embedFileV2,
     triggerExtraction,
     type FileItemV2,
-    type ExtractionStatus,
+    type FileStatus,
   } from "$lib/api/files";
   import { getCollections, addFilesToCollection, type Collection } from "$lib/api/collections";
 
@@ -50,11 +49,7 @@
   let dragOver = $state(false);
   let uploadError = $state<string | null>(null);
 
-  // Embedding state, keyed by file id
-  let embedding = $state<Record<string, boolean>>({});
-  let embedResult = $state<Record<string, string>>({});
-
-  // Re-extract state
+  // Reprocess state, keyed by file id (one pipeline, one status — #33)
   let extracting = $state<Record<string, boolean>>({});
 
   // Add-to-collection modal
@@ -163,7 +158,7 @@
           mimeType: uploaded.mimeType,
           sizeBytes: uploaded.sizeBytes,
           createdAt: uploaded.createdAt,
-          extractionStatus: "pending",
+          status: uploaded.status,
         },
         ...files,
       ];
@@ -213,30 +208,19 @@
     window.open(getDownloadUrl(file.id, $apiKey), "_blank");
   }
 
-  async function handleExtract(file: FileItemV2) {
+  async function handleReprocess(file: FileItemV2) {
     extracting = { ...extracting, [file.id]: true };
     try {
       const result = await triggerExtraction($apiKey, file.id);
       files = files.map((f) =>
-        f.id === file.id ? { ...f, extractionStatus: result.extractionStatus } : f,
+        f.id === file.id ? { ...f, status: result.status } : f,
       );
+      // The pipeline is async — poll once for the settled status.
+      setTimeout(refreshFiles, 1500);
     } catch (error: any) {
-      console.error("Extraction failed:", error);
+      console.error("Reprocess failed:", error);
     } finally {
       extracting = { ...extracting, [file.id]: false };
-    }
-  }
-
-  async function handleEmbed(file: FileItemV2) {
-    embedding = { ...embedding, [file.id]: true };
-    try {
-      const result = await embedFileV2($apiKey, file.id);
-      embedResult = { ...embedResult, [file.id]: result.embeddingStatus };
-    } catch (error: any) {
-      embedResult = { ...embedResult, [file.id]: "failed" };
-      console.error("Embedding failed:", error);
-    } finally {
-      embedding = { ...embedding, [file.id]: false };
     }
   }
 
@@ -276,9 +260,9 @@
     }
   }
 
-  function extractionBadgeVariant(status: ExtractionStatus): "default" | "success" | "warning" | "danger" | "info" {
+  function statusBadgeVariant(status: FileStatus): "default" | "success" | "warning" | "danger" | "info" {
     switch (status) {
-      case "completed": return "success";
+      case "ready": return "success";
       case "failed": return "danger";
       case "pending":
       case "processing": return "warning";
@@ -377,14 +361,9 @@
                 <div class="file-info">
                   <div class="file-name-row">
                     <span class="file-name">{file.name}</span>
-                    <Badge variant={extractionBadgeVariant(file.extractionStatus)}>
-                      {file.extractionStatus}
+                    <Badge variant={statusBadgeVariant(file.status)}>
+                      {file.status}
                     </Badge>
-                    {#if embedResult[file.id]}
-                      <Badge variant={embedResult[file.id] === 'completed' ? 'success' : embedResult[file.id] === 'failed' ? 'danger' : 'info'}>
-                        embed: {embedResult[file.id]}
-                      </Badge>
-                    {/if}
                   </div>
                   <div class="file-meta">
                     <span>{formatBytes(file.sizeBytes)}</span>
@@ -395,24 +374,14 @@
                   </div>
                 </div>
                 <div class="file-actions">
-                  {#if file.extractionStatus === 'failed' || file.extractionStatus === 'pending'}
+                  {#if file.status !== 'processing' && file.status !== 'pending'}
                     <Button
                       variant="secondary"
                       size="sm"
                       loading={extracting[file.id]}
-                      onclick={() => handleExtract(file)}
+                      onclick={() => handleReprocess(file)}
                     >
-                      Extract
-                    </Button>
-                  {/if}
-                  {#if file.extractionStatus === 'completed'}
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      loading={embedding[file.id]}
-                      onclick={() => handleEmbed(file)}
-                    >
-                      Embed
+                      Reprocess
                     </Button>
                   {/if}
                   <Button
