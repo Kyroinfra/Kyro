@@ -1,4 +1,4 @@
-// lib/retrieval.ts
+// rag/retrieve.ts
 // ─────────────────────────────────────────────────────────────────────────────
 // Two-phase hybrid retrieval for file chunks.
 //
@@ -44,7 +44,7 @@
 
 import { pool } from '../db';
 import config from '../config';
-import { embedQuery } from './embeddings';
+import { embed } from './ollama';
 import { rerank, type RerankCandidate } from './rerank';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -242,7 +242,7 @@ export async function hybridSearch(opts: HybridSearchOptions): Promise<Retrieval
     minRrfScore = 0,
   } = opts;
 
-  const queryVector = await embedQuery(query);
+  const [queryVector] = await embed([query]);
 
   const candidates = await rrfSearch({
     orgId,

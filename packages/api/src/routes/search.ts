@@ -14,34 +14,11 @@
 // Consumers can pass ?min_score=0 to disable filtering entirely.
 
 import { Router, type Response } from 'express';
-import { db } from '../db';
-import { collections, collectionFiles } from '../db/schema';
-import { eq, and } from 'drizzle-orm';
 import { requireScope, type AuthedRequest } from '../middleware/auth';
-import { hybridSearch } from '../lib/retrieval';
+import { hybridSearch } from '../rag/retrieve';
+import { resolveCollectionToFileIds } from '../rag/scope';
 
 const router = Router();
-
-// ── Shared helper: resolve a collection to its file IDs ──────────────────────
-
-export async function resolveCollectionToFileIds(
-  collectionId: string,
-  orgId:        string,
-): Promise<string[] | null> {
-  const [col] = await db
-    .select({ id: collections.id })
-    .from(collections)
-    .where(and(eq(collections.id, collectionId), eq(collections.orgId, orgId)));
-
-  if (!col) {return null;}
-
-  const rows = await db
-    .select({ fileId: collectionFiles.fileId })
-    .from(collectionFiles)
-    .where(eq(collectionFiles.collectionId, collectionId));
-
-  return rows.map(r => r.fileId);
-}
 
 // ── GET / — hybrid search across chunks ──────────────────────────────────────
 

@@ -7,7 +7,7 @@ import { upload } from '../middleware/upload';
 import { saveFile, deleteFile, getFilePath } from '../lib/storage';
 import { SUPPORTED_MIME_TYPES_LIST } from '../lib/extractors';
 import { runPipeline } from '../lib/pipeline';
-import { embedFile } from '../lib/embeddings';
+import { embedFile } from '../rag/ingest';
 import config from '../config';
 import fs from 'fs';
 import { z } from 'zod';
