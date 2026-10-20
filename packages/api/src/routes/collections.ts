@@ -58,9 +58,9 @@ router.get('/', requireScope('read'), async (req: AuthedRequest, res: Response) 
       createdAt:     collections.createdAt,
       updatedAt:     collections.updatedAt,
       fileCount:     sql<number>`COUNT(${collectionFiles.fileId})::int`.mapWith(Number),
-      embeddedCount: sql<number>`COUNT(CASE WHEN ${files.embeddingStatus} = 'completed' THEN 1 END)::int`.mapWith(Number),
-      pendingCount:  sql<number>`COUNT(CASE WHEN ${files.embeddingStatus} = 'pending' THEN 1 END)::int`.mapWith(Number),
-      failedCount:   sql<number>`COUNT(CASE WHEN ${files.embeddingStatus} = 'failed' THEN 1 END)::int`.mapWith(Number),
+      embeddedCount: sql<number>`COUNT(CASE WHEN ${files.status} = 'ready' THEN 1 END)::int`.mapWith(Number),
+      pendingCount:  sql<number>`COUNT(CASE WHEN ${files.status} IN ('pending', 'processing') THEN 1 END)::int`.mapWith(Number),
+      failedCount:   sql<number>`COUNT(CASE WHEN ${files.status} = 'failed' THEN 1 END)::int`.mapWith(Number),
     })
     .from(collections)
     .leftJoin(collectionFiles, eq(collectionFiles.collectionId, collections.id))
@@ -122,13 +122,13 @@ router.get('/:id', requireScope('read'), async (req: AuthedRequest, res: Respons
       createdAt:    collections.createdAt,
       updatedAt:    collections.updatedAt,
       fileCount:    sql<number>`COUNT(${collectionFiles.fileId})::int`.mapWith(Number),
-      embeddedCount: sql<number>`COUNT(CASE WHEN ${files.embeddingStatus} = 'completed' THEN 1 END)::int`.mapWith(Number),
-      pendingCount:  sql<number>`COUNT(CASE WHEN ${files.embeddingStatus} = 'pending' THEN 1 END)::int`.mapWith(Number),
-      failedCount:   sql<number>`COUNT(CASE WHEN ${files.embeddingStatus} = 'failed' THEN 1 END)::int`.mapWith(Number),
-      skippedCount:  sql<number>`COUNT(CASE WHEN ${files.embeddingStatus} = 'skipped' THEN 1 END)::int`.mapWith(Number),
+      embeddedCount: sql<number>`COUNT(CASE WHEN ${files.status} = 'ready' THEN 1 END)::int`.mapWith(Number),
+      pendingCount:  sql<number>`COUNT(CASE WHEN ${files.status} IN ('pending', 'processing') THEN 1 END)::int`.mapWith(Number),
+      failedCount:   sql<number>`COUNT(CASE WHEN ${files.status} = 'failed' THEN 1 END)::int`.mapWith(Number),
+      skippedCount:  sql<number>`COUNT(CASE WHEN ${files.status} = 'skipped' THEN 1 END)::int`.mapWith(Number),
       queryReady: sql<boolean>`
         COUNT(${collectionFiles.fileId}) > 0 AND
-        COUNT(CASE WHEN ${files.embeddingStatus} IN ('pending', 'embedding', 'failed') THEN 1 END) = 0
+        COUNT(CASE WHEN ${files.status} IN ('pending', 'processing', 'failed') THEN 1 END) = 0
       `.mapWith(Boolean),
     })
     .from(collections)
@@ -231,7 +231,7 @@ router.get('/:id/files', requireScope('read'), async (req: AuthedRequest, res: R
         name:            files.name,
         mimeType:        files.mimeType,
         sizeBytes:       files.sizeBytes,
-        embeddingStatus: files.embeddingStatus,
+        status:          files.status,
         createdAt:       files.createdAt,
         addedAt:         collectionFiles.addedAt,
       })

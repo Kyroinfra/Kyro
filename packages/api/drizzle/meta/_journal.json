@@ -78,6 +78,20 @@
       "when": 1792500199664,
       "tag": "0010_jittery_brood",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792505454900,
+      "tag": "0011_famous_logan",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792505491205,
+      "tag": "0012_jittery_vanisher",
+      "breakpoints": true
     }
   ]
 }

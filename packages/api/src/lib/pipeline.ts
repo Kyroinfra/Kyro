@@ -1,24 +1,27 @@
 /**
  * In-process ingest pipeline: extract → embed, for one file.
  *
- * Replaces the old Redis/BullMQ text-extraction worker (RFC #49 decision —
- * drop Redis). Files are processed through a semaphore so parallel uploads
- * never multiply extraction's RAM/CPU cost, and failures land in the DB
- * instead of vanishing into a fire-and-forget queue:
+ * One pipeline with one status (#33): a file's whole ingest position lives in
+ * files.status (pending | processing | ready | failed | skipped) and failures
+ * land in files.error — there is no jobs table. Files run through a semaphore
+ * so parallel uploads never multiply extraction's RAM/CPU cost:
  *
- *   - extraction error → text_extraction_jobs.status = failed + extraction.failed webhook
- *   - embed error      → files.embedding_status = failed (extraction stays completed)
- *   - RAG disabled     → files.embedding_status = skipped, no HTTP happens
+ *   - upload (extractable MIME) → status = 'pending', pipeline fires
+ *   - attempt start             → status = 'processing' (extraction.started)
+ *   - extraction ok             → extraction.completed webhook
+ *   - embed ok                  → status = 'ready'   (rag/ingest sets it)
+ *   - embed side not needed     → status = 'skipped' (RAG disabled / no text)
+ *   - any failure               → status = 'failed' + files.error + *.failed event
  *
- * There are no automatic retries anymore (they were BullMQ's attempts/backoff).
- * Callers re-trigger via POST /files/:id/extract. On process restart,
- * recoverInterruptedPipelines() marks jobs lost mid-run as failed — nothing
- * is left dangling in 'processing'.
+ * There are no automatic retries (they were BullMQ's attempts/backoff, and
+ * Redis is gone since #49) — re-run via POST /files/:id/reprocess. On process
+ * restart, recoverInterruptedPipelines() marks files lost mid-run as failed so
+ * nothing looks like it is "in progress" forever.
  */
 import fs from 'node:fs';
 import { db } from '../db';
-import { files, textExtractionJobs } from '../db/schema';
-import { eq, inArray, sql } from 'drizzle-orm';
+import { files } from '../db/schema';
+import { eq, inArray } from 'drizzle-orm';
 import config from '../config';
 import { getFilePath } from './storage';
 import { extractText } from './extractors';
@@ -30,7 +33,6 @@ export interface PipelineInput {
   fileId:     string;
   storageKey: string;
   mimeType:   string;
-  jobId:      string;
   orgId:      string;
 }
 
@@ -43,23 +45,26 @@ export function runPipeline(input: PipelineInput): void {
     .catch((err) => console.error(`Pipeline: unhandled failure for file ${input.fileId}:`, err));
 }
 
-async function processPipeline({ fileId, storageKey, mimeType, jobId, orgId }: PipelineInput): Promise<void> {
-  const filePath = getFilePath(storageKey);
+async function processPipeline({ fileId, storageKey, mimeType, orgId }: PipelineInput): Promise<void> {
+  // ── Attempt start ──────────────────────────────────────────────────────────
+  await db.update(files)
+    .set({ status: 'processing', error: null })
+    .where(eq(files.id, fileId));
 
+  await dispatchWebhookEvent(orgId, 'extraction.started', { fileId });
+
+  const fail = async (message: string): Promise<void> => {
+    await db.update(files)
+      .set({ status: 'failed', error: message })
+      .where(eq(files.id, fileId));
+    await dispatchWebhookEvent(orgId, 'extraction.failed', { fileId, error: message });
+  };
+
+  const filePath = getFilePath(storageKey);
   if (!fs.existsSync(filePath)) {
-    await failJob(jobId, orgId, fileId, `File not found at path: ${filePath}`);
+    await fail(`File not found at path: ${filePath}`);
     return;
   }
-
-  await db.update(textExtractionJobs)
-    .set({
-      status:    'processing',
-      startedAt: new Date(),
-      attempts:  sql`${textExtractionJobs.attempts} + 1`,
-    })
-    .where(eq(textExtractionJobs.id, jobId));
-
-  await dispatchWebhookEvent(orgId, 'extraction.started', { fileId, jobId });
 
   // ── Step 1: Extract text ───────────────────────────────────────────────────
   let extractedText: string;
@@ -67,33 +72,29 @@ async function processPipeline({ fileId, storageKey, mimeType, jobId, orgId }: P
     extractedText = await extractText(mimeType, filePath);
   } catch (err) {
     console.error(`Pipeline: extraction failed for file ${fileId}:`, err);
-    await failJob(jobId, orgId, fileId, err instanceof Error ? err.message : String(err));
+    await fail(err instanceof Error ? err.message : String(err));
     return;
   }
 
-  await db.transaction(async (tx) => {
-    await tx.update(files)
-      .set({ extractedText })
-      .where(eq(files.id, fileId));
-
-    await tx.update(textExtractionJobs)
-      .set({ status: 'completed', completedAt: new Date() })
-      .where(eq(textExtractionJobs.id, jobId));
-  });
+  await db.update(files)
+    .set({ extractedText })
+    .where(eq(files.id, fileId));
 
   await dispatchWebhookEvent(orgId, 'extraction.completed', {
     fileId,
-    jobId,
     extractedTextLength: extractedText.length,
   });
 
   console.log(`Pipeline: text extraction completed for file ${fileId} (${extractedText.length} chars)`);
 
   // ── Step 2: Embed chunks ───────────────────────────────────────────────────
+  // rag/ingest.embedFile owns the terminal file status for this stage: 'ready'
+  // on success, 'skipped' when there is nothing to embed, 'failed' + error when
+  // the Ollama side or persistence fails (then rethrown here).
   if (!config.ragEnabled) {
     console.warn(`Pipeline: RAG disabled (OLLAMA_URL not set) — skipping embedding for file ${fileId}`);
     await db.update(files)
-      .set({ embeddingStatus: 'skipped' })
+      .set({ status: 'skipped', error: null })
       .where(eq(files.id, fileId));
     return;
   }
@@ -107,38 +108,33 @@ async function processPipeline({ fileId, storageKey, mimeType, jobId, orgId }: P
     }
   } catch (embedErr) {
     console.error(`Pipeline: embedding failed for file ${fileId}:`, embedErr);
+    // Belt and braces — embedFile already wrote status/error for its own
+    // failures; this also catches anything thrown before its try/catch.
+    const message = embedErr instanceof Error ? embedErr.message : 'Embedding failed';
     await db.update(files)
-      .set({ embeddingStatus: 'failed' })
+      .set({ status: 'failed', error: message })
       .where(eq(files.id, fileId));
   }
 }
 
-async function failJob(jobId: string, orgId: string, fileId: string, message: string): Promise<void> {
-  await db.update(textExtractionJobs)
-    .set({ status: 'failed', error: message, completedAt: new Date() })
-    .where(eq(textExtractionJobs.id, jobId));
-  await dispatchWebhookEvent(orgId, 'extraction.failed', { fileId, jobId, error: message });
-}
-
 /**
- * Called once at API start: jobs that were pending/processing when the
+ * Called once at API start: files that were pending/processing when the
  * previous process died are marked failed so no file looks like it is
- * "in progress" forever. Re-run extraction on the ones you care about.
+ * "in progress" forever. Re-run them via POST /files/:id/reprocess.
  */
 export async function recoverInterruptedPipelines(): Promise<void> {
   try {
     const rows = await db
-      .update(textExtractionJobs)
+      .update(files)
       .set({
-        status:      'failed',
-        error:       'Interrupted by restart',
-        completedAt: new Date(),
+        status: 'failed',
+        error:  'Interrupted by restart',
       })
-      .where(inArray(textExtractionJobs.status, ['pending', 'processing']))
-      .returning({ id: textExtractionJobs.id });
+      .where(inArray(files.status, ['pending', 'processing']))
+      .returning({ id: files.id });
 
     if (rows.length > 0) {
-      console.log(`Pipeline: marked ${rows.length} interrupted job(s) as failed`);
+      console.log(`Pipeline: marked ${rows.length} interrupted file(s) as failed`);
     }
   } catch (err) {
     console.error('Pipeline: recovery sweep failed:', err);

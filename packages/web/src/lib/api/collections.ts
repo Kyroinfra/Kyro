@@ -23,7 +23,8 @@ export interface CollectionFile {
 	name: string;
 	mimeType: string;
 	sizeBytes: number;
-	embeddingStatus: string;
+	// One pipeline status (#33)
+	status: 'pending' | 'processing' | 'ready' | 'failed' | 'skipped';
 	createdAt: string;
 	addedAt: string;
 }

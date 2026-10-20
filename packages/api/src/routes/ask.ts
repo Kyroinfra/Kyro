@@ -113,7 +113,7 @@ router.post('/', requireScope('read'), async (req: AuthedRequest, res: Response)
 
   if (resolvedFileIds !== undefined) {
     const ownedFiles = await db
-      .select({ id: files.id, name: files.name, embeddingStatus: files.embeddingStatus })
+      .select({ id: files.id, name: files.name, status: files.status })
       .from(files)
       .where(and(
         eq(files.orgId, orgId),
@@ -127,7 +127,7 @@ router.post('/', requireScope('read'), async (req: AuthedRequest, res: Response)
     }
 
     embeddedFileIds = ownedFiles
-      .filter(f => f.embeddingStatus === 'completed')
+      .filter(f => f.status === 'ready')
       .map(f => f.id);
 
     if (embeddedFileIds.length === 0) {
@@ -136,7 +136,7 @@ router.post('/', requireScope('read'), async (req: AuthedRequest, res: Response)
         fileStatuses: ownedFiles.map(f => ({
           id:              f.id,
           name:            f.name,
-          embeddingStatus: f.embeddingStatus,
+          status:          f.status,
         })),
       });
       return;
@@ -149,7 +149,7 @@ router.post('/', requireScope('read'), async (req: AuthedRequest, res: Response)
       .where(and(
         eq(files.orgId, orgId),
         isNull(files.deletedAt),
-        eq(files.embeddingStatus, 'completed'),
+        eq(files.status, 'ready'),
       ))
       .limit(1);
 

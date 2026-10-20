@@ -80,28 +80,15 @@ export const files = pgTable('files', {
   sizeBytes:         bigint('size_bytes', { mode: 'number' }).notNull(),
   extractedText:     text('extracted_text'),
   textSearchVector:  tsvector('text_search_vector'),
-  extractionJobId:   uuid('extraction_job_id'),
-  embeddingStatus:   varchar('embedding_status', { length: 50 }).default('pending'),  // pending | completed | failed | skipped
+  // One pipeline status (#33): the file's whole ingest position.
+  //   pending | processing | ready | failed | skipped
+  // `error` carries the failure message whenever status = 'failed'.
+  status:            varchar('status', { length: 50 }).notNull().default('pending'),
+  error:             text('error'),
   deletedAt:         timestamp('deleted_at'),
   createdAt:         timestamp('created_at').defaultNow(),
 }, (table) => ({
   orgIdIdx:          index('idx_files_org_id').on(table.orgId).where(sql`${table.deletedAt} IS NULL`),
-  extractionJobIdIdx: index('idx_files_extraction_job_id').on(table.extractionJobId),
-}));
-
-export const textExtractionJobs = pgTable('text_extraction_jobs', {
-  id:           uuid('id').defaultRandom().primaryKey(),
-  fileId:       uuid('file_id').notNull().references(() => files.id, { onDelete: 'cascade' }),
-  status:       varchar('status', { length: 50 }).notNull().default('pending'),
-  attempts:     integer('attempts').notNull().default(0),
-  maxAttempts:  integer('max_attempts').notNull().default(3),
-  error:        text('error'),
-  startedAt:    timestamp('started_at'),
-  completedAt:  timestamp('completed_at'),
-  createdAt:    timestamp('created_at').defaultNow(),
-}, (table) => ({
-  fileIdIdx: uniqueIndex('idx_text_jobs_file_id').on(table.fileId),
-  statusIdx: index('idx_text_jobs_status').on(table.status),
 }));
 
 // ── NEW: file_chunks ──────────────────────────────────────────────────────────

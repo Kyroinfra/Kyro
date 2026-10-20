@@ -39,7 +39,7 @@ export async function embedFile(opts: EmbedFileOptions): Promise<EmbedFileResult
   // ── Skipped: no text to embed ──────────────────────────────────────────────
   if (!extractedText?.trim()) {
     await db.update(files)
-      .set({ embeddingStatus: 'skipped' })
+      .set({ status: 'skipped', error: null })
       .where(eq(files.id, fileId));
 
     await dispatchWebhookEvent(orgId, 'embedding.skipped', {
@@ -61,7 +61,7 @@ export async function embedFile(opts: EmbedFileOptions): Promise<EmbedFileResult
   // ── Skipped: text produced no chunks ──────────────────────────────────────
   if (chunks.length === 0) {
     await db.update(files)
-      .set({ embeddingStatus: 'skipped' })
+      .set({ status: 'skipped', error: null })
       .where(eq(files.id, fileId));
 
     await dispatchWebhookEvent(orgId, 'embedding.skipped', {
@@ -74,10 +74,7 @@ export async function embedFile(opts: EmbedFileOptions): Promise<EmbedFileResult
     return { chunksCreated: 0, skipped: true };
   }
 
-  // ── Started ────────────────────────────────────────────────────────────────
-  await db.update(files)
-    .set({ embeddingStatus: 'embedding' })
-    .where(eq(files.id, fileId));
+  // ── Embedding: status stays 'processing' (set by the pipeline) ─────────────
 
   await dispatchWebhookEvent(orgId, 'embedding.started', {
     fileId,
@@ -94,7 +91,10 @@ export async function embedFile(opts: EmbedFileOptions): Promise<EmbedFileResult
     }
   } catch (embedErr) {
     await db.update(files)
-      .set({ embeddingStatus: 'failed' })
+      .set({
+        status: 'failed',
+        error:  embedErr instanceof Error ? embedErr.message : 'Unknown embedding error',
+      })
       .where(eq(files.id, fileId));
 
     await dispatchWebhookEvent(orgId, 'embedding.failed', {
@@ -142,7 +142,10 @@ export async function embedFile(opts: EmbedFileOptions): Promise<EmbedFileResult
     }
   } catch (persistErr) {
     await db.update(files)
-      .set({ embeddingStatus: 'failed' })
+      .set({
+        status: 'failed',
+        error:  persistErr instanceof Error ? persistErr.message : 'Failed to persist chunks',
+      })
       .where(eq(files.id, fileId));
 
     await dispatchWebhookEvent(orgId, 'embedding.failed', {
@@ -160,7 +163,7 @@ export async function embedFile(opts: EmbedFileOptions): Promise<EmbedFileResult
 
   // ── Completed ──────────────────────────────────────────────────────────────
   await db.update(files)
-    .set({ embeddingStatus: 'completed' })
+    .set({ status: 'ready', error: null })
     .where(eq(files.id, fileId));
 
   await dispatchWebhookEvent(orgId, 'embedding.completed', {

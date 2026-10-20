@@ -1,20 +1,17 @@
 import { Router, type Response } from 'express';
 import { db } from '../db';
-import { files, textExtractionJobs, fileMetadata } from '../db/schema';
-import { eq, and, isNull, inArray, sql } from 'drizzle-orm';
+import { files, fileMetadata } from '../db/schema';
+import { eq, and, isNull, sql } from 'drizzle-orm';
 import { requireScope, resolveUserId, type AuthedRequest } from '../middleware/auth';
 import { upload } from '../middleware/upload';
 import { saveFile, deleteFile, getFilePath } from '../lib/storage';
 import { SUPPORTED_MIME_TYPES_LIST } from '../lib/extractors';
 import { runPipeline } from '../lib/pipeline';
-import { embedFile } from '../rag/ingest';
 import config from '../config';
 import fs from 'fs';
 import { z } from 'zod';
 
 const router = Router();
-
-const { ragEnabled: RAG_ENABLED } = config;
 
 // ── POST / — upload a file ────────────────────────────────────────────────────
 
@@ -62,6 +59,11 @@ router.post(
       size:         req.file.size,
     });
 
+    const isExtractable = SUPPORTED_MIME_TYPES_LIST.includes(req.file.mimetype ?? '');
+
+    // One status from the moment of insert (#33): extractable files start the
+    // pipeline immediately ('pending' → 'processing' → ...), non-extractable
+    // MIME has nothing to ingest and is 'skipped'.
     const [fileRecord] = await db
       .insert(files)
       .values({
@@ -71,6 +73,7 @@ router.post(
         storageKey,
         mimeType:   req.file.mimetype,
         sizeBytes:  req.file.size,
+        status:     isExtractable ? 'pending' : 'skipped',
       })
       .returning({
         id:        files.id,
@@ -78,34 +81,22 @@ router.post(
         mimeType:  files.mimeType,
         sizeBytes: files.sizeBytes,
         createdAt: files.createdAt,
+        status:    files.status,
       });
 
-    const isExtractable = SUPPORTED_MIME_TYPES_LIST.includes(req.file.mimetype ?? '');
-
     if (!isExtractable) {
-      res.status(201).json({ ...fileRecord, extractionStatus: 'skipped' });
+      res.status(201).json(fileRecord);
       return;
     }
-
-    const [job] = await db
-      .insert(textExtractionJobs)
-      .values({ fileId: fileRecord.id, status: 'pending' })
-      .returning({ id: textExtractionJobs.id });
-
-    await db
-      .update(files)
-      .set({ extractionJobId: job.id })
-      .where(eq(files.id, fileRecord.id));
 
     runPipeline({
       fileId:     fileRecord.id,
       storageKey,
       mimeType:   req.file.mimetype ?? '',
-      jobId:      job.id,
       orgId,
     });
 
-    res.status(201).json({ ...fileRecord, extractionStatus: 'pending' });
+    res.status(201).json(fileRecord);
   },
 );
 
@@ -129,13 +120,12 @@ router.get('/', requireScope('read'), async (req: AuthedRequest, res: Response) 
 
   const result = await db
     .select({
-      id:              files.id,
-      name:            files.name,
-      mimeType:        files.mimeType,
-      sizeBytes:       files.sizeBytes,
-      createdAt:       files.createdAt,
-      extractionJobId: files.extractionJobId,
-      extractedText:   files.extractedText,
+      id:        files.id,
+      name:      files.name,
+      mimeType:  files.mimeType,
+      sizeBytes: files.sizeBytes,
+      createdAt: files.createdAt,
+      status:    files.status,
     })
     .from(files)
     .where(and(eq(files.orgId, orgId), isNull(files.deletedAt), cursorCondition))
@@ -145,32 +135,8 @@ router.get('/', requireScope('read'), async (req: AuthedRequest, res: Response) 
   const hasMore = result.length > limit;
   const items   = hasMore ? result.slice(0, limit) : result;
 
-  const jobIds = items.map((f) => f.extractionJobId).filter(Boolean) as string[];
-
-  const jobStatusMap: Record<string, string> = {};
-  if (jobIds.length > 0) {
-    const jobRows = await db
-      .select({ id: textExtractionJobs.id, status: textExtractionJobs.status })
-      .from(textExtractionJobs)
-      .where(inArray(textExtractionJobs.id, jobIds));
-    for (const row of jobRows) {
-      jobStatusMap[row.id] = row.status;
-    }
-  }
-
-  const data = items.map(({ extractionJobId, extractedText, ...f }) => {
-    let extractionStatus: string;
-    if (extractionJobId) {
-      extractionStatus = jobStatusMap[extractionJobId] ?? 'pending';
-    } else if (extractedText) {
-      extractionStatus = 'completed';
-    } else if (SUPPORTED_MIME_TYPES_LIST.includes(f.mimeType ?? '')) {
-      extractionStatus = 'failed';
-    } else {
-      extractionStatus = 'skipped';
-    }
-    return { ...f, extractionStatus };
-  });
+  // Rows already carry files.status — no derived heuristics (#33).
+  const data = items;
 
   const nextCursor = hasMore
     ? Buffer.from(
@@ -194,10 +160,10 @@ router.get('/:id/text', requireScope('read'), async (req: AuthedRequest, res: Re
 
   const [file] = await db
     .select({
-      id:              files.id,
-      mimeType:        files.mimeType,
-      extractedText:   files.extractedText,
-      extractionJobId: files.extractionJobId,
+      id:            files.id,
+      extractedText: files.extractedText,
+      status:        files.status,
+      error:         files.error,
     })
     .from(files)
     .where(and(eq(files.id, id), eq(files.orgId, orgId), isNull(files.deletedAt)));
@@ -207,37 +173,18 @@ router.get('/:id/text', requireScope('read'), async (req: AuthedRequest, res: Re
     return;
   }
 
-  if (file.extractedText) {
-    res.json({ fileId: file.id, extractionStatus: 'completed', extractedText: file.extractedText });
-    return;
-  }
-
-  if (!file.extractionJobId) {
-    const isExtractable = SUPPORTED_MIME_TYPES_LIST.includes(file.mimeType ?? '');
-    res.json({
-      fileId:          file.id,
-      extractionStatus: isExtractable ? 'failed' : 'skipped',
-      extractedText:   null,
-    });
-    return;
-  }
-
-  const [job] = await db
-    .select({ status: textExtractionJobs.status, error: textExtractionJobs.error })
-    .from(textExtractionJobs)
-    .where(eq(textExtractionJobs.id, file.extractionJobId));
-
   res.json({
-    fileId:          file.id,
-    extractionStatus: job?.status ?? 'pending',
-    extractedText:   null,
-    ...(job?.status === 'failed' && { error: job.error }),
+    fileId:        file.id,
+    status:        file.status,
+    extractedText: file.extractedText,
+    ...(file.status === 'failed' && { error: file.error }),
   });
 });
 
 // ── POST /:id/reprocess ───────────────────────────────────────────────────────
-// Queues extraction (and the pipeline continues into embedding) again for an
-// already-uploaded file. Fine-grained scoping (e.g. embed-only) is #33's job.
+// Re-runs the whole pipeline (extract → embed) for an already-uploaded file.
+// A real re-run (#33): resets status to 'pending', clears the old error and
+// fires the pipeline again — there is no separate extract/embed step anymore.
 
 router.post('/:id/reprocess', requireScope('write'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
@@ -245,10 +192,10 @@ router.post('/:id/reprocess', requireScope('write'), async (req: AuthedRequest, 
 
   const [file] = await db
     .select({
-      id:              files.id,
-      storageKey:      files.storageKey,
-      mimeType:        files.mimeType,
-      extractionJobId: files.extractionJobId,
+      id:         files.id,
+      storageKey: files.storageKey,
+      mimeType:   files.mimeType,
+      status:     files.status,
     })
     .from(files)
     .where(and(eq(files.id, id), eq(files.orgId, orgId), isNull(files.deletedAt)));
@@ -266,55 +213,28 @@ router.post('/:id/reprocess', requireScope('write'), async (req: AuthedRequest, 
     return;
   }
 
-  if (file.extractionJobId) {
-    const [existing] = await db
-      .select({ status: textExtractionJobs.status })
-      .from(textExtractionJobs)
-      .where(eq(textExtractionJobs.id, file.extractionJobId));
-
-    if (existing && ['pending', 'processing'].includes(existing.status)) {
-      res.status(409).json({ error: 'Extraction already in progress', extractionStatus: existing.status });
-      return;
-    }
+  if (file.status === 'pending' || file.status === 'processing') {
+    res.status(409).json({ error: 'Pipeline already in progress', status: file.status });
+    return;
   }
 
-  const job = await db.transaction(async (tx) => {
-    const [newJob] = await tx
-      .insert(textExtractionJobs)
-      .values({ fileId: file.id, status: 'pending' })
-      .onConflictDoUpdate({
-        target: textExtractionJobs.fileId,
-        set: {
-          status:      'pending',
-          attempts:    0,
-          error:       null,
-          startedAt:   null,
-          completedAt: null,
-          createdAt:   new Date(),
-        },
-      })
-      .returning({ id: textExtractionJobs.id });
-
-    await tx
-      .update(files)
-      .set({ extractionJobId: newJob.id })
-      .where(eq(files.id, file.id));
-
-    return newJob;
-  });
+  // Reset: back to 'pending', old failure message gone, pipeline re-fires.
+  await db
+    .update(files)
+    .set({ status: 'pending', error: null })
+    .where(eq(files.id, file.id));
 
   runPipeline({
     fileId:     file.id,
     storageKey: file.storageKey,
     mimeType:   file.mimeType ?? '',
-    jobId:      job.id,
     orgId,
   });
 
   res.status(202).json({
-    fileId:           file.id,
-    extractionStatus: 'pending',
-    message:          'Reprocessing queued. Poll GET /files/:id/text for status.',
+    fileId:  file.id,
+    status:  'pending',
+    message: 'Reprocessing queued. Poll GET /files/:id/text for status.',
   });
 });
 
@@ -420,46 +340,8 @@ router.delete('/:id/metadata/:key', requireScope('write'), async (req: AuthedReq
 });
 
 // ── POST /:id/embed ───────────────────────────────────────────────────────────
-
-router.post('/:id/embed', requireScope('write'), async (req: AuthedRequest, res: Response) => {
-  const orgId = req.orgId!;
-  const id    = req.params.id as string;
-
-  if (!RAG_ENABLED) {
-    res.status(400).json({ error: 'OLLAMA_URL must be configured to use embeddings' });
-    return;
-  }
-
-  const [file] = await db
-    .select({ id: files.id, extractedText: files.extractedText, embeddingStatus: files.embeddingStatus })
-    .from(files)
-    .where(and(eq(files.id, id), eq(files.orgId, orgId), isNull(files.deletedAt)));
-
-  if (!file) {
-    res.status(404).json({ error: 'File not found' });
-    return;
-  }
-
-  if (!file.extractedText) {
-    res.status(400).json({
-      error: 'No extracted text available. Run text extraction first via POST /files/:id/reprocess.',
-    });
-    return;
-  }
-
-  const result = await embedFile({
-    fileId:        file.id,
-    orgId,
-    extractedText: file.extractedText,
-    replace:       true,
-  });
-
-  res.json({
-    fileId:          file.id,
-    embeddingStatus: result.skipped ? 'skipped' : 'completed',
-    chunksCreated:   result.chunksCreated,
-  });
-});
+// Removed (#33): there is one pipeline and one status. POST /:id/reprocess
+// re-runs extract → embed as a single flow.
 
 // ── GET /:id ──────────────────────────────────────────────────────────────────
 
