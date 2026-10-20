@@ -96,12 +96,12 @@ export async function dispatchCollectionEmbeddingEvents(
 
         if (!collection) {continue;}
 
-        // 3. Load all files in this collection with their current embedding status
+        // 3. Load all files in this collection with their current pipeline status
         const memberFiles = await db
             .select({
                 fileId: files.id,
                 fileName: files.name,
-                embeddingStatus: files.embeddingStatus,
+                status: files.status,
             })
             .from(collectionFiles)
             .innerJoin(files, eq(files.id, collectionFiles.fileId))
@@ -115,17 +115,17 @@ export async function dispatchCollectionEmbeddingEvents(
             );
 
         const statusCounts = {
-            completed: 0,
+            ready: 0,
             skipped: 0,
             failed: 0,
             pending: 0,
-            embedding: 0,
+            processing: 0,
         } as Record<string, number>;
 
         const failedFiles: Array<{ fileId: string; fileName: string }> = [];
 
         for (const f of memberFiles) {
-            const s = f.embeddingStatus ?? 'pending';
+            const s = f.status ?? 'pending';
             statusCounts[s] = (statusCounts[s] ?? 0) + 1;
             if (s === 'failed') {
                 failedFiles.push({ fileId: f.fileId, fileName: f.fileName });
@@ -133,7 +133,7 @@ export async function dispatchCollectionEmbeddingEvents(
         }
 
         const totalFiles = memberFiles.length;
-        const settledCount = (statusCounts.completed ?? 0) +
+        const settledCount = (statusCounts.ready ?? 0) +
             (statusCounts.skipped ?? 0) +
             (statusCounts.failed ?? 0);
         const allSettled = settledCount === totalFiles && totalFiles > 0;
@@ -159,13 +159,13 @@ export async function dispatchCollectionEmbeddingEvents(
                 ...basePayload,
                 failedFiles,          // [{ fileId, fileName }, ...]
                 failedCount: failedFiles.length,
-                successCount: (statusCounts.completed ?? 0) + (statusCounts.skipped ?? 0),
+                readyCount: (statusCounts.ready ?? 0) + (statusCounts.skipped ?? 0),
             });
         } else {
-            // All files completed or skipped — fully ready for querying
+            // All files settled (ready or skipped) — fully queryable
             await dispatchWebhookEvent(orgId, 'collection.embedding_completed', {
                 ...basePayload,
-                embeddedCount: statusCounts.completed ?? 0,
+                embeddedCount: statusCounts.ready ?? 0,
                 skippedCount: statusCounts.skipped ?? 0,
             });
         }
