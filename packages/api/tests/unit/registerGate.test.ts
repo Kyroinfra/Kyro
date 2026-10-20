@@ -10,6 +10,7 @@
  * which is how the ALLOW_SIGNUP=true case activates.
  */
 import type { Express } from 'express';
+import type * as schemaModule from '../../src/db/schema';
 
 type Row = Record<string, unknown>;
 type DbState = {
@@ -19,6 +20,12 @@ type DbState = {
   /** Rows popped in order by the mocked transaction's returning() calls. */
   inserts: Row[];
 };
+
+type Schema = typeof schemaModule;
+
+// Typed control surface of the mocked ../db module (returned by the factory
+// below; resolved with `as` before its type exists at static-check time).
+type DbModule = { db: unknown; __setState: (s: Partial<DbState>) => void };
 
 jest.mock('../../src/db', () => {
   const state = {
@@ -30,9 +37,9 @@ jest.mock('../../src/db', () => {
 
   // Real schema so routers' table identities match (schema.ts has no
   // parent-module imports — verified).
-  const schema = jest.requireActual('../../src/db/schema');
+  const schema = jest.requireActual<Schema>('../../src/db/schema');
 
-  const db: unknown = {
+  const db = {
     // Test control surface, accessed via import('../../src/db').
     __setState: (s: Partial<typeof state>) => Object.assign(state, s),
 
@@ -42,7 +49,7 @@ jest.mock('../../src/db', () => {
         if ('count' in (proj ?? {})) {
           // COUNT(*) row — the register gate and setup-status read this.
           rows = [{ count: state.orgCount }];
-        } else if (table === (schema as any).users) {
+        } else if (table === schema.users) {
           rows = state.users;
         } else {
           rows = state.orgs;
@@ -52,7 +59,7 @@ jest.mock('../../src/db', () => {
       },
     }),
 
-    transaction: (fn: (tx: any) => Promise<any>) =>
+    transaction: (fn: (tx: unknown) => Promise<Row>) =>
       fn({
         insert: () => ({
           values: () => ({
@@ -65,7 +72,11 @@ jest.mock('../../src/db', () => {
       }),
   };
 
-  return { __esModule: true, db, __setState: (db as any).__setState };
+  return {
+    __esModule: true,
+    db,
+    __setState: (db as { __setState: (s: Partial<typeof state>) => void }).__setState,
+  };
 });
 
 const BODY = {
@@ -79,7 +90,7 @@ async function setup(s: Partial<DbState>): Promise<Express> {
   // seeded after the reset (and it double-serves to re-evaluate config
   // from the current process.env — how ALLOW_SIGNUP=true gets activated).
   jest.resetModules();
-  const dbModule: any = await import('../../src/db');
+  const dbModule = (await import('../../src/db')) as unknown as DbModule;
   dbModule.__setState(s);
   return (await import('../../src/app')).default;
 }
