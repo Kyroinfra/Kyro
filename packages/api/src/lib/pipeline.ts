@@ -22,7 +22,7 @@ import { eq, inArray, sql } from 'drizzle-orm';
 import config from '../config';
 import { getFilePath } from './storage';
 import { extractText } from './extractors';
-import { embedFile } from './embeddings';
+import { embedFile } from '../rag/ingest';
 import { dispatchWebhookEvent } from './webhook';
 import { Semaphore } from './semaphore';
 

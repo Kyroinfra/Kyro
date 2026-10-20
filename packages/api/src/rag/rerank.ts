@@ -1,6 +1,4 @@
-// lib/rerank.ts
-// ─────────────────────────────────────────────────────────────────────────────
-// Cross-encoder reranking using a locally hosted model via Ollama.
+// rag/rerank.ts — cross-encoder reranking using a locally hosted model via Ollama
 //
 // A cross-encoder sees the query and a candidate chunk *together* in a single
 // forward pass, so it can model their interaction directly — unlike a
@@ -15,22 +13,15 @@
 //      answer.
 //   3. Candidates are sorted by that score descending and returned.
 //
-// Model recommendation:
-//   Any instruction-following model served by Ollama works. Smaller is faster:
-//     - llama3.2:3b  — good balance of speed and accuracy
-//     - mistral:7b   — better accuracy, slower
-//   Set RERANK_MODEL in your environment to override the default.
-//
 // Latency note:
-//   Each candidate requires one Ollama call. For RERANK_CANDIDATE_LIMIT=50 on
-//   a GPU-backed Ollama this is ~2–5 s. On CPU expect 10–30 s. Callers should
-//   use a reasonable RERANK_CANDIDATE_LIMIT (default: 50) and only call this
-//   after the fast hybrid stage has already narrowed the field.
-// ─────────────────────────────────────────────────────────────────────────────
+//   Each candidate requires one Ollama call. Set RERANK_MODEL in your
+//   environment to choose the model; for most self-hosted setups candidates
+//   are scored sequentially (#35 makes reranking opt-in end to end).
 
 import config from '../config';
+import { generate } from './ollama';
 
-const { ollamaUrl: OLLAMA_URL, rerankModel: RERANK_MODEL } = config;
+const { rerankModel: RERANK_MODEL } = config;
 
 // How many characters of a chunk to send to the cross-encoder.
 // Longer = more accurate but slower. 512 chars (~128 tokens) is a good default.
@@ -48,6 +39,13 @@ export interface RerankCandidate {
 export interface RerankResult<T extends RerankCandidate> {
   candidate:   T;
   rerankScore: number;  // 0–10 as returned by the model, normalised to 0–1
+}
+
+export interface RerankOptions {
+  // If true, errors on individual candidates are logged but do not abort the
+  // whole rerank — the failing candidate gets score 0 instead.
+  // Default: true (partial failure is better than a total outage).
+  tolerateErrors?: boolean;
 }
 
 // ── Internal: score one candidate ────────────────────────────────────────────
@@ -69,30 +67,13 @@ async function scoreOne(query: string, content: string): Promise<number> {
     `Passage: ${snippet}`,
   ].join('\n');
 
-  const res = await fetch(`${OLLAMA_URL}/api/generate`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({
-      model:  RERANK_MODEL,
-      prompt,
-      stream: false,
-      options: {
-        temperature: 0,      // deterministic scoring
-        num_predict: 4,      // we only need 1–2 digits
-        stop: ['\n', ' '],   // stop after the first token
-      },
-    }),
-  }).catch(err => {
-    throw new Error(`Ollama rerank fetch failed: ${err.cause?.message ?? err.message}`);
+  const data = await generate(prompt, RERANK_MODEL, {
+    temperature: 0,      // deterministic scoring
+    num_predict: 4,      // we only need 1–2 digits
+    stop: ['\n', ' '],   // stop after the first token
   });
 
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Ollama rerank error (${res.status}): ${body}`);
-  }
-
-  const data = await res.json() as { response: string };
-  const raw  = data.response.trim();
+  const raw = data.response.trim();
 
   // Parse the first integer we find in the response. If the model ignores the
   // stop tokens and outputs extra text, this is still robust.
@@ -110,13 +91,6 @@ async function scoreOne(query: string, content: string): Promise<number> {
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
-
-export interface RerankOptions {
-  // If true, errors on individual candidates are logged but do not abort the
-  // whole rerank — the failing candidate gets score 0 instead.
-  // Default: true (partial failure is better than a total outage).
-  tolerateErrors?: boolean;
-}
 
 /**
  * Reranks `candidates` by relevance to `query` using a cross-encoder prompt.

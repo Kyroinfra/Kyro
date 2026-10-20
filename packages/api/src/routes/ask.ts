@@ -12,15 +12,16 @@ import { db } from '../db';
 import { files } from '../db/schema';
 import { eq, and, isNull, inArray } from 'drizzle-orm';
 import { requireScope, type AuthedRequest } from '../middleware/auth';
-import { hybridSearch } from '../lib/retrieval';
+import { hybridSearch } from '../rag/retrieve';
+import { streamAnswer, answerOnce } from '../rag/ask';
+import { resolveCollectionToFileIds } from '../rag/scope';
 import { z } from 'zod';
 import { resolveMetadataFilter } from '../lib/metadata';
 import config from '../config';
-import { resolveCollectionToFileIds } from './search';
 
 const router = Router();
 
-const { ollamaUrl: OLLAMA_URL, chatModel: CHAT_MODEL, ragEnabled: RAG_ENABLED } = config;
+const { ragEnabled: RAG_ENABLED } = config;
 
 export const askSchema = z.object({
   filters: z.record(z.string(), z.union([z.string(), z.array(z.string())])).optional(),
@@ -62,7 +63,7 @@ router.post('/', requireScope('read'), async (req: AuthedRequest, res: Response)
 
   const { question, topK, stream } = parsed.data;
   const minScore = parsed.data.minScore;
-  const model    = parsed.data.model ?? CHAT_MODEL;
+  const model    = parsed.data.model;
 
   // ── Resolve file IDs ───────────────────────────────────────────────────
   // resolvedFileIds === undefined means "search the whole org" — this is
@@ -170,33 +171,9 @@ router.post('/', requireScope('read'), async (req: AuthedRequest, res: Response)
     minRrfScore: minScore,
   });
 
-  // ── Build prompt ───────────────────────────────────────────────────────
-  const contextBlock = sources.length > 0
-    ? sources
-        .map((s, i) =>
-          `[${i + 1}] File: "${s.fileName}" (chunk ${s.chunkIndex})\n${s.content}`,
-        )
-        .join('\n\n---\n\n')
-    : '(No relevant document context was found for this question.)';
-
-  const systemPrompt = `You are a precise document analyst. Answer the user's question using ONLY the provided document context.
-
-Rules:
-- Cite sources using [1], [2], etc. referencing the chunk numbers in the context.
-- If the answer cannot be determined from the context, say so clearly — do not hallucinate.
-- Be concise but complete. Include numbers, dates, or specific details when they appear in the context.
-- If asked to aggregate (e.g. "total across all invoices"), work through the math explicitly.`;
-
-  const messages = [
-    { role: 'system', content: systemPrompt },
-    ...(parsed.data.history ?? []).map(h => ({ role: h.role, content: h.content })),
-    {
-      role:    'user',
-      content: `Document context:\n\n${contextBlock}\n\n---\n\nQuestion: ${question}`,
-    },
-  ];
-
-  // ── Streaming response ─────────────────────────────────────────────────
+  // ── Prompt + streaming response ────────────────────────────────────────
+  // Prompt building, the Ollama chat calls and stream parsing live in
+  // rag/ask.ts + rag/ollama.ts; this route owns only the SSE wire.
   if (stream) {
     res.setHeader('Content-Type',  'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -209,49 +186,19 @@ Rules:
     // Inner try/catch is intentional: once the SSE stream is open, failures
     // must be reported as an in-band error event — the status code is moot.
     try {
-      const ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ model, messages, stream: true, options: { temperature: 0.2 } }),
-      });
-
-      if (!ollamaRes.ok || !ollamaRes.body) {
-        throw new Error(`Ollama chat failed (${ollamaRes.status}): ${await ollamaRes.text()}`);
+      // chatStreaming always yields a final { done: true } event, so the
+      // done count matches the previous implementation (per Ollama done
+      // line + one terminal event) without an extra unconditional send.
+      for await (const evt of streamAnswer(question, sources, {
+        model,
+        history: parsed.data.history,
+      })) {
+        if (evt.delta) {sendEvent({ type: 'chunk', text: evt.delta });}
+        if (evt.done)  {sendEvent({ type: 'done' });}
       }
-
-      const reader  = ollamaRes.body.getReader();
-      const decoder = new TextDecoder();
-      let   buffer  = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {break;}
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-
-        for (const line of lines) {
-          if (!line.trim()) {continue;}
-          try {
-            const json = JSON.parse(line) as { message?: { content?: string }; done?: boolean };
-            if (json.message?.content) {sendEvent({ type: 'chunk', text: json.message.content });}
-            if (json.done) {sendEvent({ type: 'done' });}
-          } catch { /* malformed line — skip */ }
-        }
-      }
-
-      if (buffer.trim()) {
-        try {
-          const json = JSON.parse(buffer) as { message?: { content?: string } };
-          if (json.message?.content) {sendEvent({ type: 'chunk', text: json.message.content });}
-        } catch { /* ignore */ }
-      }
-
-      sendEvent({ type: 'done' });
-    } catch (llmErr: any) {
+    } catch (llmErr) {
       console.error('Ollama streaming error:', llmErr);
-      sendEvent({ type: 'error', message: llmErr.message ?? 'LLM request failed' });
+      sendEvent({ type: 'error', message: llmErr instanceof Error ? llmErr.message : 'LLM request failed' });
     } finally {
       res.end();
     }
@@ -259,18 +206,12 @@ Rules:
   }
 
   // ── Non-streaming response ─────────────────────────────────────────────
-  const ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ model, messages, stream: false, options: { temperature: 0.2 } }),
+  const answer = await answerOnce(question, sources, {
+    model,
+    history: parsed.data.history,
   });
 
-  if (!ollamaRes.ok) {
-    throw new Error(`Ollama chat failed (${ollamaRes.status}): ${await ollamaRes.text()}`);
-  }
-
-  const ollamaData = await ollamaRes.json() as { message?: { content?: string } };
-  res.json({ answer: ollamaData.message?.content ?? '', sources });
+  res.json({ answer, sources });
 });
 
 export default router;
