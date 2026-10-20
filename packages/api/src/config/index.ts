@@ -47,6 +47,12 @@ const configSchema = z.object({
   RERANK_MODEL: z.string().default('llama3.2'),
   /** Opt-in: cross-encoder rerank adds serial LLM calls per query. */
   RERANK_ENABLED: booleanish,
+  /**
+   * Off by default: open registration exists only to bootstrap the first
+   * org. Afterwards members join via POST /org/members — unless the
+   * operator intentionally reopens signup for the whole deployment.
+   */
+  ALLOW_SIGNUP: booleanish,
   /** Max cosine distance for a chunk to enter the vector arm of RRF. */
   VECTOR_DISTANCE_THRESHOLD: z.coerce.number().gte(0).default(0.5),
 
@@ -87,6 +93,7 @@ const config = {
   chatModel: env.CHAT_MODEL,
   rerankModel: env.RERANK_MODEL,
   rerankEnabled: env.RERANK_ENABLED,
+  allowSignup: env.ALLOW_SIGNUP,
   vectorDistanceThreshold: env.VECTOR_DISTANCE_THRESHOLD,
   storageLimit: env.STORAGE_LIMIT,
 

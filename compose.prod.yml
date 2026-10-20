@@ -19,8 +19,6 @@ services:
     build:
       context: .
       dockerfile: packages/web/Dockerfile
-      args:
-        PUBLIC_API_URL: http://localhost/api/v2
     restart: unless-stopped
     environment:
       - NODE_ENV=production
@@ -69,6 +67,7 @@ services:
       - OLLAMA_URL=${OLLAMA_URL}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text}
       - CHAT_MODEL=${CHAT_MODEL:-llama3.2}
+      - ALLOW_SIGNUP=${ALLOW_SIGNUP:-}
     volumes:
       - uploads_data:/app/uploads
     deploy:

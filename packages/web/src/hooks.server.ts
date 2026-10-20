@@ -1,7 +1,13 @@
 import jwt from 'jsonwebtoken';
 import type { Handle } from '@sveltejs/kit';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'Kyro';
+// Required at module load (#30): a missing JWT_SECRET would silently sign
+// sessions with a constant — anyone could forge a session token. The API
+// already fail-fasts on the same var (config getRequired); the web must
+// too. Compose files pass JWT_SECRET in both dev and prod.
+const JWT_SECRET = process.env.JWT_SECRET ?? (() => {
+	throw new Error('JWT_SECRET must be set — refusing to start with forgeable sessions');
+})();
 const COOKIE_NAME = 'kyro_token';
 
 export const handle: Handle = async ({ event, resolve }) => {

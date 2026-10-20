@@ -32,6 +32,7 @@ services:
       - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text}
       - CHAT_MODEL=${CHAT_MODEL:-llama3.2}
+      - ALLOW_SIGNUP=${ALLOW_SIGNUP:-}
     volumes:
       - ./packages/api/src:/app/packages/api/src
       - ./packages/shared:/app/packages/shared

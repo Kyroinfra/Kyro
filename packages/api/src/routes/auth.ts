@@ -5,6 +5,7 @@ import { eq, sql } from 'drizzle-orm';
 import { hashPassword, verifyPassword } from '../lib/password';
 import { signJWT } from '../lib/auth';
 import { authMiddleware } from '../middleware/auth';
+import config from '../config';
 import { registerSchema, loginSchema, type RegisterInput, type LoginInput } from '../validations/auth';
 
 const router = Router();
@@ -38,6 +39,18 @@ router.post('/register', async (req: Request, res: Response) => {
     return;
   }
   const input = parsed.data as RegisterInput;
+
+  // Locked by default (#30): open registration exists only to bootstrap the
+  // first org. Afterwards members join via POST /org/members, or the operator
+  // explicitly reopens signup with ALLOW_SIGNUP=true. Checked before the
+  // account lookup so strangers cannot enumerate existing emails.
+  const [{ count }] = await db
+    .select({ count: sql<number>`COUNT(*)`.mapWith(Number) })
+    .from(organisations);
+
+  if (count > 0 && !config.allowSignup) {
+    return res.status(403).json({ error: 'Signup disabled' });
+  }
 
   const existingUser = await db
     .select({ id: users.id })
