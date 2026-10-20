@@ -57,15 +57,15 @@
     }
   }
 
-  // Persists on every transcript change (including cleared).
+  // Persists on every transcript change. Save-only: an empty transcript must
+  // NOT delete the stored thread here — this effect runs before onMount's
+  // restoreThread() on every page visit (Svelte flushes effects in creation
+  // order), so a mount-time remove wiped the transcript before it could be
+  // restored. Deletion belongs solely to the explicit "clear chat" action.
   $effect(() => {
-    if (!browser) return;
+    if (!browser || messages.length === 0) return;
     try {
-      if (messages.length === 0) {
-        localStorage.removeItem(THREAD_KEY);
-      } else {
-        localStorage.setItem(THREAD_KEY, JSON.stringify(messages.slice(-MAX_STORED)));
-      }
+      localStorage.setItem(THREAD_KEY, JSON.stringify(messages.slice(-MAX_STORED)));
     } catch {
       // storage unavailable (private mode/full) — history simply degrades
     }
@@ -193,6 +193,13 @@
 
   function clearChat() {
     messages = [];
+    // Explicit user action — the only place the stored thread is deleted.
+    // The persist effect above deliberately never removes the key.
+    try {
+      localStorage.removeItem(THREAD_KEY);
+    } catch {
+      // storage unavailable — nothing to clean
+    }
   }
 </script>
 
