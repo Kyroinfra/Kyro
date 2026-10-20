@@ -19,8 +19,6 @@ services:
     build:
       context: .
       dockerfile: packages/web/Dockerfile
-      args:
-        PUBLIC_API_URL: http://localhost/api/v2
     restart: unless-stopped
     environment:
       - NODE_ENV=production
