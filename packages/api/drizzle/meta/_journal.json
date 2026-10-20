@@ -71,6 +71,13 @@
       "when": 1792421567701,
       "tag": "0009_drop-migrations-table",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792500199664,
+      "tag": "0010_jittery_brood",
+      "breakpoints": true
     }
   ]
 }

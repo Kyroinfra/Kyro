@@ -140,18 +140,6 @@ export const usageLogs = pgTable('usage_logs', {
   createdAtIdx: index('idx_usage_logs_created').on(table.createdAt),
 }));
 
-export const usageDaily = pgTable('usage_daily', {
-  id:             uuid('id').defaultRandom().primaryKey(),
-  orgId:          uuid('org_id').notNull().references(() => organisations.id),
-  date:           date('date').notNull(),
-  totalRequests:  bigint('total_requests', { mode: 'number' }).default(0),
-  totalBytesIn:   bigint('total_bytes_in', { mode: 'number' }).default(0),
-  totalBytesOut:  bigint('total_bytes_out', { mode: 'number' }).default(0),
-  storageBytes:   bigint('storage_bytes', { mode: 'number' }).default(0),
-}, (table) => ({
-  orgDateIdx: uniqueIndex('idx_usage_daily_org_date').on(table.orgId, table.date),
-}));
-
 export const webhooks = pgTable('webhooks', {
   id:        uuid('id').defaultRandom().primaryKey(),
   orgId:     uuid('org_id').notNull().references(() => organisations.id, { onDelete: 'cascade' }),
