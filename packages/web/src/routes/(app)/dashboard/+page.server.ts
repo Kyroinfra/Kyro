@@ -3,7 +3,7 @@ import type { PageServerLoad } from './$types';
 import { getUsage } from '$lib/api/usage';
 import { getKeys } from '$lib/api/keys';
 import { getMembers } from '$lib/api/org';
-import { getFilesV2 } from '$lib/api/files-v2';
+import { getFilesV2 } from '$lib/api/files';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	const token = locals.user?.token;

@@ -1,15 +1,13 @@
 // routes/v2/collections.ts
 
 import { Router, type Response } from 'express';
-import { db } from '../../db';
-import { collections, collectionFiles, apiKeys, files } from '../../db/schema';
+import { db } from '../db';
+import { collections, collectionFiles, apiKeys, files } from '../db/schema';
 import { eq, and, isNull, inArray, sql, desc } from 'drizzle-orm';
-import { apiKeyAuthMiddleware, requireScope, type ApiKeyRequest } from '../../middleware/apiKeyAuth';
+import { requireScope, type ApiKeyRequest } from '../middleware/apiKeyAuth';
 import { z } from 'zod';
 
 const router = Router();
-
-router.use(apiKeyAuthMiddleware);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

@@ -1,17 +1,20 @@
 import { Router, type Response } from 'express';
-import { db } from '../../db';
-import { apiKeys, files, textExtractionJobs, fileMetadata } from '../../db/schema';
+import { db } from '../db';
+import { apiKeys, files, textExtractionJobs, fileMetadata } from '../db/schema';
 import { eq, and, isNull, inArray, sql } from 'drizzle-orm';
-import { requireScope, type ApiKeyRequest } from '../../middleware/apiKeyAuth';
-import { upload } from '../../middleware/upload';
-import { saveFile, deleteFile, getFilePath } from '../../lib/storage';
-import { SUPPORTED_MIME_TYPES_LIST } from '../../lib/extractors';
-import { runPipeline } from '../../lib/pipeline';
-import config from '../../config';
+import { requireScope, type ApiKeyRequest } from '../middleware/apiKeyAuth';
+import { upload } from '../middleware/upload';
+import { saveFile, deleteFile, getFilePath } from '../lib/storage';
+import { SUPPORTED_MIME_TYPES_LIST } from '../lib/extractors';
+import { runPipeline } from '../lib/pipeline';
+import { embedFile } from '../lib/embeddings';
+import config from '../config';
 import fs from 'fs';
 import { z } from 'zod';
 
 const router = Router();
+
+const { ragEnabled: RAG_ENABLED } = config;
 
 // ── POST / — upload a file ────────────────────────────────────────────────────
 
@@ -179,81 +182,9 @@ router.get('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) 
   res.json({ data, pagination: { limit, hasMore, nextCursor } });
 });
 
-// ── GET /search ───────────────────────────────────────────────────────────────
-// IMPORTANT: must be registered BEFORE /:id so Express doesn't swallow it.
-
-router.get('/search', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
-  const orgId = req.orgId!;
-  const q     = (req.query.q as string | undefined)?.trim();
-
-  if (!q) {
-    res.status(400).json({ error: 'Query parameter "q" is required' });
-    return;
-  }
-
-  const limit  = Math.min(parseInt((req.query.limit as string) || '20', 10), 100);
-  const cursor = req.query.cursor as string | undefined;
-
-  const tsQuery = sql`websearch_to_tsquery('english', ${q})`;
-
-  let cursorCondition = sql`TRUE`;
-  if (cursor) {
-    try {
-      const { rank, id } = JSON.parse(Buffer.from(cursor, 'base64url').toString());
-      cursorCondition = sql`
-        (ts_rank(${files.textSearchVector}, ${tsQuery}), ${files.id})
-        < (${rank}::float4, ${id}::uuid)
-      `;
-    } catch {
-      res.status(400).json({ error: 'Invalid cursor' });
-      return;
-    }
-  }
-
-  const rows = await db.execute(sql`
-    SELECT
-      f.id,
-      f.name,
-      f.mime_type   AS "mimeType",
-      f.size_bytes  AS "sizeBytes",
-      f.created_at  AS "createdAt",
-      ts_rank(f.text_search_vector, ${tsQuery}) AS rank,
-      ts_headline(
-        'english',
-        f.extracted_text,
-        ${tsQuery},
-        'StartSel=<mark>, StopSel=</mark>, MaxWords=35, MinWords=15, ShortWord=3, HighlightAll=false, MaxFragments=2, FragmentDelimiter=" … "'
-      ) AS headline
-    FROM files f
-    WHERE
-      f.org_id     = ${orgId}
-      AND f.deleted_at IS NULL
-      AND f.text_search_vector @@ ${tsQuery}
-      AND ${cursorCondition}
-    ORDER BY rank DESC, f.id DESC
-    LIMIT ${limit + 1}
-  `);
-
-  const results = rows.rows as Array<{
-    id: string; name: string; mimeType: string;
-    sizeBytes: number; createdAt: Date; rank: number; headline: string;
-  }>;
-
-  const hasMore = results.length > limit;
-  const items   = hasMore ? results.slice(0, limit) : results;
-
-  const nextCursor = hasMore
-    ? Buffer.from(
-        JSON.stringify({ rank: items[items.length - 1].rank, id: items[items.length - 1].id }),
-      ).toString('base64url')
-    : null;
-
-  res.json({ data: items, pagination: { limit, hasMore, nextCursor } });
-});
-
 // ── GET /:id/text ─────────────────────────────────────────────────────────────
-// IMPORTANT: /:id/text, /:id/extract, and /:id/metadata must all be registered
-// BEFORE /:id, otherwise Express matches /:id first and never reaches them.
+// IMPORTANT: /:id/text, /:id/metadata*, /:id/reprocess and /:id/embed must all
+// be registered BEFORE /:id, otherwise Express matches /:id first.
 
 router.get('/:id/text', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
   const orgId = req.orgId!;
@@ -302,9 +233,11 @@ router.get('/:id/text', requireScope('read'), async (req: ApiKeyRequest, res: Re
   });
 });
 
-// ── POST /:id/extract ─────────────────────────────────────────────────────────
+// ── POST /:id/reprocess ───────────────────────────────────────────────────────
+// Queues extraction (and the pipeline continues into embedding) again for an
+// already-uploaded file. Fine-grained scoping (e.g. embed-only) is #33's job.
 
-router.post('/:id/extract', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
+router.post('/:id/reprocess', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
   const orgId = req.orgId!;
   const id    = req.params.id as string;
 
@@ -379,7 +312,7 @@ router.post('/:id/extract', requireScope('write'), async (req: ApiKeyRequest, re
   res.status(202).json({
     fileId:           file.id,
     extractionStatus: 'pending',
-    message:          'Extraction queued. Poll GET /files/:id/text for status.',
+    message:          'Reprocessing queued. Poll GET /files/:id/text for status.',
   });
 });
 
@@ -482,6 +415,48 @@ router.delete('/:id/metadata/:key', requireScope('write'), async (req: ApiKeyReq
     );
 
   res.status(204).send();
+});
+
+// ── POST /:id/embed ───────────────────────────────────────────────────────────
+
+router.post('/:id/embed', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
+  const orgId = req.orgId!;
+  const id    = req.params.id as string;
+
+  if (!RAG_ENABLED) {
+    res.status(400).json({ error: 'OLLAMA_URL must be configured to use embeddings' });
+    return;
+  }
+
+  const [file] = await db
+    .select({ id: files.id, extractedText: files.extractedText, embeddingStatus: files.embeddingStatus })
+    .from(files)
+    .where(and(eq(files.id, id), eq(files.orgId, orgId), isNull(files.deletedAt)));
+
+  if (!file) {
+    res.status(404).json({ error: 'File not found' });
+    return;
+  }
+
+  if (!file.extractedText) {
+    res.status(400).json({
+      error: 'No extracted text available. Run text extraction first via POST /files/:id/reprocess.',
+    });
+    return;
+  }
+
+  const result = await embedFile({
+    fileId:        file.id,
+    orgId,
+    extractedText: file.extractedText,
+    replace:       true,
+  });
+
+  res.json({
+    fileId:          file.id,
+    embeddingStatus: result.skipped ? 'skipped' : 'completed',
+    chunksCreated:   result.chunksCreated,
+  });
 });
 
 // ── GET /:id ──────────────────────────────────────────────────────────────────

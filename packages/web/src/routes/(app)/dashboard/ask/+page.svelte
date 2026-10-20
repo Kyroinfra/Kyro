@@ -8,7 +8,7 @@
   import { Send } from "$lib/components/icons";
   import { askStream, type AskSource } from "$lib/api/ask";
   import { getCollections, type Collection } from "$lib/api/collections";
-  import { getFilesV2 } from "$lib/api/files-v2";
+  import { getFilesV2 } from "$lib/api/files";
   import { onMount } from "svelte";
 
   interface Props {

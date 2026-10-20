@@ -21,7 +21,7 @@
     triggerExtraction,
     type FileItemV2,
     type ExtractionStatus,
-  } from "$lib/api/files-v2";
+  } from "$lib/api/files";
   import { getCollections, addFilesToCollection, type Collection } from "$lib/api/collections";
 
   interface Props {

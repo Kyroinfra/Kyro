@@ -1,11 +1,11 @@
 import { Router, type Request, type Response } from 'express';
-import { db } from '../../db';
-import { organisations, users } from '../../db/schema';
+import { db } from '../db';
+import { organisations, users } from '../db/schema';
 import { eq, sql } from 'drizzle-orm';
-import { hashPassword, verifyPassword } from '../../lib/password';
-import { signJWT } from '../../lib/auth';
-import { authMiddleware } from '../../middleware/auth';
-import { registerSchema, loginSchema, type RegisterInput, type LoginInput } from '../../validations/auth';
+import { hashPassword, verifyPassword } from '../lib/password';
+import { signJWT } from '../lib/auth';
+import { authMiddleware } from '../middleware/auth';
+import { registerSchema, loginSchema, type RegisterInput, type LoginInput } from '../validations/auth';
 
 const router = Router();
 

@@ -11,7 +11,7 @@
     createCollection,
     type Collection,
   } from "$lib/api/collections";
-  import { getFilesV2 } from "$lib/api/files-v2";
+  import { getFilesV2 } from "$lib/api/files";
 
   interface Props {
     data: { hasApiKey: boolean };

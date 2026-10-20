@@ -2,10 +2,10 @@ import type { NextFunction, Request, Response } from 'express';
 import config from '../config';
 
 export interface AppError extends Error {
-  statusCode?: number;
-  isOperational?: boolean;
-  /** Multer error codes: LIMIT_FILE_SIZE etc. (name === 'MulterError'). */
-  code?: string;
+    statusCode?: number;
+    isOperational?: boolean;
+    /** Multer error codes: LIMIT_FILE_SIZE etc. (name === 'MulterError'). */
+    code?: string;
 }
 
 /**
@@ -17,65 +17,83 @@ export interface AppError extends Error {
  * removed in favour of this handler (#27).
  */
 export function errorHandler(
-  err: unknown,
-  req: Request,
-  res: Response,
-  _next: NextFunction
+    err: unknown,
+    req: Request,
+    res: Response,
+    _next: NextFunction
 ) {
-  const error = (err ?? {}) as AppError;
+    const error = (err ?? {}) as AppError;
+    const cause = (error as any).cause;
 
-  let statusCode = error.statusCode || 500;
-  let message = error.message || 'Internal Server Error';
+    let statusCode = error.statusCode || 500;
+    let message = error.message || 'Internal Server Error';
 
-  // Multer errors (bad file size, unexpected field, …) are client-intent
-  // failures without a statusCode — never let them surface as 500.
-  if (error.name === 'MulterError') {
-    if (error.code === 'LIMIT_FILE_SIZE') {
-      statusCode = 413;
-      message = 'File too large';
-    } else {
-      statusCode = error.statusCode || 400;
-      message = message || 'Invalid upload';
+    // Multer errors (bad file size, unexpected field, …) are client-intent
+    // failures without a statusCode — never let them surface as 500.
+    if (error.name === 'MulterError') {
+        if (error.code === 'LIMIT_FILE_SIZE') {
+            statusCode = 413;
+            message = 'File too large';
+        } else {
+            statusCode = error.statusCode || 400;
+            message = message || 'Invalid upload';
+        }
     }
-  }
 
-  if (config.nodeEnv === 'development') {
-    console.error('Error:', {
-      message: error.message,
-      stack: error.stack,
-      statusCode,
+    if (config.nodeEnv === 'development') {
+        console.error('Error:', {
+            message: error.message,
+            stack: error.stack,
+            statusCode,
+        });
+    } else {
+        console.error('Error:', { statusCode, message });
+    }
+
+
+    if (config.nodeEnv === 'development') {
+        console.error('Error:', {
+            message: error.message,
+            stack: error.stack,
+            statusCode,
+            pg: cause && {
+                message: cause.message,
+                code: cause.code,
+                detail: cause.detail,
+                constraint: cause.constraint,
+                column: cause.column,
+                table: cause.table,
+            },
+        });
+    }
+
+    if (res.headersSent) {
+        // Nothing sane left to send mid-response (e.g. an SSE stream broke);
+        // destroying the connection beats double-response crashes.
+        res.end();
+        return;
+    }
+
+    res.status(statusCode).json({
+        error: {
+            message,
+            ...(config.nodeEnv === 'development' && { stack: error.stack }),
+        },
     });
-  } else {
-    console.error('Error:', { statusCode, message });
-  }
-
-  if (res.headersSent) {
-    // Nothing sane left to send mid-response (e.g. an SSE stream broke);
-    // destroying the connection beats double-response crashes.
-    res.end();
-    return;
-  }
-
-  res.status(statusCode).json({
-    error: {
-      message,
-      ...(config.nodeEnv === 'development' && { stack: error.stack }),
-    },
-  });
 }
 
 export function notFoundHandler(req: Request, res: Response) {
-  res.status(404).json({
-    error: {
-      message: `Cannot ${req.method} ${req.path}`,
-      statusCode: 404,
-    },
-  });
+    res.status(404).json({
+        error: {
+            message: `Cannot ${req.method} ${req.path}`,
+            statusCode: 404,
+        },
+    });
 }
 
 export function createError(message: string, statusCode: number): AppError {
-  const error: AppError = new Error(message);
-  error.statusCode = statusCode;
-  error.isOperational = true;
-  return error;
+    const error: AppError = new Error(message);
+    error.statusCode = statusCode;
+    error.isOperational = true;
+    return error;
 }
