@@ -6,7 +6,7 @@
   import Badge from "$lib/components/ui/Badge.svelte";
   import ApiKeyGate from "$lib/components/ApiKeyGate.svelte";
   import { Send } from "$lib/components/icons";
-  import { askStream, type AskSource } from "$lib/api/ask";
+  import { thread, ask, clearThread, note } from "$lib/stores/askThread.svelte";
   import { getCollections, type Collection } from "$lib/api/collections";
   import { getFilesV2 } from "$lib/api/files";
   import { onMount } from "svelte";
@@ -17,17 +17,13 @@
 
   let { data }: Props = $props();
 
-  interface ChatMessage {
-    role: "user" | "assistant";
-    content: string;
-    sources?: AskSource[];
-    error?: string;
-    streaming?: boolean;
-  }
-
-  let messages = $state<ChatMessage[]>([]);
+  // The thread + stream loop live in the module-scoped ask store so prompts
+  // keep processing when the user navigates away (the page's effects are torn
+  // down at unmount — the store's are not). These mirrors keep the existing
+  // markup reactive to the shared state.
+  const messages = $derived(thread.messages);
+  const asking = $derived(thread.asking);
   let question = $state("");
-  let asking = $state(false);
   let scrollAnchor: HTMLDivElement | undefined;
 
   // ── Scope selection ─────────────────────────────────────────────────────────
@@ -72,62 +68,29 @@
     if (!q || asking) return;
 
     if (scope === "collection" && !selectedCollectionId) {
-      messages = [
-        ...messages,
-        { role: "assistant", content: "", error: "Select a collection first." },
-      ];
+      note("Select a collection first.");
       return;
     }
 
-    messages = [...messages, { role: "user", content: q }];
     question = "";
-    asking = true;
     scrollToBottom();
-
-    const assistantMsg: ChatMessage = { role: "assistant", content: "", streaming: true };
-    messages = [...messages, assistantMsg];
-    const msgIndex = messages.length - 1;
-
-    try {
-      await askStream(
-        $apiKey,
-        {
-          question: q,
-          ...(scope === "collection" ? { collectionId: selectedCollectionId } : {}),
-        },
-        {
-          onSources: (sources) => {
-            messages[msgIndex] = { ...messages[msgIndex], sources };
-            messages = [...messages];
-          },
-          onChunk: (text) => {
-            messages[msgIndex] = {
-              ...messages[msgIndex],
-              content: messages[msgIndex].content + text,
-            };
-            messages = [...messages];
-            scrollToBottom();
-          },
-          onError: (message) => {
-            messages[msgIndex] = { ...messages[msgIndex], error: message, streaming: false };
-            messages = [...messages];
-          },
-        },
-      );
-    } catch (error: any) {
-      messages[msgIndex] = {
-        ...messages[msgIndex],
-        error: error.message || "Request failed",
-        streaming: false,
-      };
-      messages = [...messages];
-    } finally {
-      messages[msgIndex] = { ...messages[msgIndex], streaming: false };
-      messages = [...messages];
-      asking = false;
-      scrollToBottom();
-    }
+    // The store owns the loop from here — navigating away mid-answer no
+    // longer kills it; the answer keeps streaming into the shared thread.
+    await ask(q, {
+      apiKey: $apiKey,
+      ...(scope === "collection" ? { collectionId: selectedCollectionId } : {}),
+    });
+    scrollToBottom();
   }
+
+  // Auto-scroll while mounted: the shared thread mutates as the background
+  // stream fills it in, and this page-scoped effect follows along only while
+  // the ask page is actually on screen.
+  $effect(() => {
+    void messages.at(-1)?.content;
+    void messages.length;
+    scrollToBottom();
+  });
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -137,7 +100,9 @@
   }
 
   function clearChat() {
-    messages = [];
+    // "Clear chat" is the only deletion path — it also aborts any stream
+    // still generating in the background.
+    clearThread();
   }
 </script>
 

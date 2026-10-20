@@ -4,6 +4,8 @@
 //   { question, collectionId }   — search within a specific collection
 //   { question, fileIds: [...] } — search within specific files
 //   { question }                 — search across the entire org's embedded corpus
+//   + optional history: prior user/assistant turns, replayed as conversation
+//     context to the LLM (multi-turn follow-ups; retrieval stays fresh each turn)
 
 import { Router, type Response } from 'express';
 import { db } from '../db';
@@ -20,7 +22,7 @@ const router = Router();
 
 const { ollamaUrl: OLLAMA_URL, chatModel: CHAT_MODEL, ragEnabled: RAG_ENABLED } = config;
 
-const askSchema = z.object({
+export const askSchema = z.object({
   filters: z.record(z.string(), z.union([z.string(), z.array(z.string())])).optional(),
   question:     z.string().min(1).max(2000),
   fileIds:      z.array(z.string().uuid()).max(20).optional(),
@@ -29,6 +31,13 @@ const askSchema = z.object({
   model:        z.string().optional(),
   minScore:     z.number().min(0).max(1).optional().default(0),
   stream:       z.boolean().optional().default(true),
+  // Conversation memory: prior user/assistant turns so follow-ups like
+  // "what about page 2?" resolve against the thread. Recent turns are
+  // replayed to the LLM verbatim (read-only — they never affect retrieval).
+  history: z.array(z.object({
+    role:    z.enum(['user', 'assistant']),
+    content: z.string().min(1).max(2000),
+  })).max(10).optional(),
 }).refine(
   // Mutual exclusion — providing both is always an error
   data => !(data.fileIds && data.collectionId),
@@ -180,6 +189,7 @@ Rules:
 
   const messages = [
     { role: 'system', content: systemPrompt },
+    ...(parsed.data.history ?? []).map(h => ({ role: h.role, content: h.content })),
     {
       role:    'user',
       content: `Document context:\n\n${contextBlock}\n\n---\n\nQuestion: ${question}`,
