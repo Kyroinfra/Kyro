@@ -10,6 +10,7 @@
   import { getCollections, type Collection } from "$lib/api/collections";
   import { getFilesV2 } from "$lib/api/files";
   import { onMount } from "svelte";
+  import { browser } from "$app/environment";
 
   interface Props {
     data: { hasApiKey: boolean };
@@ -29,6 +30,54 @@
   let question = $state("");
   let asking = $state(false);
   let scrollAnchor: HTMLDivElement | undefined;
+
+  // ── Thread persistence + conversation memory (#ask-history) ────────────────
+  // The transcript survives reloads/navigation in the browser; the last turns
+  // also ride along to POST /ask as conversation context so follow-ups stay
+  // in-thread. One thread per browser — "clear" resets it explicitly.
+  const THREAD_KEY = "kyro.ask.thread";
+  const MAX_STORED = 50; // transcript cap (turns kept for restore)
+  const HISTORY_TURNS = 8; // turns replayed to the LLM
+
+  function restoreThread() {
+    if (!browser) return;
+    try {
+      const saved = localStorage.getItem(THREAD_KEY);
+      if (!saved) return;
+      const parsed = JSON.parse(saved) as ChatMessage[];
+      if (Array.isArray(parsed)) {
+        messages = parsed
+          .filter(m => m && typeof m.content === "string" && (m.content || m.error))
+          .slice(-MAX_STORED)
+          .map(m => ({ ...m, streaming: false }));
+        scrollToBottom();
+      }
+    } catch {
+      // corrupt or unusable storage — start clean
+    }
+  }
+
+  // Persists on every transcript change (including cleared).
+  $effect(() => {
+    if (!browser) return;
+    try {
+      if (messages.length === 0) {
+        localStorage.removeItem(THREAD_KEY);
+      } else {
+        localStorage.setItem(THREAD_KEY, JSON.stringify(messages.slice(-MAX_STORED)));
+      }
+    } catch {
+      // storage unavailable (private mode/full) — history simply degrades
+    }
+  });
+
+  function buildHistory(): Array<{ role: "user" | "assistant"; content: string }> {
+    return messages
+      .filter(m => !m.streaming && !m.error)
+      .filter(m => m.content)
+      .slice(-HISTORY_TURNS)
+      .map(m => ({ role: m.role, content: m.content }));
+  }
 
   // ── Scope selection ─────────────────────────────────────────────────────────
   type Scope = "org" | "collection";
@@ -59,6 +108,7 @@
       scope = "collection";
       selectedCollectionId = fromQuery;
     }
+    restoreThread();
   });
 
   function scrollToBottom() {
@@ -79,6 +129,10 @@
       return;
     }
 
+    // Snapshot prior turns BEFORE the new user message so the API receives
+    // the thread without the question it is also getting inline.
+    const history = buildHistory();
+
     messages = [...messages, { role: "user", content: q }];
     question = "";
     asking = true;
@@ -94,6 +148,7 @@
         {
           question: q,
           ...(scope === "collection" ? { collectionId: selectedCollectionId } : {}),
+          history,
         },
         {
           onSources: (sources) => {

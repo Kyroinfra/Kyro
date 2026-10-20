@@ -55,6 +55,8 @@ export interface AskInput {
   topK?: number;
   minScore?: number;
   filters?: Record<string, string | string[]>;
+  /** Prior turns replayed to the LLM so follow-ups stay in-thread. */
+  history?: Array<{ role: "user" | "assistant"; content: string }>;
 }
 
 export interface AskNonStreamResponse {
