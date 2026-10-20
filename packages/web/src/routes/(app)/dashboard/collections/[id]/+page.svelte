@@ -18,7 +18,7 @@
     type CollectionDetail,
     type CollectionFile,
   } from "$lib/api/collections";
-  import { getFilesV2, type FileItemV2 } from "$lib/api/files-v2";
+  import { getFilesV2, type FileItemV2 } from "$lib/api/files";
   import { goto } from "$app/navigation";
 
   interface Props {

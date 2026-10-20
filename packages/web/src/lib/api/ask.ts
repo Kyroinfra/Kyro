@@ -33,7 +33,7 @@ export async function semanticSearch(
   if (opts.minScore !== undefined)
     params.set("min_score", String(opts.minScore));
 
-  return request(`/api/v2/files/semantic-search?${params.toString()}`, {
+  return request(`/api/v1/search?${params.toString()}`, {
     method: "GET",
     apiKey,
   });
@@ -84,7 +84,7 @@ export async function askStream(
   },
   signal?: AbortSignal,
 ): Promise<void> {
-  const url = `${getBaseUrl()}/api/v2/files/ask`;
+  const url = `${getBaseUrl()}/api/v1/ask`;
 
   const res = await fetch(url, {
     method: "POST",
@@ -147,7 +147,7 @@ export async function ask(
   apiKey: string,
   input: AskInput,
 ): Promise<AskNonStreamResponse> {
-  return request<AskNonStreamResponse>("/api/v2/files/ask", {
+  return request<AskNonStreamResponse>("/api/v1/ask", {
     method: "POST",
     apiKey,
     body: { ...input, stream: false },

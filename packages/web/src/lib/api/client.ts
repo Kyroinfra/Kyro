@@ -20,7 +20,6 @@ type RequestOptions = {
 
 function getBaseUrl(): string {
   if (browser) {
-    console.log("[DEBUG-V3]", env.PUBLIC_API_URL);
     return env.PUBLIC_API_URL || "";
   }
   return process.env.INTERNAL_API_URL || "http://api:3000";

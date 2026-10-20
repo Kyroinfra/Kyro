@@ -109,7 +109,7 @@ export async function uploadFile(
 
 		xhr.onerror = () => reject(new Error('Network error'));
 
-		xhr.open('POST', `${getBaseUrl()}/api/v2/files`);
+		xhr.open('POST', `${getBaseUrl()}/api/v1/files`);
 		xhr.setRequestHeader('X-API-Key', apiKey);
 
 		const fd = new FormData();
@@ -123,4 +123,96 @@ export async function uploadFile(
 // Path: /api/files/[id]?key=<apiKey>  (note: NOT /api/v1/files)
 export function getDownloadUrl(id: string, apiKey: string): string {
 	return `/api/files/${id}?key=${encodeURIComponent(apiKey)}`;
+}
+
+// ── Extracted-text / enrichment endpoints (former files-v2.ts) ───────────────
+// All paths are the single /api/v1 surface since the v1/v2 flatten (#28).
+
+export type ExtractionStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
+export type EmbeddingStatus = 'pending' | 'embedding' | 'completed' | 'failed' | 'skipped';
+
+export type FileItemV2 = FileItem & {
+	extractionStatus: ExtractionStatus;
+};
+
+export interface PaginatedFilesV2 {
+	data: FileItemV2[];
+	pagination: {
+		limit: number;
+		hasMore: boolean;
+		nextCursor: string | null;
+	};
+}
+
+export async function getFilesV2(
+	apiKey: string,
+	limit = 100,
+	cursor?: string
+): Promise<{ files: FileItemV2[]; nextCursor: string | null; hasMore: boolean }> {
+	let url = `/api/v1/files?limit=${limit}`;
+	if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`;
+
+	const res = await request<PaginatedFilesV2>(url, { method: 'GET', apiKey });
+
+	return {
+		files: res.data,
+		nextCursor: res.pagination.nextCursor,
+		hasMore: res.pagination.hasMore
+	};
+}
+
+export interface ExtractedTextResponse {
+	fileId: string;
+	extractionStatus: ExtractionStatus;
+	extractedText: string | null;
+	error?: string;
+}
+
+export async function getFileText(apiKey: string, id: string): Promise<ExtractedTextResponse> {
+	return request<ExtractedTextResponse>(`/api/v1/files/${id}/text`, { method: 'GET', apiKey });
+}
+
+export async function triggerExtraction(
+	apiKey: string,
+	id: string
+): Promise<{ fileId: string; extractionStatus: ExtractionStatus; message?: string; extractedText?: string }> {
+	// POST /files/:id/reprocess — renamed from /:id/extract in #28 (#33 scopes
+	// fine-grained reprocessing variants).
+	return request(`/api/v1/files/${id}/reprocess`, { method: 'POST', apiKey });
+}
+
+export interface EmbedResponse {
+	fileId: string;
+	embeddingStatus: EmbeddingStatus;
+	chunksCreated: number;
+}
+
+export async function embedFileV2(apiKey: string, id: string): Promise<EmbedResponse> {
+	return request<EmbedResponse>(`/api/v1/files/${id}/embed`, { method: 'POST', apiKey });
+}
+
+export async function getFileMetadata(
+	apiKey: string,
+	id: string
+): Promise<Record<string, string>> {
+	return request<Record<string, string>>(`/api/v1/files/${id}/metadata`, { method: 'GET', apiKey });
+}
+
+export async function setFileMetadata(
+	apiKey: string,
+	id: string,
+	metadata: Record<string, string>
+): Promise<Record<string, string>> {
+	return request<Record<string, string>>(`/api/v1/files/${id}/metadata`, {
+		method: 'PUT',
+		apiKey,
+		body: metadata
+	});
+}
+
+export async function deleteFileMetadataKey(apiKey: string, id: string, key: string): Promise<void> {
+	await request<void>(`/api/v1/files/${id}/metadata/${encodeURIComponent(key)}`, {
+		method: 'DELETE',
+		apiKey
+	});
 }
