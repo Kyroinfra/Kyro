@@ -1,8 +1,8 @@
 import { Router, type Request, type Response } from 'express';
-import { db } from '../../db';
-import { webhooks, webhookDeliveries } from '../../db/schema';
+import { db } from '../db';
+import { webhooks, webhookDeliveries } from '../db/schema';
 import { eq, and, desc } from 'drizzle-orm';
-import { authMiddleware, requireRole } from '../../middleware/auth';
+import { authMiddleware, requireRole } from '../middleware/auth';
 import crypto from 'crypto';
 import { z } from 'zod';
 

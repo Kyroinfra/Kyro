@@ -1,10 +1,10 @@
 import { Router, type Request, type Response } from 'express';
-import { db } from '../../db';
-import { organisations, users } from '../../db/schema';
+import { db } from '../db';
+import { organisations, users } from '../db/schema';
 import { eq, and, sql } from 'drizzle-orm';
-import { hashPassword } from '../../lib/password';
-import { authMiddleware, requireRole } from '../../middleware/auth';
-import { inviteSchema, type InviteInput } from '../../validations/auth';
+import { hashPassword } from '../lib/password';
+import { authMiddleware, requireRole } from '../middleware/auth';
+import { inviteSchema, type InviteInput } from '../validations/auth';
 
 const router = Router();
 

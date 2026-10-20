@@ -1,158 +1,24 @@
-// routes/v2/semantic.ts
-// ─────────────────────────────────────────────────────────────────────────────
-// Changes from previous version:
-//   • /ask no longer requires fileIds or collectionId — when neither is
-//     provided the search runs across the entire org's embedded corpus.
-//     This enables support-bot / knowledge-base use cases where the caller
-//     should not need to know which files are relevant.
-//
-//   • askSchema: removed the refine() that required one of fileIds /
-//     collectionId. The mutual-exclusion refine() is kept.
-//
-//   • File ID resolution is now a three-way branch:
-//       collectionId → resolve to that collection's file IDs
-//       fileIds      → use as-is
-//       neither      → undefined (hybridSearch scopes to orgId only)
-//
-//   • Ownership + embedding-status check handles undefined resolvedFileIds:
-//       - When scoped: verify ownership, filter to embedded files, 422 if none.
-//       - When org-wide: verify at least one embedded file exists in the org.
-//
-//   • Both hybridSearch calls receive embeddedFileIds (which may be undefined
-//     for the org-wide case) — rrfSearch already handles undefined fileIds
-//     by omitting the AND file_id = ANY(...) clause entirely.
-//
-//   • All other logic (/semantic-search, /:id/embed, streaming, prompt) is
-//     unchanged.
-// ─────────────────────────────────────────────────────────────────────────────
-
-import { Router, type Response } from 'express';
-import { db } from '../../db';
-import { collections, collectionFiles, files } from '../../db/schema';
-import { eq, and, isNull, inArray } from 'drizzle-orm';
-import { requireScope, type ApiKeyRequest } from '../../middleware/apiKeyAuth';
-import { embedFile } from '../../lib/embeddings';
-import { hybridSearch } from '../../lib/retrieval';
-import { z } from 'zod';
-import { resolveMetadataFilter } from '../../lib/metadata';
-
-const router = Router();
-
-router.use((req, res, next) => {
-  console.log('semanticRouter hit:', req.method, req.path);
-  next();
-});
-
-import config from '../../config';
-
-const { ollamaUrl: OLLAMA_URL, chatModel: CHAT_MODEL, ragEnabled: RAG_ENABLED } = config;
-
-// ── Helper: resolve a collection to its file IDs ──────────────────────────────
-
-async function resolveCollectionToFileIds(
-  collectionId: string,
-  orgId:        string,
-): Promise<string[] | null> {
-  const [col] = await db
-    .select({ id: collections.id })
-    .from(collections)
-    .where(and(eq(collections.id, collectionId), eq(collections.orgId, orgId)));
-
-  if (!col) {return null;}
-
-  const rows = await db
-    .select({ fileId: collectionFiles.fileId })
-    .from(collectionFiles)
-    .where(eq(collectionFiles.collectionId, collectionId));
-
-  return rows.map(r => r.fileId);
-}
-
-// ── GET /semantic-search ──────────────────────────────────────────────────────
-//
-// min_score defaults to 0.01 — enough to filter chunks that appear in neither
-// retrieval arm while still returning anything with a genuine signal.
-// RRF score reference:
-//   ~0.016  chunk ranked #1 in one arm only   (1 / (60+1))
-//   ~0.008  chunk ranked #60 in one arm only  (1 / (60+60))
-//   ~0.032  chunk ranked #1 in BOTH arms      (two contributions)
-// 0.01 sits between a mid-table single-arm hit and a top single-arm hit,
-// so it filters obvious noise without hiding legitimate low-confidence matches.
-// Consumers can pass ?min_score=0 to disable filtering entirely.
-
-router.get('/semantic-search', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
-  const orgId = req.orgId!;
-  const q     = (req.query.q as string | undefined)?.trim();
-
-  if (!q) {
-    res.status(400).json({ error: 'Query parameter "q" is required' });
-    return;
-  }
-
-  if (!RAG_ENABLED) {
-    res.status(400).json({ error: 'OLLAMA_URL must be configured for semantic search' });
-    return;
-  }
-
-  const limit    = Math.min(parseInt((req.query.limit as string) || '10', 10), 50);
-  // Default 0.01 filters noise; pass ?min_score=0 to get all results
-  const minScore = parseFloat((req.query.min_score as string) || '0.01');
-
-  // ── Resolve file ID filter ─────────────────────────────────────────────
-  const hasCollectionId = !!req.query.collection_id;
-  const hasFileIds      = !!req.query.file_ids;
-
-  if (hasCollectionId && hasFileIds) {
-    res.status(400).json({ error: 'Provide either collection_id or file_ids, not both' });
-    return;
-  }
-
-  let fileIdFilter: string[] | undefined;
-
-  if (hasCollectionId) {
-    const ids = await resolveCollectionToFileIds(req.query.collection_id as string, orgId);
-    if (ids === null) {
-      res.status(400).json({ error: 'Collection not found' });
-      return;
-    }
-    if (ids.length === 0) {
-      res.status(400).json({ error: 'Collection has no files' });
-      return;
-    }
-    fileIdFilter = ids;
-  } else if (hasFileIds) {
-    const ids = (req.query.file_ids as string)
-      .split(',').map(s => s.trim()).filter(Boolean);
-    fileIdFilter = ids.length > 0 ? ids : undefined;
-  }
-
-  // ── Run hybrid retrieval ───────────────────────────────────────────────
-  const results = await hybridSearch({
-    orgId,
-    query:       q,
-    fileIds:     fileIdFilter,
-    limit,
-    minRrfScore: minScore,
-  });
-
-  res.json({
-    data:     results,
-    query:    q,
-    limit,
-    minScore, // expose so consumers know what threshold was applied
-  });
-});
-
-// ── POST /ask ─────────────────────────────────────────────────────────────────
+// routes/ask.ts — POST /ask (RAG question answering with SSE streaming)
 //
 // Supported modes (all via the same endpoint):
 //   { question, collectionId }   — search within a specific collection
 //   { question, fileIds: [...] } — search within specific files
 //   { question }                 — search across the entire org's embedded corpus
-//
-// The third mode is the primary addition: it lets support-bot callers send
-// only the question and let the retrieval layer determine relevance, rather
-// than requiring the caller to know which files to search.
+
+import { Router, type Response } from 'express';
+import { db } from '../db';
+import { files } from '../db/schema';
+import { eq, and, isNull, inArray } from 'drizzle-orm';
+import { requireScope, type ApiKeyRequest } from '../middleware/apiKeyAuth';
+import { hybridSearch } from '../lib/retrieval';
+import { z } from 'zod';
+import { resolveMetadataFilter } from '../lib/metadata';
+import config from '../config';
+import { resolveCollectionToFileIds } from './search';
+
+const router = Router();
+
+const { ollamaUrl: OLLAMA_URL, chatModel: CHAT_MODEL, ragEnabled: RAG_ENABLED } = config;
 
 const askSchema = z.object({
   filters: z.record(z.string(), z.union([z.string(), z.array(z.string())])).optional(),
@@ -169,7 +35,9 @@ const askSchema = z.object({
   { message: 'Provide either fileIds or collectionId, not both' },
 );
 
-router.post('/ask', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
+// ── POST / — answer a question from retrieved context ────────────────────────
+
+router.post('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
   const orgId = req.orgId!;
 
   const parsed = askSchema.safeParse(req.body);
@@ -192,9 +60,7 @@ router.post('/ask', requireScope('read'), async (req: ApiKeyRequest, res: Respon
   // intentional and handled correctly downstream by hybridSearch / rrfSearch.
   let resolvedFileIds: string[] | undefined;
 
-
   // Filter from filters
-
   if (parsed.data.filters && Object.keys(parsed.data.filters).length > 0) {
     const filteredIds = await resolveMetadataFilter(orgId, parsed.data.filters);
     if (filteredIds.length === 0) {
@@ -395,48 +261,6 @@ Rules:
 
   const ollamaData = await ollamaRes.json() as { message?: { content?: string } };
   res.json({ answer: ollamaData.message?.content ?? '', sources });
-});
-
-// ── POST /:id/embed ───────────────────────────────────────────────────────────
-
-router.post('/:id/embed', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
-  const orgId = req.orgId!;
-  const id    = req.params.id as string;
-
-  if (!RAG_ENABLED) {
-    res.status(400).json({ error: 'OLLAMA_URL must be configured to use embeddings' });
-    return;
-  }
-
-  const [file] = await db
-    .select({ id: files.id, extractedText: files.extractedText, embeddingStatus: files.embeddingStatus })
-    .from(files)
-    .where(and(eq(files.id, id), eq(files.orgId, orgId), isNull(files.deletedAt)));
-
-  if (!file) {
-    res.status(404).json({ error: 'File not found' });
-    return;
-  }
-
-  if (!file.extractedText) {
-    res.status(400).json({
-      error: 'No extracted text available. Run text extraction first via POST /files/:id/extract.',
-    });
-    return;
-  }
-
-  const result = await embedFile({
-    fileId:        file.id,
-    orgId,
-    extractedText: file.extractedText,
-    replace:       true,
-  });
-
-  res.json({
-    fileId:          file.id,
-    embeddingStatus: result.skipped ? 'skipped' : 'completed',
-    chunksCreated:   result.chunksCreated,
-  });
 });
 
 export default router;

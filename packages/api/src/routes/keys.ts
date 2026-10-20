@@ -1,9 +1,9 @@
 import { Router, type Request, type Response } from 'express';
-import { db } from '../../db';
-import { apiKeys } from '../../db/schema';
+import { db } from '../db';
+import { apiKeys } from '../db/schema';
 import { eq, and, isNull, desc, sql } from 'drizzle-orm';
-import { generateApiKey } from '../../lib/apiKey';
-import { authMiddleware, requireRole } from '../../middleware/auth';
+import { generateApiKey } from '../lib/apiKey';
+import { authMiddleware, requireRole } from '../middleware/auth';
 import { z } from 'zod';
 
 const router = Router();
