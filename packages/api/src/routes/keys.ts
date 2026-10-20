@@ -10,7 +10,7 @@ const router = Router();
 
 const createKeySchema = z.object({
   name: z.string().min(1).max(255),
-  scopes: z.array(z.enum(['read', 'write', 'admin'])).default(['read']),
+  scopes: z.array(z.enum(['read', 'write'])).default(['read']),
 });
 
 // POST / - create and returns a new API key

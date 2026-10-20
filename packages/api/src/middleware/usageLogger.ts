@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { db } from '../db';
 import { usageLogs } from '../db/schema';
-import type { ApiKeyRequest } from '../middleware/apiKeyAuth';
+import type { AuthedRequest } from './auth';
 
 export function usageLoggerMiddleware(req: Request, res: Response, next: NextFunction): void {
   const startTime = Date.now();
@@ -9,8 +9,8 @@ export function usageLoggerMiddleware(req: Request, res: Response, next: NextFun
 
   res.send = function (body?: any): Response {
     const responseTime = Date.now() - startTime;
-    const orgId = (req as ApiKeyRequest).orgId;
-    const apiKeyId = (req as ApiKeyRequest).apiKeyId;
+    const orgId = (req as AuthedRequest).orgId;
+    const apiKeyId = (req as AuthedRequest).apiKeyId;
 
     setImmediate(async () => {
       try {

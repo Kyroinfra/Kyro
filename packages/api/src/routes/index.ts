@@ -23,7 +23,7 @@ import usageRouter from './usage';
 import webhookRouter from './webhook';
 import collectionsRouter from './collections';
 import { usageLoggerMiddleware } from '../middleware/usageLogger';
-import { apiKeyAuthMiddleware } from '../middleware/apiKeyAuth';
+import { authMiddleware } from '../middleware/auth';
 import { rateLimitMiddleware } from '../middleware/rateLimit';
 
 const apiRouter = Router();
@@ -36,13 +36,13 @@ apiRouter.use('/webhooks', webhookRouter);
 
 apiRouter.use(
   '/files',
-  apiKeyAuthMiddleware,
+  authMiddleware,
   rateLimitMiddleware,
   usageLoggerMiddleware,
   filesRouter,
 );
-apiRouter.use('/collections', apiKeyAuthMiddleware, collectionsRouter);
-apiRouter.use('/search', apiKeyAuthMiddleware, rateLimitMiddleware, usageLoggerMiddleware, searchRouter);
-apiRouter.use('/ask', apiKeyAuthMiddleware, rateLimitMiddleware, usageLoggerMiddleware, askRouter);
+apiRouter.use('/collections', authMiddleware, collectionsRouter);
+apiRouter.use('/search', authMiddleware, rateLimitMiddleware, usageLoggerMiddleware, searchRouter);
+apiRouter.use('/ask', authMiddleware, rateLimitMiddleware, usageLoggerMiddleware, askRouter);
 
 export default apiRouter;

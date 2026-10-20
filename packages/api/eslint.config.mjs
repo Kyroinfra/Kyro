@@ -7,18 +7,35 @@ export default tseslint.config(
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  // Type-lookup is per file group — projectService and project must never
+  // appear in the same block.
   {
+    // src/ is covered by the primary tsconfig.json.
+    files: ['src/**/*.ts'],
+    languageOptions: {
+      parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
+    },
+  },
+  {
+    // Root-level config files live outside any tsconfig — give them a
+    // default project without type-lookup pain.
+    files: ['*.ts'],
     languageOptions: {
       parserOptions: {
-        projectService: {
-          // tests/ uses tsconfig.test.json (not referenced by the primary
-          // tsconfig.json) and root-level config files live outside any
-          // tsconfig — give both a default project without type-lookup pain.
-          allowDefaultProject: ['*.ts', 'tests/*.ts', 'tests/unit/*.ts'],
-        },
+        projectService: { allowDefaultProject: ['*.ts'] },
         tsconfigRootDir: import.meta.dirname,
       },
     },
+  },
+  {
+    // tests/ is not referenced by the primary tsconfig.json — type-check
+    // them against the dedicated test project instead.
+    files: ['tests/**/*.ts'],
+    languageOptions: {
+      parserOptions: { project: 'tsconfig.test.json', tsconfigRootDir: import.meta.dirname },
+    },
+  },
+  {
     rules: {
       'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': [
@@ -43,6 +60,17 @@ export default tseslint.config(
       quotes: ['error', 'single'],
       'no-process-exit': 'error',
       'no-return-await': 'error',
+    },
+  },
+  {
+    // Tests are not referenced by the primary tsconfig.json — type-check
+    // them against the dedicated test project instead.
+    files: ['tests/**/*.ts'],
+    languageOptions: {
+      parserOptions: {
+        project: 'tsconfig.test.json',
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
   },
   {

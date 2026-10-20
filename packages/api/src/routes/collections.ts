@@ -2,9 +2,9 @@
 
 import { Router, type Response } from 'express';
 import { db } from '../db';
-import { collections, collectionFiles, apiKeys, files } from '../db/schema';
+import { collections, collectionFiles, files } from '../db/schema';
 import { eq, and, isNull, inArray, sql, desc } from 'drizzle-orm';
-import { requireScope, type ApiKeyRequest } from '../middleware/apiKeyAuth';
+import { requireScope, resolveUserId, type AuthedRequest } from '../middleware/auth';
 import { z } from 'zod';
 
 const router = Router();
@@ -43,18 +43,10 @@ async function uniqueSlug(orgId: string, base: string, _excludeId?: string): Pro
   return slug;
 }
 
-/** Resolve the userId that owns the API key making the request. */
-async function getUserIdFromApiKey(apiKeyId: string): Promise<string> {
-  const [row] = await db
-    .select({ userId: apiKeys.userId })
-    .from(apiKeys)
-    .where(eq(apiKeys.id, apiKeyId));
-  return row.userId;
-}
 
 // ── GET / — list collections ──────────────────────────────────────────────────
 
-router.get('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
+router.get('/', requireScope('read'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
 
   const rows = await db
@@ -82,7 +74,7 @@ router.get('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) 
 
 // ── POST / — create collection ────────────────────────────────────────────────
 
-router.post('/', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
+router.post('/', requireScope('write'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
 
   const parsed = createCollectionSchema.safeParse(req.body);
@@ -91,7 +83,13 @@ router.post('/', requireScope('write'), async (req: ApiKeyRequest, res: Response
     return;
   }
 
-  const userId = await getUserIdFromApiKey(req.apiKeyId!);
+  const userId = await resolveUserId(req);
+
+  if (!userId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+
   const { name, description } = parsed.data;
   const slug = await uniqueSlug(orgId, toSlug(name));
 
@@ -111,7 +109,7 @@ router.post('/', requireScope('write'), async (req: ApiKeyRequest, res: Response
 
 // ── GET /:id — get collection with status summary ─────────────────────────────
 
-router.get('/:id', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
+router.get('/:id', requireScope('read'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
   const id = req.params.id as string;
 
@@ -149,7 +147,7 @@ router.get('/:id', requireScope('read'), async (req: ApiKeyRequest, res: Respons
 
 // ── PATCH /:id — update collection ───────────────────────────────────────────
 
-router.patch('/:id', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
+router.patch('/:id', requireScope('write'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
   const id = req.params.id as string;
 
@@ -190,7 +188,7 @@ router.patch('/:id', requireScope('write'), async (req: ApiKeyRequest, res: Resp
 
 // ── DELETE /:id ───────────────────────────────────────────────────────────────
 
-router.delete('/:id', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
+router.delete('/:id', requireScope('write'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
   const id = req.params.id as string;
 
@@ -209,7 +207,7 @@ router.delete('/:id', requireScope('write'), async (req: ApiKeyRequest, res: Res
 
 // ── GET /:id/files ────────────────────────────────────────────────────────────
 
-router.get('/:id/files', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
+router.get('/:id/files', requireScope('read'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
   const id = req.params.id as string;
 
@@ -260,7 +258,7 @@ router.get('/:id/files', requireScope('read'), async (req: ApiKeyRequest, res: R
 
 // ── POST /:id/files ───────────────────────────────────────────────────────────
 
-router.post('/:id/files', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
+router.post('/:id/files', requireScope('write'), async (req: AuthedRequest, res: Response) => {
   const orgId  = req.orgId!;
   const id     = req.params.id as string;
 
@@ -296,7 +294,12 @@ router.post('/:id/files', requireScope('write'), async (req: ApiKeyRequest, res:
     return;
   }
 
-  const userId = await getUserIdFromApiKey(req.apiKeyId!);
+  const userId = await resolveUserId(req);
+
+  if (!userId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
 
   await db
     .insert(collectionFiles)
@@ -313,7 +316,7 @@ router.post('/:id/files', requireScope('write'), async (req: ApiKeyRequest, res:
 
 // ── DELETE /:id/files/:fileId ─────────────────────────────────────────────────
 
-router.delete('/:id/files/:fileId', requireScope('write'), async (req: ApiKeyRequest, res: Response) => {
+router.delete('/:id/files/:fileId', requireScope('write'), async (req: AuthedRequest, res: Response) => {
   const orgId              = req.orgId!;
   const { id, fileId } = req.params as { id: string; fileId: string };
 

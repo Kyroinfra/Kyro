@@ -17,7 +17,7 @@ import { Router, type Response } from 'express';
 import { db } from '../db';
 import { collections, collectionFiles } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
-import { requireScope, type ApiKeyRequest } from '../middleware/apiKeyAuth';
+import { requireScope, type AuthedRequest } from '../middleware/auth';
 import { hybridSearch } from '../lib/retrieval';
 
 const router = Router();
@@ -45,7 +45,7 @@ export async function resolveCollectionToFileIds(
 
 // ── GET / — hybrid search across chunks ──────────────────────────────────────
 
-router.get('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
+router.get('/', requireScope('read'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
   const q     = (req.query.q as string | undefined)?.trim();
 

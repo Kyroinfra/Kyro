@@ -9,7 +9,7 @@ import { Router, type Response } from 'express';
 import { db } from '../db';
 import { files } from '../db/schema';
 import { eq, and, isNull, inArray } from 'drizzle-orm';
-import { requireScope, type ApiKeyRequest } from '../middleware/apiKeyAuth';
+import { requireScope, type AuthedRequest } from '../middleware/auth';
 import { hybridSearch } from '../lib/retrieval';
 import { z } from 'zod';
 import { resolveMetadataFilter } from '../lib/metadata';
@@ -37,7 +37,7 @@ const askSchema = z.object({
 
 // ── POST / — answer a question from retrieved context ────────────────────────
 
-router.post('/', requireScope('read'), async (req: ApiKeyRequest, res: Response) => {
+router.post('/', requireScope('read'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
 
   const parsed = askSchema.safeParse(req.body);
