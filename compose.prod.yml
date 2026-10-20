@@ -69,6 +69,7 @@ services:
       - OLLAMA_URL=${OLLAMA_URL}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text}
       - CHAT_MODEL=${CHAT_MODEL:-llama3.2}
+      - ALLOW_SIGNUP=${ALLOW_SIGNUP:-}
     volumes:
       - uploads_data:/app/uploads
     deploy:
