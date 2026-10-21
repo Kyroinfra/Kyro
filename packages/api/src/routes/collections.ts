@@ -3,7 +3,7 @@
 import { Router, type Response } from 'express';
 import { db } from '../db';
 import { collections, collectionFiles, files } from '../db/schema';
-import { eq, and, isNull, inArray, sql, desc } from 'drizzle-orm';
+import { eq, and, inArray, sql, desc } from 'drizzle-orm';
 import { requireScope, resolveUserId, type AuthedRequest } from '../middleware/auth';
 import { z } from 'zod';
 
@@ -64,7 +64,7 @@ router.get('/', requireScope('read'), async (req: AuthedRequest, res: Response) 
     })
     .from(collections)
     .leftJoin(collectionFiles, eq(collectionFiles.collectionId, collections.id))
-    .leftJoin(files, and(eq(files.id, collectionFiles.fileId), isNull(files.deletedAt)))
+    .leftJoin(files, and(eq(files.id, collectionFiles.fileId)))
     .where(eq(collections.orgId, orgId))
     .groupBy(collections.id)
     .orderBy(desc(collections.createdAt));
@@ -133,7 +133,7 @@ router.get('/:id', requireScope('read'), async (req: AuthedRequest, res: Respons
     })
     .from(collections)
     .leftJoin(collectionFiles, eq(collectionFiles.collectionId, collections.id))
-    .leftJoin(files, and(eq(files.id, collectionFiles.fileId), isNull(files.deletedAt)))
+    .leftJoin(files, and(eq(files.id, collectionFiles.fileId)))
     .where(and(eq(collections.id, id), eq(collections.orgId, orgId)))
     .groupBy(collections.id);
 
@@ -237,7 +237,7 @@ router.get('/:id/files', requireScope('read'), async (req: AuthedRequest, res: R
       })
       .from(collectionFiles)
       .innerJoin(files, eq(files.id, collectionFiles.fileId))
-      .where(and(eq(collectionFiles.collectionId, id), isNull(files.deletedAt)))
+      .where(and(eq(collectionFiles.collectionId, id)))
       .orderBy(desc(collectionFiles.addedAt))
       .limit(limit)
       .offset(offset),
@@ -245,7 +245,7 @@ router.get('/:id/files', requireScope('read'), async (req: AuthedRequest, res: R
       .select({ total: sql<number>`COUNT(*)::int`.mapWith(Number) })
       .from(collectionFiles)
       .innerJoin(files, eq(files.id, collectionFiles.fileId))
-      .where(and(eq(collectionFiles.collectionId, id), isNull(files.deletedAt))),
+      .where(and(eq(collectionFiles.collectionId, id))),
   ]);
 
   const total = countRow?.total ?? 0;
@@ -281,7 +281,7 @@ router.post('/:id/files', requireScope('write'), async (req: AuthedRequest, res:
   const ownedFiles = await db
     .select({ id: files.id })
     .from(files)
-    .where(and(eq(files.orgId, orgId), inArray(files.id, parsed.data.fileIds), isNull(files.deletedAt)));
+    .where(and(eq(files.orgId, orgId), inArray(files.id, parsed.data.fileIds)));
 
   const ownedIds = new Set(ownedFiles.map(f => f.id));
   const unowned  = parsed.data.fileIds.filter(fid => !ownedIds.has(fid));

@@ -108,9 +108,6 @@ export async function dispatchCollectionEmbeddingEvents(
             .where(
                 and(
                     eq(collectionFiles.collectionId, collectionId),
-                    // only count non-deleted files
-                    // (deleted files are excluded — if they were removed the collection
-                    //  should not be blocked waiting for them)
                 ),
             );
 

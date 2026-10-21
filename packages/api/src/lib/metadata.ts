@@ -25,7 +25,7 @@ import { files, fileMetadata } from '../db/schema';
 import { eq, and, exists, inArray, sql, type SQL } from 'drizzle-orm';
 
 /**
- * Returns the IDs of all non-deleted files in `orgId` that match every
+ * Returns the IDs of all files in `orgId` that match every
  * entry in `filters`.
  *
  * @param orgId   The org to scope the search to.

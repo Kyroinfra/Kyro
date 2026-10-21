@@ -1,4 +1,6 @@
-// db/schema.ts  (full replacement — adds vector type + fileChunks table)
+// db/schema.ts — the data model. pgvector via Drizzle's native `vector` type
+// (dimensions from config.EMBEDDING_DIM), the chunk tsvector is a Postgres
+// generated column (no triggers) — reflects migrations 0000..0014.
 
 import {
   pgTable,
@@ -13,25 +15,15 @@ import {
   boolean,
   customType,
   primaryKey,
+  vector,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import config from '../config';
 
 // ── Custom column types ────────────────────────────────────────────────────────
 
 const tsvector = customType<{ data: string }>({
   dataType() { return 'tsvector'; },
-});
-
-// pgvector — fixed at 768 dims (nomic-embed-text).
-// Change the number if you switch to a different model.
-const vector = customType<{ data: number[]; driverData: string }>({
-  dataType() { return 'vector(768)'; },
-  toDriver(value: number[]): string {
-    return `[${value.join(',')}]`;
-  },
-  fromDriver(value: string): number[] {
-    return value.replace(/^\[|\]$/g, '').split(',').map(Number);
-  },
 });
 
 // ── Tables ─────────────────────────────────────────────────────────────────────
@@ -79,19 +71,17 @@ export const files = pgTable('files', {
   mimeType:          varchar('mime_type', { length: 255 }),
   sizeBytes:         bigint('size_bytes', { mode: 'number' }).notNull(),
   extractedText:     text('extracted_text'),
-  textSearchVector:  tsvector('text_search_vector'),
   // One pipeline status (#33): the file's whole ingest position.
   //   pending | processing | ready | failed | skipped
   // `error` carries the failure message whenever status = 'failed'.
   status:            varchar('status', { length: 50 }).notNull().default('pending'),
   error:             text('error'),
-  deletedAt:         timestamp('deleted_at'),
   createdAt:         timestamp('created_at').defaultNow(),
 }, (table) => ({
-  orgIdIdx:          index('idx_files_org_id').on(table.orgId).where(sql`${table.deletedAt} IS NULL`),
+  orgIdIdx:          index('idx_files_org_id').on(table.orgId),
 }));
 
-// ── NEW: file_chunks ──────────────────────────────────────────────────────────
+// ── file_chunks ───────────────────────────────────────────────────────────────
 // One row per text chunk. Populated after text extraction completes.
 export const fileChunks = pgTable('file_chunks', {
   id:                uuid('id').defaultRandom().primaryKey(),
@@ -99,15 +89,21 @@ export const fileChunks = pgTable('file_chunks', {
   orgId:             uuid('org_id').notNull().references(() => organisations.id, { onDelete: 'cascade' }),
   chunkIndex:        integer('chunk_index').notNull(),
   content:           text('content').notNull(),
-  embedding:         vector('embedding'),
+  // Native Drizzle/pgvector column. Dimensions come from config only
+  // (EMBEDDING_DIM, #24) — keep it in sync with the embedding model. Switching
+  // models means: generate a migration for the new type, wipe/re-embed the
+  // chunks (POST /files/:id/reprocess runs the whole pipeline per file).
+  embedding:         vector('embedding', { dimensions: config.embeddingDim }),
   tokenCount:        integer('token_count'),
-  textSearchVector:  tsvector('text_search_vector'),   // ← add this
+  // Postgres 12+ generated column — no trigger needed (#34).
+  textSearchVector:  tsvector('text_search_vector').generatedAlwaysAs(sql`to_tsvector('english', content)`),
   createdAt:         timestamp('created_at').defaultNow(),
 }, (table) => ({
   orgIdIdx:    index('idx_file_chunks_org_id').on(table.orgId),
   fileIdIdx:   index('idx_file_chunks_file_id').on(table.fileId),
   uniqueChunk: uniqueIndex('idx_file_chunks_file_chunk').on(table.fileId, table.chunkIndex),
-  ftsIdx:      index('idx_file_chunks_fts').using('gin', table.textSearchVector),  // ← add this
+  ftsIdx:      index('idx_file_chunks_fts').using('gin', table.textSearchVector),
+  hnswIdx:     index('idx_file_chunks_embedding_hnsw').using('hnsw', table.embedding.op('vector_cosine_ops')),
 }));
 
 export const usageLogs = pgTable('usage_logs', {
