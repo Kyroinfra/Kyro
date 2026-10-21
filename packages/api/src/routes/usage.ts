@@ -72,7 +72,7 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
       totalStorage: sql<number>`COALESCE(SUM(${files.sizeBytes}), 0)`.mapWith(Number),
     })
     .from(files)
-    .where(and(eq(files.orgId, orgId), sql`${files.deletedAt} IS NULL`));
+    .where(eq(files.orgId, orgId));
 
   const [keysRow] = await db
     .select({

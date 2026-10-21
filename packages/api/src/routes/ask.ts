@@ -10,7 +10,7 @@
 import { Router, type Response } from 'express';
 import { db } from '../db';
 import { files } from '../db/schema';
-import { eq, and, isNull, inArray } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { requireScope, type AuthedRequest } from '../middleware/auth';
 import { hybridSearch } from '../rag/retrieve';
 import { streamAnswer, answerOnce } from '../rag/ask';
@@ -117,7 +117,6 @@ router.post('/', requireScope('read'), async (req: AuthedRequest, res: Response)
       .from(files)
       .where(and(
         eq(files.orgId, orgId),
-        isNull(files.deletedAt),
         inArray(files.id, resolvedFileIds),
       ));
 
@@ -148,7 +147,6 @@ router.post('/', requireScope('read'), async (req: AuthedRequest, res: Response)
       .from(files)
       .where(and(
         eq(files.orgId, orgId),
-        isNull(files.deletedAt),
         eq(files.status, 'ready'),
       ))
       .limit(1);

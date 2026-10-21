@@ -148,7 +148,6 @@ export async function rrfSearch(opts: RrfSearchOptions): Promise<RetrievalResult
       JOIN files f ON f.id = fc.file_id
       WHERE
             fc.org_id    = $${P_ORG}
-        AND f.deleted_at  IS NULL
         AND fc.embedding  IS NOT NULL
         AND fc.embedding <=> '${vectorLiteral}'::vector < ${VECTOR_DISTANCE_THRESHOLD}
         ${fileFilterClause}
@@ -169,7 +168,6 @@ export async function rrfSearch(opts: RrfSearchOptions): Promise<RetrievalResult
       JOIN files f ON f.id = fc.file_id
       WHERE
             fc.org_id             = $${P_ORG}
-        AND f.deleted_at          IS NULL
         AND fc.text_search_vector @@ websearch_to_tsquery('english', $${P_QUERY})
         ${fileFilterClause}
       LIMIT ${CANDIDATE_LIMIT}

@@ -1,7 +1,7 @@
 import { Router, type Response } from 'express';
 import { db } from '../db';
 import { files, fileMetadata } from '../db/schema';
-import { eq, and, isNull, sql } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { requireScope, resolveUserId, type AuthedRequest } from '../middleware/auth';
 import { upload } from '../middleware/upload';
 import { saveFile, deleteFile, getFilePath } from '../lib/storage';
@@ -39,8 +39,7 @@ router.post(
     // Deployment-wide disk-safety cap from config — not a per-org quota.
     const [storageRow] = await db
       .select({ used: sql`COALESCE(SUM(${files.sizeBytes}), 0)`.mapWith(Number) })
-      .from(files)
-      .where(isNull(files.deletedAt));
+      .from(files);
     const usedStorage = storageRow?.used ?? 0;
 
     if (usedStorage + req.file.size > config.storageLimit) {
@@ -128,7 +127,7 @@ router.get('/', requireScope('read'), async (req: AuthedRequest, res: Response) 
       status:    files.status,
     })
     .from(files)
-    .where(and(eq(files.orgId, orgId), isNull(files.deletedAt), cursorCondition))
+    .where(and(eq(files.orgId, orgId), cursorCondition))
     .orderBy(sql`${files.createdAt} DESC, ${files.id} DESC`)
     .limit(limit + 1);
 
@@ -166,7 +165,7 @@ router.get('/:id/text', requireScope('read'), async (req: AuthedRequest, res: Re
       error:         files.error,
     })
     .from(files)
-    .where(and(eq(files.id, id), eq(files.orgId, orgId), isNull(files.deletedAt)));
+    .where(and(eq(files.id, id), eq(files.orgId, orgId)));
 
   if (!file) {
     res.status(404).json({ error: 'File not found' });
@@ -198,7 +197,7 @@ router.post('/:id/reprocess', requireScope('write'), async (req: AuthedRequest, 
       status:     files.status,
     })
     .from(files)
-    .where(and(eq(files.id, id), eq(files.orgId, orgId), isNull(files.deletedAt)));
+    .where(and(eq(files.id, id), eq(files.orgId, orgId)));
 
   if (!file) {
     res.status(404).json({ error: 'File not found' });
@@ -248,7 +247,7 @@ router.get('/:id/metadata', requireScope('read'), async (req: AuthedRequest, res
   const [file] = await db
     .select({ id: files.id })
     .from(files)
-    .where(and(eq(files.id, id), eq(files.orgId, orgId), isNull(files.deletedAt)));
+    .where(and(eq(files.id, id), eq(files.orgId, orgId)));
 
   if (!file) {
     res.status(404).json({ error: 'File not found' });
@@ -281,7 +280,7 @@ router.put('/:id/metadata', requireScope('write'), async (req: AuthedRequest, re
   const [file] = await db
     .select({ id: files.id })
     .from(files)
-    .where(and(eq(files.id, id), eq(files.orgId, orgId), isNull(files.deletedAt)));
+    .where(and(eq(files.id, id), eq(files.orgId, orgId)));
 
   if (!file) {
     res.status(404).json({ error: 'File not found' });
@@ -319,7 +318,7 @@ router.delete('/:id/metadata/:key', requireScope('write'), async (req: AuthedReq
   const [file] = await db
     .select({ id: files.id })
     .from(files)
-    .where(and(eq(files.id, id), eq(files.orgId, orgId), isNull(files.deletedAt)));
+    .where(and(eq(files.id, id), eq(files.orgId, orgId)));
 
   if (!file) {
     res.status(404).json({ error: 'File not found' });
@@ -358,7 +357,7 @@ router.get('/:id', requireScope('read'), async (req: AuthedRequest, res: Respons
       sizeBytes: files.sizeBytes,
     })
     .from(files)
-    .where(and(eq(files.id, id), eq(files.orgId, orgId), isNull(files.deletedAt)));
+    .where(and(eq(files.id, id), eq(files.orgId, orgId)));
 
   if (!file) {
     res.status(404).json({ error: 'File not found' });
@@ -387,16 +386,19 @@ router.delete('/:id', requireScope('write'), async (req: AuthedRequest, res: Res
   const id    = req.params.id as string;
 
   const [file] = await db
-    .select({ storageKey: files.storageKey })
+    .select({ id: files.id, storageKey: files.storageKey })
     .from(files)
-    .where(and(eq(files.id, id), eq(files.orgId, orgId), isNull(files.deletedAt)));
+    .where(and(eq(files.id, id), eq(files.orgId, orgId)));
 
   if (!file) {
     res.status(404).json({ error: 'File not found' });
     return;
   }
 
-  await db.update(files).set({ deletedAt: new Date() }).where(eq(files.id, id));
+  // Hard delete (#34): one delete removes the row; the ON DELETE CASCADE FKs
+  // on file_chunks / file_metadata / collection_files remove its children,
+  // and the physical blob goes too. Nothing lingers under a deleted_at flag.
+  await db.delete(files).where(eq(files.id, file.id));
   await deleteFile(file.storageKey);
 
   res.json({ message: 'File deleted', id });
