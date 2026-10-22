@@ -1,17 +1,17 @@
 // routes/search.ts — GET /search (hybrid retrieval, chunk-level)
 //
 // Replaces the v2 endpoints GET /files/semantic-search and GET /files/search:
-// rrfSearch() already fuses the lexical arm (ts_rank over chunk text) with the
-// dense vector arm, so this chunk-level endpoint subsumes both; the file-level
-// ts_rank + ts_headline route was deleted with #28 (semantics per #34).
+// rrfSearch() already fuses the full-text arm (ts_rank over chunk text) with
+// the dense vector arm, so this chunk-level endpoint subsumes both; the
+// file-level ts_rank + ts_headline route was deleted with #28 (semantics
+// per #34).
 //
-// min_score defaults to 0.01 — enough to filter chunks that appear in neither
-// retrieval arm while still returning anything with a genuine signal.
-// RRF score reference:
+// No client-side score threshold (#35): ?min_score on an RRF scale whose
+// maximum is ~0.033 was opaque to consumers, and the vector arm's distance
+// threshold (config) already bounds noise. RRF score reference:
 //   ~0.016  chunk ranked #1 in one arm only   (1 / (60+1))
 //   ~0.008  chunk ranked #60 in one arm only  (1 / (60+60))
 //   ~0.032  chunk ranked #1 in BOTH arms      (two contributions)
-// Consumers can pass ?min_score=0 to disable filtering entirely.
 
 import { Router, type Response } from 'express';
 import { requireScope, type AuthedRequest } from '../middleware/auth';
@@ -31,9 +31,7 @@ router.get('/', requireScope('read'), async (req: AuthedRequest, res: Response) 
     return;
   }
 
-  const limit    = Math.min(parseInt((req.query.limit as string) || '10', 10), 50);
-  // Default 0.01 filters noise; pass ?min_score=0 to get all results
-  const minScore = parseFloat((req.query.min_score as string) || '0.01');
+  const limit = Math.min(parseInt((req.query.limit as string) || '10', 10), 50);
 
   // ── Resolve file ID filter ─────────────────────────────────────────────
   const hasCollectionId = !!req.query.collection_id;
@@ -66,17 +64,15 @@ router.get('/', requireScope('read'), async (req: AuthedRequest, res: Response) 
   // ── Run hybrid retrieval ───────────────────────────────────────────────
   const results = await hybridSearch({
     orgId,
-    query:       q,
-    fileIds:     fileIdFilter,
+    query:   q,
+    fileIds: fileIdFilter,
     limit,
-    minRrfScore: minScore,
   });
 
   res.json({
-    data:     results,
-    query:    q,
+    data:  results,
+    query: q,
     limit,
-    minScore, // expose so consumers know what threshold was applied
   });
 });
 

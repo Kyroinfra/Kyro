@@ -18,20 +18,16 @@ export async function semanticSearch(
     collectionId?: string;
     fileIds?: string[];
     limit?: number;
-    minScore?: number;
   } = {},
 ): Promise<{
   data: SemanticSearchResult[];
   query: string;
   limit: number;
-  minScore: number;
 }> {
   const params = new URLSearchParams({ q });
   if (opts.collectionId) params.set("collection_id", opts.collectionId);
   if (opts.fileIds?.length) params.set("file_ids", opts.fileIds.join(","));
   if (opts.limit) params.set("limit", String(opts.limit));
-  if (opts.minScore !== undefined)
-    params.set("min_score", String(opts.minScore));
 
   return request(`/api/v1/search?${params.toString()}`, {
     method: "GET",
@@ -53,7 +49,6 @@ export interface AskInput {
   collectionId?: string;
   fileIds?: string[];
   topK?: number;
-  minScore?: number;
   filters?: Record<string, string | string[]>;
   /** Prior turns replayed to the LLM so follow-ups stay in-thread. */
   history?: Array<{ role: "user" | "assistant"; content: string }>;
