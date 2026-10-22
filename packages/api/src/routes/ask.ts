@@ -30,7 +30,6 @@ export const askSchema = z.object({
   collectionId: z.string().uuid().optional(),
   topK:         z.number().int().min(1).max(20).optional().default(8),
   model:        z.string().optional(),
-  minScore:     z.number().min(0).max(1).optional().default(0),
   stream:       z.boolean().optional().default(true),
   // Conversation memory: prior user/assistant turns so follow-ups like
   // "what about page 2?" resolve against the thread. Recent turns are
@@ -62,8 +61,7 @@ router.post('/', requireScope('read'), async (req: AuthedRequest, res: Response)
   }
 
   const { question, topK, stream } = parsed.data;
-  const minScore = parsed.data.minScore;
-  const model    = parsed.data.model;
+  const model = parsed.data.model;
 
   // ── Resolve file IDs ───────────────────────────────────────────────────
   // resolvedFileIds === undefined means "search the whole org" — this is
@@ -163,10 +161,9 @@ router.post('/', requireScope('read'), async (req: AuthedRequest, res: Response)
   // ── Hybrid retrieval ───────────────────────────────────────────────────
   const sources = await hybridSearch({
     orgId,
-    query:       question,
-    fileIds:     embeddedFileIds,   // undefined = whole org
-    limit:       topK,
-    minRrfScore: minScore,
+    query:   question,
+    fileIds: embeddedFileIds,   // undefined = whole org
+    limit:   topK,
   });
 
   // ── Prompt + streaming response ────────────────────────────────────────

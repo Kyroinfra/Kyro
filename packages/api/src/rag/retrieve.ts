@@ -1,45 +1,38 @@
 // rag/retrieve.ts
 // ─────────────────────────────────────────────────────────────────────────────
-// Two-phase hybrid retrieval for file chunks.
+// Hybrid retrieval for file chunks (#35).
 //
-// Phase 1 — Candidate generation (fast, runs entirely in Postgres):
-//   a. Dense retrieval:  cosine similarity via pgvector (<=> operator).
-//   b. Sparse retrieval: BM25-style full-text search via tsvector / tsquery.
-//   Both return up to CANDIDATE_LIMIT rows with their rank positions.
-//   Scores are fused with Reciprocal Rank Fusion (RRF, k=60).
+//   a. Dense arm:  cosine distance via pgvector (`<=>`), HNSW-backed since #34.
+//   b. Full-text arm: ts_rank over the generated tsvector (it is NOT BM25 —
+//      ts_rank is a simpler relevance function; the name says what it is).
+//   Both arms fetch up to CANDIDATE_LIMIT rows WITH an explicit ORDER BY
+//   before LIMIT, so the kept candidate set is deterministic. Scores are
+//   fused with Reciprocal Rank Fusion (RRF k=60); ties break on file_id /
+//   chunk_index so the output order is fully deterministic.
 //
-// Phase 2 — Reranking (slow, runs against Ollama):
-//   The top RERANK_INPUT_LIMIT candidates from Phase 1 are scored by a
-//   cross-encoder model that sees (query, chunk) jointly and assigns a
-//   relevance score. Final results are sorted by that score.
+//   Cross-encoder reranking is OPT-IN (RERANK_ENABLED, default off — it makes
+//   up to RERANK_INPUT_LIMIT Ollama calls). When off, RRF order is the final
+//   answer.
 //
-// Fixes applied:
+// History notes worth keeping:
 //
-//   FIX 1 (2026-06-07) — Parameter index corruption:
-//   The original rrfSearch() built SQL parameter indices ($N) by reading
-//   params.length mid-template-literal, but the fileIds IIFE mutated params
-//   during vector-arm template evaluation — so by the time the BM25 arm was
-//   evaluated, params.length was already wrong, giving the BM25 query string
-//   the wrong bind index. This caused the BM25 arm to silently fail, leaving
-//   only the vector arm contributing to RRF.
-//   Fix: assign ALL parameter indices explicitly BEFORE constructing the SQL
-//   string.
+//   FIX 1 (2026-06-07) — Parameter index corruption: parameter indices are
+//   assigned explicitly BEFORE constructing the SQL string (the original code
+//   derived them from params.length inside the template and mutated the array
+//   mid-construction, silently breaking the full-text arm).
 //
-//   FIX 2 (2026-06-07) — Vector arm distance threshold:
-//   Without a distance filter the vector arm always returns CANDIDATE_LIMIT
-//   rows regardless of relevance — cosine similarity ranks every chunk against
-//   every query, so even nonsense queries get N results. This meant RRF always
-//   had N candidates from the vector arm even when none were relevant, causing
-//   semantic-search to return all chunks for any query.
-//   Fix: add VECTOR_DISTANCE_THRESHOLD to the vector arm's WHERE clause so
-//   only genuinely similar chunks (distance < threshold) enter RRF. Chunks
-//   that are too far from the query vector are excluded before ranking.
-//   The BM25 arm is unaffected — it already self-filters via @@ tsquery.
+//   FIX 2 (2026-06-07) — Vector arm distance threshold: without it the vector
+//   arm always returns CANDIDATE_LIMIT rows and nonsense queries carried noise
+//   into RRF. The threshold is config.VECTOR_DISTANCE_THRESHOLD (#24).
+//
+//   #35 — query vector is a BOUND parameter ($n::vector). pgvector accepts
+//   the native driver string in a parameter and casts it; the old
+//   string-interpolation and the "cannot bind" comment were wrong.
 //
 // NOTE — this is the ONLY module permitted to use the raw pg handle (see the
-// comment in db/index.ts): the RRF SQL is tsvector/vector-specific and is not
-// expressible with the Drizzle query builder. Re-established as the explicit
-// whitelist by #26.
+// comment in db/index.ts): the fusion SQL is tsvector/vector-specific and is
+// not expressible with the Drizzle query builder. Re-established as the
+// explicit whitelist by #26.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { pool } from '../db';
@@ -55,19 +48,17 @@ const RRF_K = 60;
 // How many candidates each arm fetches before fusion.
 const CANDIDATE_LIMIT = 100;
 
-// How many fused candidates are passed to the cross-encoder.
+// How many fused candidates are passed to the cross-encoder (only when
+// reranking is enabled).
 const RERANK_INPUT_LIMIT = 50;
 
-// Cosine distance threshold for the vector arm.
-// pgvector's <=> operator returns cosine distance in [0, 2]:
+// Cosine distance threshold for the vector arm — from config (#24).
+// pgvector's <=> returns cosine distance in [0, 2]:
 //   0.0  = identical vectors
 //   1.0  = orthogonal (no similarity)
 //   2.0  = opposite vectors
-// Typical values for nomic-embed-text on related text: 0.1–0.4
-// Typical values for unrelated/nonsense text:          0.5–1.0+
-// 0.5 is a deliberately generous cutoff — it admits anything with any
-// directional similarity while excluding pure noise. Tighten to 0.3–0.4
-// if you want stricter relevance filtering.
+// 0.5 (default) admits anything with any directional similarity while
+// excluding pure noise. Tighten via env without a redeploy.
 const VECTOR_DISTANCE_THRESHOLD = config.vectorDistanceThreshold;
 
 // ── Shared result shape ───────────────────────────────────────────────────────
@@ -81,7 +72,7 @@ export interface RetrievalResult {
   rerankScore?: number;
 }
 
-// ── Phase 1: BM25 + vector → RRF ─────────────────────────────────────────────
+// ── Phase 1: full-text + vector → RRF ────────────────────────────────────────
 
 export interface RrfSearchOptions {
   orgId:       string;
@@ -89,73 +80,84 @@ export interface RrfSearchOptions {
   queryVector: number[];
   fileIds?:    string[];
   limit:       number;
-  minScore?:   number;
 }
 
 /**
- * Phase 1: retrieve candidates from both the dense (vector) and sparse (BM25)
- * arms, fuse their ranks with RRF, and return up to `limit` results sorted
- * by descending RRF score.
+ * Phase 1: retrieve candidates from both the dense (vector) and full-text
+ * arms, fuse their ranks with RRF, and return up to `limit` results sorted by
+ * descending RRF score (ties break by fileId/chunkIndex — deterministic).
  *
  * Parameter layout (all assigned before SQL construction):
- *   $1  — orgId       (used in both arms)
- *   $2  — query text  (used in BM25 arm)
- *   $3  — fileIds[]   (only when fileIds filter is present)
- *
- * The vector literal and distance threshold are inlined as safe strings
- * (number[] and a numeric constant we produced, never raw user input) because
- * pgvector's <=> operator does not accept bind parameters for its operands.
+ *   $1 — orgId (where the vector arm's chunks, the joined file and the
+ *        full-text arm's chunks must belong)
+ *   $2 — query embedding, bound once as ::vector (used for both the distance
+ *        filter and the ORDER BY)
+ *   $3 — cosine distance threshold (config, number we produced)
+ *   $4 — per-arm candidate LIMIT
+ *   $5 — query text (full-text arm)
+ *   $6 — fileIds[] ::uuid[] (only when the filter is present)
+ *   $7 — output LIMIT (only when the filter is present; $6 otherwise)
  */
 export async function rrfSearch(opts: RrfSearchOptions): Promise<RetrievalResult[]> {
-  const { orgId, query, queryVector, fileIds, limit, minScore = 0 } = opts;
+  const { orgId, query, queryVector, fileIds, limit } = opts;
 
   // ── Build params array with explicit indices BEFORE touching SQL ──────────
   const params: unknown[] = [];
 
-  // $1 — orgId
   params.push(orgId);
   const P_ORG = params.length; // 1
 
-  // $2 — query text (BM25 arm)
-  params.push(query);
-  const P_QUERY = params.length; // 2
+  // pgvector bind — pool/JSON-stringified plain text cast to the column type
+  params.push(`[${queryVector.join(',')}]`);
+  const P_VECTOR = params.length; // 2
 
-  // $3 — fileIds array (optional)
+  params.push(VECTOR_DISTANCE_THRESHOLD);
+  const P_THRESHOLD = params.length; // 3
+
+  params.push(CANDIDATE_LIMIT);
+  const P_CANDIDATES = params.length; // 4
+
+  params.push(query);
+  const P_QUERY = params.length; // 5
+
   let fileFilterClause = '';
   if (fileIds && fileIds.length > 0) {
     params.push(fileIds);
-    const P_FILE_IDS = params.length; // 3
+    const P_FILE_IDS = params.length;
     fileFilterClause = `AND fc.file_id = ANY($${P_FILE_IDS}::uuid[])`;
   }
 
-  // Inline the vector literal and threshold — safe, number[] we produced
-  const vectorLiteral = `[${queryVector.join(',')}]`;
+  params.push(limit);
+  const P_LIMIT = params.length;
 
-  const sql = `
+  const fusedSql = `
     WITH vector_ranked AS (
-      -- Dense arm: only include chunks within VECTOR_DISTANCE_THRESHOLD of the
-      -- query vector. This prevents noise chunks from always contributing to RRF
-      -- even when the query has no semantic match in the corpus.
+      -- Dense arm: keep only chunks within the configured cosine distance of
+      -- the query vector, ranked by distance ASC. The ORDER BY before LIMIT is
+      -- what makes the kept set mean "closest $4", not "any $4 rows".
       SELECT
         fc.file_id         AS file_id,
         f.name             AS file_name,
         fc.chunk_index     AS chunk_index,
         fc.content         AS content,
         ROW_NUMBER() OVER (
-          ORDER BY fc.embedding <=> '${vectorLiteral}'::vector
-        )                  AS rank
+          ORDER BY fc.embedding <=> $${P_VECTOR}::vector
+        )                          AS rank
       FROM file_chunks fc
       JOIN files f ON f.id = fc.file_id
       WHERE
-            fc.org_id    = $${P_ORG}
-        AND fc.embedding  IS NOT NULL
-        AND fc.embedding <=> '${vectorLiteral}'::vector < ${VECTOR_DISTANCE_THRESHOLD}
+            fc.org_id                            = $${P_ORG}
+        AND f.org_id  IS NOT DISTINCT FROM $${P_ORG}
+        AND fc.embedding IS NOT NULL
+        AND fc.embedding <=> $${P_VECTOR}::vector < $${P_THRESHOLD}::float8
         ${fileFilterClause}
-      LIMIT ${CANDIDATE_LIMIT}
+      ORDER BY fc.embedding <=> $${P_VECTOR}::vector
+      LIMIT $${P_CANDIDATES}::int
     ),
-    bm25_ranked AS (
-      -- Sparse arm: BM25 via tsvector. Self-filtering — only chunks that match
-      -- the tsquery are included, so no threshold needed here.
+    text_ranked AS (
+      -- Full-text arm: ts_rank over the generated tsvector (NOT BM25 — the
+      -- simpler ts_rank relevance postgres ships). Self-filtering: only
+      -- chunks matching the tsquery are included, no threshold needed.
       SELECT
         fc.file_id         AS file_id,
         f.name             AS file_name,
@@ -163,30 +165,32 @@ export async function rrfSearch(opts: RrfSearchOptions): Promise<RetrievalResult
         fc.content         AS content,
         ROW_NUMBER() OVER (
           ORDER BY ts_rank(fc.text_search_vector, websearch_to_tsquery('english', $${P_QUERY})) DESC
-        )                  AS rank
+        )                          AS rank
       FROM file_chunks fc
       JOIN files f ON f.id = fc.file_id
       WHERE
-            fc.org_id             = $${P_ORG}
+            fc.org_id  = $${P_ORG}
+        AND f.org_id IS NOT DISTINCT FROM $${P_ORG}
         AND fc.text_search_vector @@ websearch_to_tsquery('english', $${P_QUERY})
         ${fileFilterClause}
-      LIMIT ${CANDIDATE_LIMIT}
+      ORDER BY ts_rank(fc.text_search_vector, websearch_to_tsquery('english', $${P_QUERY})) DESC
+      LIMIT $${P_CANDIDATES}::int
     ),
     fused AS (
       -- Reciprocal Rank Fusion over the union of both arms.
       -- A chunk that appears in both arms gets contributions from each.
       -- A chunk that appears in neither arm is not present at all.
       SELECT
-        COALESCE(v.file_id,     b.file_id)     AS file_id,
-        COALESCE(v.file_name,   b.file_name)   AS file_name,
-        COALESCE(v.chunk_index, b.chunk_index) AS chunk_index,
-        COALESCE(v.content,     b.content)     AS content,
+        COALESCE(v.file_id,     t.file_id)     AS file_id,
+        COALESCE(v.file_name,   t.file_name)   AS file_name,
+        COALESCE(v.chunk_index, t.chunk_index) AS chunk_index,
+        COALESCE(v.content,     t.content)     AS content,
         COALESCE(1.0 / (${RRF_K} + v.rank), 0)
-          + COALESCE(1.0 / (${RRF_K} + b.rank), 0) AS rrf_score
+          + COALESCE(1.0 / (${RRF_K} + t.rank), 0) AS rrf_score
       FROM vector_ranked v
-      FULL OUTER JOIN bm25_ranked b
-        ON  v.file_id     = b.file_id
-        AND v.chunk_index = b.chunk_index
+      FULL OUTER JOIN text_ranked t
+        ON  v.file_id     = t.file_id
+        AND v.chunk_index = t.chunk_index
     )
     SELECT
       file_id     AS "fileId",
@@ -195,16 +199,15 @@ export async function rrfSearch(opts: RrfSearchOptions): Promise<RetrievalResult
       content,
       rrf_score   AS "rrfScore"
     FROM fused
-    WHERE rrf_score >= ${minScore}
-    ORDER BY rrf_score DESC
-    LIMIT ${limit}
+    ORDER BY rrf_score DESC, "fileId", "chunkIndex"
+    LIMIT $${P_LIMIT}::int
   `;
 
-  const result = await pool.query(sql, params);
+  const result = await pool.query(fusedSql, params);
   return result.rows as RetrievalResult[];
 }
 
-// ── Phase 2: cross-encoder rerank ─────────────────────────────────────────────
+// ── Phase 2: cross-encoder rerank (opt-in) ───────────────────────────────────
 
 interface ChunkCandidate extends RerankCandidate {
   fileId:     string;
@@ -216,45 +219,42 @@ interface ChunkCandidate extends RerankCandidate {
 // ── Public entry point ────────────────────────────────────────────────────────
 
 export interface HybridSearchOptions {
-  orgId:        string;
-  query:        string;
-  fileIds?:     string[];
-  limit?:       number;
-  minRrfScore?: number;
+  orgId:    string;
+  query:    string;
+  fileIds?: string[];
+  limit?:   number;
 }
 
 /**
- * Full two-phase retrieval:
- *   Phase 1 — BM25 + vector → RRF → top RERANK_INPUT_LIMIT candidates
- *   Phase 2 — Cross-encoder rerank → top `limit` results
+ * Hybrid retrieval:
+ *   Phase 1 — full-text + vector → RRF.
+ *   Phase 2 — cross-encoder rerank of the top RERANK_INPUT_LIMIT candidates,
+ *             ONLY when RERANK_ENABLED is on (default off — without it this
+ *             makes up to 50 sequential-by-default Ollama LLM calls per query;
+ *             bounded pools make it reasonable but never free).
  *
- * If OLLAMA_URL is not set, Phase 2 is skipped and Phase 1 results are
- * returned sorted by RRF score.
+ * With reranking off, the RRF order is the final answer and no LLM calls are
+ * made beyond the query embedding.
  */
 export async function hybridSearch(opts: HybridSearchOptions): Promise<RetrievalResult[]> {
-  const {
-    orgId,
-    query,
-    fileIds,
-    limit       = 10,
-    minRrfScore = 0,
-  } = opts;
+  const { orgId, query, fileIds, limit = 10 } = opts;
 
   const [queryVector] = await embed([query]);
+
+  const wantsRerank = config.ragEnabled && config.rerankEnabled;
 
   const candidates = await rrfSearch({
     orgId,
     query,
     queryVector,
     fileIds,
-    limit:    RERANK_INPUT_LIMIT,
-    minScore: minRrfScore,
+    limit: wantsRerank ? RERANK_INPUT_LIMIT : limit,
   });
 
   if (candidates.length === 0) {return [];}
 
-  if (!config.ragEnabled) {
-    return candidates.slice(0, limit);
+  if (!wantsRerank) {
+    return candidates;
   }
 
   const rerankInput: ChunkCandidate[] = candidates.map(c => ({

@@ -23,6 +23,14 @@ import { generate } from './ollama';
 
 const { rerankModel: RERANK_MODEL } = config;
 
+// How many candidates we score in flight at once when rerank runs (#35).
+// Purely serial scoring takes 2-5s (GPU) to 10-30s (CPU) PER CANDIDATE with
+// RERANK_INPUT_LIMIT up to 50 - minutes per query. A small bounded pool keeps
+// Ollama busy without pile-up: Ollama serialises model execution internally
+// anyway, so a pool of 4 saturates a single model instance without
+// backpressure blowing up its queue.
+const RERANK_CONCURRENCY = 4;
+
 // How many characters of a chunk to send to the cross-encoder.
 // Longer = more accurate but slower. 512 chars (~128 tokens) is a good default.
 const RERANK_CONTEXT_CHARS = 512;
@@ -109,24 +117,44 @@ export async function rerank<T extends RerankCandidate>(
 
   if (candidates.length === 0) {return [];}
 
-  // Score candidates sequentially to avoid overwhelming Ollama.
-  // Parallelism here would only help if Ollama is running on a GPU with enough
-  // VRAM to batch requests — for most self-hosted setups sequential is safer.
-  const scored: RerankResult<T>[] = [];
+  // Small bounded pool (#35): split the candidate list into
+  // RERANK_CONCURRENCY interleaved lanes and drain them in parallel.
+  // Order-dependent nothing — the final sort below is deterministic, and ties
+  // preserve the input order (Array.sort is stable), i.e. RRF order.
+  const results: Array<RerankResult<T>> = new Array(candidates.length);
+  let next = 0;         // shared cursor into `candidates`
+  let firstError: unknown; // tolerateErrors=false: surface AFTER the pool drains
 
-  for (const candidate of candidates) {
-    let rerankScore = 0;
-    try {
-      rerankScore = await scoreOne(query, candidate.content);
-    } catch (err: any) {
-      if (tolerateErrors) {
-        console.warn(`Rerank: scoring failed for candidate ${candidate.id}: ${err.message}`);
-      } else {
-        throw err;
+  const worker = async (): Promise<void> => {
+    while (true) {
+      const index = next++;
+      if (index >= candidates.length) {break;}
+
+      const candidate = candidates[index];
+      let rerankScore = 0;
+      try {
+        rerankScore = await scoreOne(query, candidate.content);
+      } catch (err: any) {
+        if (tolerateErrors) {
+          console.warn(`Rerank: scoring failed for candidate ${candidate.id}: ${err.message}`);
+        } else if (firstError === undefined) {
+          firstError = err;
+        }
       }
+      results[index] = { candidate, rerankScore };
     }
-    scored.push({ candidate, rerankScore });
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.min(RERANK_CONCURRENCY, candidates.length) }, () => worker()),
+  );
+
+  if (!tolerateErrors && firstError !== undefined) {
+    throw firstError;
   }
+
+  // `tolerateErrors=true` (default) leaves score 0 rows in place of failures.
+  const scored = results as RerankResult<T>[];
 
   // Sort best-first.
   scored.sort((a, b) => b.rerankScore - a.rerankScore);
