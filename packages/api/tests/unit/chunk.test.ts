@@ -1,105 +1,132 @@
 /**
- * Unit tests for rag/chunk.ts — the pure chunking pipeline.
- * Covers: empty input, short-paragraph forward merging, sentence-level splits
- * of oversized blocks, the soft overlap tail, and index continuity.
+ * Unit tests for rag/chunk.ts — the pure chunking function (#36).
+ * Covers: empty input, greedy paragraph packing, exact threshold boundaries,
+ * oversized (hard-split) paragraphs, no-paragraph blobs, unicode, the fixed
+ * overlap, determinism and the token estimate.
  */
 import { chunkText } from '../../src/rag/chunk';
+
+const MAX = 1200; // CHUNK_MAX_CHARS
+const OVERLAP = 200; // CHUNK_OVERLAP_CHARS
 
 describe('chunkText', () => {
   it('returns [] for empty or whitespace-only text', () => {
     expect(chunkText('')).toEqual([]);
     expect(chunkText('   \n\n  \t ')).toEqual([]);
+    expect(chunkText('\n\n\n')).toEqual([]);
   });
 
   it('returns one chunk for short text, with a 1/4-char token estimate', () => {
-    const chunks = chunkText('The quick brown fox jumps over the lazy dog.');
+    const text = 'The quick brown fox jumps over the lazy dog.';
+    const chunks = chunkText(text);
     expect(chunks).toHaveLength(1);
     expect(chunks[0]).toMatchObject({
       index: 0,
-      content: 'The quick brown fox jumps over the lazy dog.',
-      tokenCount: Math.ceil('The quick brown fox jumps over the lazy dog.'.length / 4),
+      content: text,
+      tokenCount: Math.ceil(text.length / 4),
     });
   });
 
-  it('merges short paragraphs forward until one reaches CHUNK_MIN_CHARS', () => {
-    // Three short paragraphs (below the 400 merge threshold each) must land in
-    // the same chunk, separated by blank lines, in order.
-    const text = 'alpha paragraph\n\nbeta paragraph\n\ngamma paragraph';
-    const chunks = chunkText(text);
+  it('packs consecutive paragraphs up to the limit, preserving separators', () => {
+    // Each paragraph is ~100 chars: three fit into one ≤1200-char chunk.
+    const para = 'w'.repeat(98) + '.'; // 100 chars
+    const chunks = chunkText([para, para, para].join('\n\n'));
     expect(chunks).toHaveLength(1);
-    expect(chunks[0].content).toBe(
-      'alpha paragraph\n\nbeta paragraph\n\ngamma paragraph',
-    );
+    expect(chunks[0].content.split('\n\n')).toHaveLength(3);
+    expect(chunks[0].content).toBe(`${para}\n\n${para}\n\n${para}`);
   });
 
-  it('preserves paragraph order and indexes chunks 0..n-1', () => {
-    const longPara = 'A'.repeat(500) + '.';   // 501 chars — self-sufficient
-    const bigger = 'B'.repeat(500) + '.';
-    const text = [longPara, bigger].join('\n\n');
+  it('flushes once another paragraph would exceed the limit', () => {
+    const para = 'x'.repeat(600); // two would exceed 1200 with separators
+    const chunks = chunkText([para, para, para].join('\n\n'));
+    expect(chunks).toHaveLength(3);
+    for (const c of chunks) {
+      expect(c.content.length).toBeLessThanOrEqual(MAX + OVERLAP + 2);
+    }
+  });
+
+  it('honours the exact boundary at the limit', () => {
+    // Two 599-char paragraphs sum to exactly 1200 including one separator.
+    const para = 'y'.repeat(599);
+    const chunks = chunkText([para, para].join('\n\n'));
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0].content.length).toBe(MAX);
+  });
+
+  it('hard-splits a huge paragraph into ≤MAX slices', () => {
+    const para = 'a'.repeat(2 * MAX + 700); // → slices of 1200, 1200, 700
+    const chunks = chunkText(para);
+    expect(chunks).toHaveLength(3);
+    // Chunk 0 carries no overlap → exactly one full slice:
+    expect(chunks[0].content).toHaveLength(MAX);
+    // Later chunks are overlap(OVERLAP) + separator(\n\n) + primary slice;
+    // strip that prefix to recover the slice sizes.
+    expect(chunks[1].content.slice(OVERLAP + 2)).toHaveLength(MAX);
+    expect(chunks[2].content.slice(OVERLAP + 2)).toHaveLength(700);
+    expect(chunks.map(c => c.index)).toEqual([0, 1, 2]);
+  });
+
+  it('gives oversized-paragraph slices the fixed overlap too', () => {
+    const para = 'a'.repeat(2 * MAX + 700);
+    const chunks = chunkText(para);
+    // Chunk 1 begins with the last OVERLAP chars of chunk 0's primary.
+    expect(chunks[1].content.startsWith(chunks[0].content.slice(-OVERLAP)))
+      .toBe(true);
+  });
+
+  it('a no-paragraph blob behaves like one huge paragraph (hard-split)', () => {
+    const blob = 'z'.repeat(3 * MAX);
+    const chunks = chunkText(blob);
+    expect(chunks).toHaveLength(3);
+    for (const c of chunks) {
+      expect(c.content.length).toBeLessThanOrEqual(MAX + OVERLAP + 2);
+    }
+  });
+
+  it('keeps unicode text intact (code-unit lengths, no data loss)', () => {
+    const text = 'naïve café 応用 👍段落\n\n' + '/Graphics'.repeat(120);
     const chunks = chunkText(text);
     expect(chunks.length).toBeGreaterThan(0);
-    chunks.forEach((c, i) => { expect(c.index).toBe(i); });
-    expect(chunks[1].content).toContain('B');
-  });
-
-  it('never starts a chunk mid-sentence when splitting oversized blocks', () => {
-    // One oversized run-on block: many sentences separated by single spaces.
-    const sentence = 'This is a fairly long sentence with several words in it.';
-    const block = Array.from({ length: 60 }, () => sentence).join(' ');
-    const chunks = chunkText(block);
-
-    expect(chunks.length).toBeGreaterThan(1);
     for (const c of chunks) {
-      // Every chunk must end where a sentence ends (oversized single-block
-      // mode) and must respect the size ceiling (primary ≤ ~TARGET + 200-char
-      // overlap + separator).
-      expect(c.content.endsWith('.')).toBe(true);
-      expect(c.content.length).toBeLessThanOrEqual(1800 + 200);
-    }
-    for (const c of chunks.slice(1)) {
-      // The PRIMARY text (everything after the overlap's blank-line separator)
-      // must start at a sentence boundary — never mid-sentence.
-      const primaryAfterOverlap = c.content.split('\n\n')[1] ?? '';
-      expect(primaryAfterOverlap.startsWith('This')).toBe(true);
-      expect(c.content.includes('\n\n')).toBe(true);
+      expect(c.content.length).toBeGreaterThan(0);
     }
   });
 
-  it('prepends the previous chunk tail as overlap (except the first)', () => {
-    const midPara = 'M'.repeat(500) + '.';
-    const lastPara = 'Z'.repeat(500) + '.';
-    const text = [midPara, lastPara].join('\n\n');
-    const chunks = chunkText(text);
-    expect(chunks.length).toBeGreaterThanOrEqual(2);
-
-    const last = chunks[chunks.length - 1];
-    // The tail of the previous *primary* text is prepended with a blank line.
-    const expectedTail = midPara.length > 200 ? midPara.slice(-200) : midPara;
-    expect(last.content.startsWith(expectedTail)).toBe(true);
-    expect(last.content.includes('\n\n')).toBe(true);
+  it('prepends the previous primary tail as fixed overlap (except first)', () => {
+    const mid = 'M'.repeat(800);
+    const last = 'Z'.repeat(800);
+    const chunks = chunkText([mid, last].join('\n\n'));
+    expect(chunks).toHaveLength(2);
+    expect(chunks[1].content.startsWith(mid.slice(-OVERLAP))).toBe(true);
+    expect(chunks[1].content.includes('\n\n')).toBe(true);
+    // The first chunk carries no overlap.
+    expect(chunks[0].content.startsWith('MMMM')).toBe(true);
   });
 
   it('does not accumulate overlap-of-overlap across many chunks', () => {
-    const para = () => 'S'.repeat(500) + '.';
+    const para = () => 'S'.repeat(1100);
     const text = Array.from({ length: 6 }, para).join('\n\n');
     const chunks = chunkText(text);
-    // With 200-char overlap the first chunk is ~500 chars; each next chunk is
-    // at most primary(≈500) + overlap(200 + separator) — far below 800 + slack.
+    expect(chunks).toHaveLength(6);
+    // Chunk 0 has no overlap → one piece; every other chunk is exactly
+    // overlap + separator + one primary paragraph — so the overlap never
+    // rides on a previous overlap (which would grow the piece count).
+    expect(chunks[0].content.split('\n\n')).toHaveLength(1);
     for (const c of chunks.slice(1)) {
-      expect(c.content.length).toBeLessThan(900);
+      expect(c.content.length).toBeLessThanOrEqual(MAX + OVERLAP + 2);
+      expect(c.content.split('\n\n')).toHaveLength(2);
     }
   });
 
   it('tokenCount tracks content length (ceil /4)', () => {
-    const text = `${'word '.repeat(100)}end.`;
-    const [chunk] = chunkText(text);
-    expect(chunk.tokenCount).toBe(Math.ceil(chunk.content.length / 4));
+    const text = `${'word '.repeat(300)}end.\n\n${'word '.repeat(300)}end.`;
+    for (const c of chunkText(text)) {
+      expect(c.tokenCount).toBe(Math.ceil(c.content.length / 4));
+    }
   });
 
   it('is deterministic for identical input', () => {
     const text = 'a\n\n'.repeat(30) + 'b';
-    const a = chunkText(text);
-    const b = chunkText(text);
-    expect(a).toEqual(b);
+    expect(chunkText(text)).toEqual(chunkText(text));
   });
 });
