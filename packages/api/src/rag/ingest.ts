@@ -19,6 +19,8 @@ import { dispatchWebhookEvent, dispatchCollectionEmbeddingEvents } from '../lib/
 import { chunkText } from './chunk';
 import { embed } from './ollama';
 
+// How many chunk texts make up ONE /api/embed HTTP request (#36 — before,
+// this only sliced the loop while every text still got its own request).
 const EMBED_BATCH_SIZE = 32;
 
 export interface EmbedFileOptions {
@@ -110,8 +112,9 @@ export async function embedFile(opts: EmbedFileOptions): Promise<EmbedFileResult
   }
 
   // ── Persist chunks ─────────────────────────────────────────────────────────
-  // Drizzle handles the vector values through the `vector` customType in the
-  // schema (number[] → pgvector literal string before binding).
+  // Embeddings are BOUND parameters: drizzle's native `vector` column maps
+  // number[] → '[…]' as a parameter value (#34/#36) — no SQL is built by
+  // concatenating vector literals, so the upsert stays injection-safe.
   const INSERT_BATCH = 100;
   try {
     for (let i = 0; i < chunks.length; i += INSERT_BATCH) {
