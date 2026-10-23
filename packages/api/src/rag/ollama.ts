@@ -4,7 +4,8 @@
 // URL from config, one request helper, one error shape. Callers never build an
 // Ollama URL or parse raw HTTP.
 //
-//   embed(texts)               POST /api/embeddings   (one request per text)
+//   embed(texts)               POST /api/embed        (one request per call;
+//                                                     the input is the batch)
 //   generate(prompt)           POST /api/generate
 //   chat(messages)             POST /api/chat         (non-streaming)
 //   chatStreaming(messages)    POST /api/chat         (streaming async
@@ -45,21 +46,24 @@ async function ollamaPost(path: string, body: unknown): Promise<Response> {
 
 // ── Embeddings ────────────────────────────────────────────────────────────────
 
-/** Embeds each text sequentially via /api/embeddings. Callers batch for
- *  pacing (rag/ingest slices by EMBED_BATCH_SIZE); real HTTP batching is #36. */
+/** Embeds a batch in ONE HTTP request via Ollama's batch endpoint
+ *  /api/embed (#36) — input order is preserved in the returned embeddings.
+ *  Callers slice the input (rag/ingest, EMBED_BATCH_SIZE) so that one batch
+ *  equals one HTTP request. */
 export async function embed(texts: string[]): Promise<number[][]> {
-  const out: number[][] = [];
+  const res = await ollamaPost('/api/embed', {
+    model: config.embeddingModel,
+    input: texts,
+  });
+  const data = await res.json() as { embeddings: number[][] };
 
-  for (const text of texts) {
-    const res  = await ollamaPost('/api/embeddings', {
-      model:  config.embeddingModel,
-      prompt: text,
-    });
-    const data = await res.json() as { embedding: number[] };
-    out.push(data.embedding);
+  if (!Array.isArray(data.embeddings) || data.embeddings.length !== texts.length) {
+    throw new Error(
+      `Ollama /api/embed returned ${data.embeddings?.length ?? 0} embeddings ` +
+      `for ${texts.length} inputs`,
+    );
   }
-
-  return out;
+  return data.embeddings;
 }
 
 // ── Generation ────────────────────────────────────────────────────────────────
