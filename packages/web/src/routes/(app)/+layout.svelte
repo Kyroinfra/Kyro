@@ -2,7 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import { page } from '$app/stores';
 	import { user } from '$lib/stores/auth';
-	import { Dashboard, Key, File, Usage, Settings, Collection, Chat } from '$lib/components/icons';
+	import { Dashboard, Key, File, Usage, Settings, Collection, Chat, Search } from '$lib/components/icons';
 	import Logo from '$lib/components/Logo.svelte';
 
 	interface Props {
@@ -40,7 +40,10 @@
 		},
 		{
 			label: '// query',
-			items: [{ href: '/dashboard/ask', label: 'ask', icon: Chat }]
+			items: [
+				{ href: '/dashboard/search', label: 'search', icon: Search },
+				{ href: '/dashboard/ask', label: 'ask', icon: Chat }
+			]
 		},
 		{
 			label: '// analytics',
@@ -136,7 +139,6 @@
 				<span class="status-text">connected</span>
 			</div>
 		</header>
-
 		<main class="main-content">
 			{@render children()}
 		</main>
