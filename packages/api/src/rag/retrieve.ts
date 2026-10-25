@@ -148,6 +148,7 @@ export async function rrfSearch(opts: RrfSearchOptions): Promise<RetrievalResult
       WHERE
             fc.org_id                            = $${P_ORG}
         AND f.org_id  IS NOT DISTINCT FROM $${P_ORG}
+        AND f.status = 'ready' -- files still processing/failed never surface (#37)
         AND fc.embedding IS NOT NULL
         AND fc.embedding <=> $${P_VECTOR}::vector < $${P_THRESHOLD}::float8
         ${fileFilterClause}
@@ -171,6 +172,7 @@ export async function rrfSearch(opts: RrfSearchOptions): Promise<RetrievalResult
       WHERE
             fc.org_id  = $${P_ORG}
         AND f.org_id IS NOT DISTINCT FROM $${P_ORG}
+        AND f.status = 'ready' -- files still processing/failed never surface (#37)
         AND fc.text_search_vector @@ websearch_to_tsquery('english', $${P_QUERY})
         ${fileFilterClause}
       ORDER BY ts_rank(fc.text_search_vector, websearch_to_tsquery('english', $${P_QUERY})) DESC

@@ -13,8 +13,33 @@
 import config from '../config';
 import { chat, chatStreaming, type ChatMessage } from './ollama';
 import type { RetrievalResult } from './retrieve';
+import { z } from 'zod';
 
 const { chatModel: CHAT_MODEL } = config;
+
+// ── The /ask request contract ────────────────────────────────────────────────
+// Lives beside the prompt/LLM logic (the meat of the endpoint) so routes/ask.ts
+// stays the thin SSE wire; routes import it from here.
+export const askSchema = z.object({
+  filters: z.record(z.string(), z.union([z.string(), z.array(z.string())])).optional(),
+  question:     z.string().min(1).max(2000),
+  fileIds:      z.array(z.string().uuid()).max(20).optional(),
+  collectionId: z.string().uuid().optional(),
+  topK:         z.number().int().min(1).max(20).optional().default(8),
+  model:        z.string().optional(),
+  stream:       z.boolean().optional().default(true),
+  // Conversation memory: prior user/assistant turns so follow-ups like
+  // "what about page 2?" resolve against the thread. Recent turns are
+  // replayed to the LLM verbatim (read-only — they never affect retrieval).
+  history: z.array(z.object({
+    role:    z.enum(['user', 'assistant']),
+    content: z.string().min(1).max(2000),
+  })).max(10).optional(),
+}).refine(
+  // Mutual exclusion — providing both is always an error
+  data => !(data.fileIds && data.collectionId),
+  { message: 'Provide either fileIds or collectionId, not both' },
+);
 
 export type AskTurn = { role: 'user' | 'assistant'; content: string };
 
