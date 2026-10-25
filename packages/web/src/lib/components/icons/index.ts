@@ -11,3 +11,4 @@ export { default as Check } from './Check.svelte';
 export { default as Collection } from './Collection.svelte';
 export { default as Chat } from './Chat.svelte';
 export { default as Send } from './Send.svelte';
+export { default as Search } from './Search.svelte';
