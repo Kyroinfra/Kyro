@@ -3,7 +3,7 @@
  * (usage-metrics and retrieval stay schema-wise untouched — this module
  * file imports the db/graph stack lazily, so ../db is mocked as elsewhere).
  */
-import { askSchema } from '../../src/routes/ask';
+import { askSchema } from '../../src/rag/ask';
 
 const base = {
   question: 'What does my invoice say?',
