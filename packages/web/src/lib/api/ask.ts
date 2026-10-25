@@ -17,6 +17,8 @@ export async function semanticSearch(
   opts: {
     collectionId?: string;
     fileIds?: string[];
+    /** Metadata filters, same shape POST /ask accepts (AND across keys, OR within values). */
+    filters?: Record<string, string | string[]>;
     limit?: number;
   } = {},
 ): Promise<{
@@ -27,6 +29,9 @@ export async function semanticSearch(
   const params = new URLSearchParams({ q });
   if (opts.collectionId) params.set("collection_id", opts.collectionId);
   if (opts.fileIds?.length) params.set("file_ids", opts.fileIds.join(","));
+  if (opts.filters && Object.keys(opts.filters).length > 0) {
+    params.set("filters", JSON.stringify(opts.filters));
+  }
   if (opts.limit) params.set("limit", String(opts.limit));
 
   return request(`/api/v1/search?${params.toString()}`, {

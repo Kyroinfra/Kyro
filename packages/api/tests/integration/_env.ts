@@ -10,4 +10,11 @@
  */
 if (process.env.TEST_DATABASE_URL) {
   process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
+  // Route-level scope tests (scope.test.ts #37) need RAG_ENABLED so POST /ask
+  // reaches its scope section; the dummy URL is never dialed — scope errors
+  // return before any retrieval or chat call, and rrfSearch-based suites need
+  // no HTTP either.
+  if (!process.env.OLLAMA_URL) {
+    process.env.OLLAMA_URL = 'http://127.0.0.1:59099';
+  }
 }
