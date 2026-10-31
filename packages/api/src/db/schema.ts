@@ -165,24 +165,20 @@ export const collections = pgTable('collections', {
   createdBy:   uuid('created_by').notNull().references(() => users.id),
   name:        varchar('name', { length: 255 }).notNull(),
   description: text('description'),
-  // slug is org-scoped — two orgs can have the same slug
-  slug:        varchar('slug', { length: 100 }).notNull(),
   createdAt:   timestamp('created_at').defaultNow(),
   updatedAt:   timestamp('updated_at').defaultNow(),
 }, (table) => ({
-  orgIdIdx:        index('idx_collections_org_id').on(table.orgId),
-  orgSlugUniq:     uniqueIndex('idx_collections_org_slug').on(table.orgId, table.slug),
+  orgIdIdx: index('idx_collections_org_id').on(table.orgId),
 }));
 
 // ── collection_files ──────────────────────────────────────────────────────────
 // Join table. A file can belong to multiple collections (useful for research
-// reuse — the same paper cited across multiple projects).
-// `addedBy` is recorded for audit purposes.
+// reuse — the same paper cited across multiple projects). `added_at` is the
+// audit trail; `added_by` was dropped in #39 (inserted-only, never read).
 
 export const collectionFiles = pgTable('collection_files', {
   collectionId: uuid('collection_id').notNull().references(() => collections.id, { onDelete: 'cascade' }),
   fileId:       uuid('file_id').notNull().references(() => files.id, { onDelete: 'cascade' }),
-  addedBy:      uuid('added_by').notNull().references(() => users.id),
   addedAt:      timestamp('added_at').defaultNow(),
 }, (table) => ({
   pk:              primaryKey({ columns: [table.collectionId, table.fileId] }),

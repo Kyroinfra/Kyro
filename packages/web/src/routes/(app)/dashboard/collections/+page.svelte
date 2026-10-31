@@ -159,7 +159,6 @@
                     {/if}
                   </div>
                   <div class="collection-footer">
-                    <span class="collection-slug">/{collection.slug}</span>
                     <span class="collection-date">created {formatDate(collection.createdAt)}</span>
                   </div>
                 </div>

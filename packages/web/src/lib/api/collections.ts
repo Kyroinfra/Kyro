@@ -4,7 +4,6 @@ export interface Collection {
 	id: string;
 	name: string;
 	description: string | null;
-	slug: string;
 	createdAt: string;
 	updatedAt: string;
 	fileCount: number;

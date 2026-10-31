@@ -1,4 +1,5 @@
-// routes/v2/collections.ts
+// routes/collections.ts — COLLECTIONS CRUD + membership (#39: no slug state,
+// no added_by; rename-to-self is a plain update, counts from files.status)
 
 import { Router, type Response } from 'express';
 import { db } from '../db';
@@ -22,28 +23,6 @@ const addFilesSchema = z.object({
   fileIds: z.array(z.string().uuid()).min(1).max(100),
 });
 
-function toSlug(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .substring(0, 100);
-}
-
-async function uniqueSlug(orgId: string, base: string, _excludeId?: string): Promise<string> {
-  const existing = await db
-    .select({ slug: collections.slug })
-    .from(collections)
-    .where(eq(collections.orgId, orgId));
-
-  const taken = new Set(existing.map(r => r.slug));
-  let slug = base;
-  let i = 2;
-  while (taken.has(slug)) {slug = `${base}-${i++}`;}
-  return slug;
-}
-
-
 // ── GET / — list collections ──────────────────────────────────────────────────
 
 router.get('/', requireScope('read'), async (req: AuthedRequest, res: Response) => {
@@ -54,7 +33,6 @@ router.get('/', requireScope('read'), async (req: AuthedRequest, res: Response) 
       id:            collections.id,
       name:          collections.name,
       description:   collections.description,
-      slug:          collections.slug,
       createdAt:     collections.createdAt,
       updatedAt:     collections.updatedAt,
       fileCount:     sql<number>`COUNT(${collectionFiles.fileId})::int`.mapWith(Number),
@@ -91,16 +69,14 @@ router.post('/', requireScope('write'), async (req: AuthedRequest, res: Response
   }
 
   const { name, description } = parsed.data;
-  const slug = await uniqueSlug(orgId, toSlug(name));
 
   const [collection] = await db
     .insert(collections)
-    .values({ orgId, createdBy: userId, name, description, slug })
+    .values({ orgId, createdBy: userId, name, description })
     .returning({
       id:          collections.id,
       name:        collections.name,
       description: collections.description,
-      slug:        collections.slug,
       createdAt:   collections.createdAt,
     });
 
@@ -118,7 +94,6 @@ router.get('/:id', requireScope('read'), async (req: AuthedRequest, res: Respons
       id:           collections.id,
       name:         collections.name,
       description:  collections.description,
-      slug:         collections.slug,
       createdAt:    collections.createdAt,
       updatedAt:    collections.updatedAt,
       fileCount:    sql<number>`COUNT(${collectionFiles.fileId})::int`.mapWith(Number),
@@ -146,6 +121,8 @@ router.get('/:id', requireScope('read'), async (req: AuthedRequest, res: Respons
 });
 
 // ── PATCH /:id — update collection ───────────────────────────────────────────
+// Renaming to the collection's own current name is a plain no-op update
+// (#39): no slug state exists that a self-rename could collide with.
 
 router.patch('/:id', requireScope('write'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
@@ -160,7 +137,6 @@ router.patch('/:id', requireScope('write'), async (req: AuthedRequest, res: Resp
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (parsed.data.name !== undefined) {
     updates.name = parsed.data.name;
-    updates.slug = await uniqueSlug(orgId, toSlug(parsed.data.name), id);
   }
   if (parsed.data.description !== undefined) {
     updates.description = parsed.data.description;
@@ -174,7 +150,6 @@ router.patch('/:id', requireScope('write'), async (req: AuthedRequest, res: Resp
       id:          collections.id,
       name:        collections.name,
       description: collections.description,
-      slug:        collections.slug,
       updatedAt:   collections.updatedAt,
     });
 
@@ -294,16 +269,9 @@ router.post('/:id/files', requireScope('write'), async (req: AuthedRequest, res:
     return;
   }
 
-  const userId = await resolveUserId(req);
-
-  if (!userId) {
-    res.status(401).json({ error: 'Authentication required' });
-    return;
-  }
-
   await db
     .insert(collectionFiles)
-    .values(parsed.data.fileIds.map(fileId => ({ collectionId: id, fileId, addedBy: userId })))
+    .values(parsed.data.fileIds.map(fileId => ({ collectionId: id, fileId })))
     .onConflictDoNothing();
 
   await db

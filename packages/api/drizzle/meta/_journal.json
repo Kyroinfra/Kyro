@@ -113,6 +113,13 @@
       "when": 1793460759123,
       "tag": "0015_metadata-jsonb",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1793478092201,
+      "tag": "0016_drop-collection-slug",
+      "breakpoints": true
     }
   ]
 }
