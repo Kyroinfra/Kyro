@@ -13,6 +13,7 @@ import {
   uniqueIndex,
   integer,
   boolean,
+  jsonb,
   customType,
   primaryKey,
   vector,
@@ -76,9 +77,15 @@ export const files = pgTable('files', {
   // `error` carries the failure message whenever status = 'failed'.
   status:            varchar('status', { length: 50 }).notNull().default('pending'),
   error:             text('error'),
+  // Plain jsonb object on the file (#38) — replaces the file_metadata EAV
+  // table (drop for drop: one bounded column + one GIN index instead of a
+  // table with 4 indexes). Flat string keys/values; the metadata endpoints
+  // upsert/delete keys in place.
+  metadata:          jsonb('metadata').notNull().default(sql`'{}'::jsonb`).$type<Record<string, string>>(),
   createdAt:         timestamp('created_at').defaultNow(),
 }, (table) => ({
   orgIdIdx:          index('idx_files_org_id').on(table.orgId),
+  metadataIdx:       index('idx_files_metadata').using('gin', table.metadata),
 }));
 
 // ── file_chunks ───────────────────────────────────────────────────────────────
@@ -183,28 +190,4 @@ export const collectionFiles = pgTable('collection_files', {
   collectionIdIdx: index('idx_collection_files_collection_id').on(table.collectionId),
 }));
 
-// ── file_metadata ─────────────────────────────────────────────────────────────
-// Arbitrary key-value metadata per file. Vertical-agnostic: legal uses
-// matter_number/document_type, research uses author/journal, support uses
-// product/version. All stored in the same table — no schema changes needed
-// when a new vertical adds new keys.
-//
-// The unique constraint on (file_id, key) is required for the upsert in
-// PUT /files/:id/metadata — ON CONFLICT (file_id, key) DO UPDATE.
- 
-export const fileMetadata = pgTable('file_metadata', {
-  id:        uuid('id').defaultRandom().primaryKey(),
-  fileId:    uuid('file_id').notNull().references(() => files.id, { onDelete: 'cascade' }),
-  orgId:     uuid('org_id').notNull().references(() => organisations.id, { onDelete: 'cascade' }),
-  key:       varchar('key', { length: 100 }).notNull(),
-  value:     text('value').notNull(),
-  createdAt: timestamp('created_at').defaultNow(),
-}, (table) => ({
-  // Covering index for the most common query: "all metadata for a file"
-  fileIdIdx:    index('idx_file_metadata_file_id').on(table.fileId),
-  // Covering index for filter queries: "files in this org with key=value"
-  orgKeyIdx:    index('idx_file_metadata_org_key').on(table.orgId, table.key),
-  orgKeyValIdx: index('idx_file_metadata_org_key_value').on(table.orgId, table.key, table.value),
-  // Required for ON CONFLICT upsert in PUT /files/:id/metadata
-  fileKeyUniq:  uniqueIndex('idx_file_metadata_file_key').on(table.fileId, table.key),
-}));
+// (file_metadata EAV deleted in #38 — metadata lives as files.metadata jsonb.)

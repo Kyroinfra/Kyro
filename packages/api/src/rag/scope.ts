@@ -21,8 +21,8 @@
 // chunk availability itself, so the caller never needs pre-count queries.
 
 import { db } from '../db';
-import { collections, collectionFiles, fileMetadata, files } from '../db/schema';
-import { and, eq, exists, inArray, sql, type SQL } from 'drizzle-orm';
+import { collections, collectionFiles, files } from '../db/schema';
+import { and, eq, inArray, sql, type SQL } from 'drizzle-orm';
 
 export interface ScopeOptions {
   collectionId?: string;
@@ -44,16 +44,19 @@ export function isScopeError(r: ScopeResult | ScopeError): r is ScopeError {
   return typeof (r as ScopeError).status === 'number';
 }
 
-// ── Metadata filters (absorbed from lib/metadata.ts, deleted) ────────────────
+// ── Metadata filters (#38) ───────────────────────────────────────────────────
 //
-// Matches a flat filter map against the file_metadata EAV tables (AND across
-// keys, OR across multiple values for one key):
+// Matches a flat filter map against the file's jsonb metadata column
+// (AND across keys, OR across the multiple values of one key):
 //   { matter_number: "M-2024-001", document_type: ["contract", "amendment"] }
 //
-// Each key becomes a correlated EXISTS sub-select, which Postgres satisfies
-// using the idx_file_metadata_org_key_value covering index. Keys and values
-// are bound as parameters — never inlined. #38 replaces this EAV storage
-// with jsonb on files; until then this is the single filtering implementation.
+// Implementation: one `metadata @> $1::jsonb` comparison per (key, value),
+// all values bound as JSON text parameters — never string-assembled, so
+// values containing quotes/backslashes are matched by binding, not escaping
+// (the old EAV path ended up inlined; #37 had already bound it, #38 now
+// binds against the generated column). `@>` contains the exact scalar pair,
+// so a file must hold `key` with exactly that value — same semantics as the
+// EAV key = value match, and GIN-indexable (idx_files_metadata).
 
 export async function resolveMetadataFilter(
   orgId:   string,
@@ -65,24 +68,22 @@ export async function resolveMetadataFilter(
     return [];
   }
 
-  // One EXISTS per key — ANDed at the top level; multiple values per key are
-  // matched with an IN list (values are bound as parameters, never inlined).
   const keyConditions: SQL[] = entries.map(([key, val]) => {
     const values = Array.isArray(val) ? val : [val];
 
-    return exists(
-      db
-        .select({ one: sql`1` })
-        .from(fileMetadata)
-        .where(
-          and(
-            eq(fileMetadata.fileId, files.id),
-            eq(fileMetadata.orgId, orgId),
-            eq(fileMetadata.key, key),
-            inArray(fileMetadata.value, values),
-          ),
-        ),
+    // An empty values array matches nothing (same as the empty IN list of the
+    // EAV path): `false` short-circuits the whole AND tree below.
+    if (values.length === 0) {
+      return sql`false`;
+    }
+
+    const valueConditions = values.map(v =>
+      sql`${files.metadata} @> ${JSON.stringify({ [key]: v })}::jsonb`,
     );
+
+    // OR within one key is always parenthesised — the route-level expression
+    // is AND across keys and must stay verbatim interpretable.
+    return sql`(${sql.join(valueConditions, sql` or `)})`;
   });
 
   const rows = await db
