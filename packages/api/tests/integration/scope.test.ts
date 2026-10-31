@@ -65,7 +65,12 @@ const userB = randomUUID();
 const fContract = randomUUID(); // metadata: document_type=contract
 const fOps      = randomUUID(); // metadata: document_type=operations
 const fNoMeta   = randomUUID(); // no metadata rows
+const fQuote    = randomUUID(); // metadata value stuffed with quotes/backslashes
 const fForeign  = randomUUID(); // belongs to orgB — must always be invisible
+
+// #38: matched by BINDING, not escaping — exotica a quote-escaping
+// implementation would botch (doubled quotes, raw backslashes).
+const QUOTE_VALUE = 'O\'Neil "quoted" \'values\' + C:\\sweep\\file';
 
 const cBoth  = randomUUID();   // fContract + fOps
 const cOps   = randomUUID();   // fOps only
@@ -81,10 +86,10 @@ async function seedFile(orgId: string, userId: string, fileId: string, name: str
   );
 }
 
-async function seedMetadata(fileId: string, orgId: string, key: string, value: string) {
+async function seedMetadata(fileId: string, metadata: Record<string, string>) {
   await pool.query(
-    'INSERT INTO file_metadata (file_id, org_id, key, value) VALUES ($1, $2, $3, $4)',
-    [fileId, orgId, key, value],
+    'UPDATE files SET metadata = metadata || $2::jsonb WHERE id = $1',
+    [fileId, JSON.stringify(metadata)],
   );
 }
 
@@ -129,9 +134,11 @@ suite('scope resolver — uniform /search + /ask scope semantics (#37)', () => {
     await seedFile(orgA, userA, fContract, 'sweep37-contract.txt');
     await seedFile(orgA, userA, fOps, 'sweep37-operations.txt');
     await seedFile(orgA, userA, fNoMeta, 'sweep37-nometa.txt');
+    await seedFile(orgA, userA, fQuote, 'sweep37-quote.txt');
     await seedFile(orgB, userB, fForeign, 'sweep37-foreign.txt');
-    await seedMetadata(fContract, orgA, 'document_type', 'contract');
-    await seedMetadata(fOps, orgA, 'document_type', 'operations');
+    await seedMetadata(fContract, { document_type: 'contract' });
+    await seedMetadata(fOps, { document_type: 'operations' });
+    await seedMetadata(fQuote, { document_type: QUOTE_VALUE });
 
     await seedCollection(orgA, userA, cBoth, 'both');
     await seedCollection(orgA, userA, cOps, 'ops');
@@ -145,8 +152,8 @@ suite('scope resolver — uniform /search + /ask scope semantics (#37)', () => {
 
   afterAll(async () => {
     if (!HAS_DB) {return;}
-    // The orgs adopt everything (files, metadata, collections, users) via
-    // ON DELETE CASCADE.
+    // The orgs adopt everything (files with their jsonb metadata, collections,
+    // users) via ON DELETE CASCADE.
     await pool.query('DELETE FROM organisations WHERE id IN ($1, $2)', [orgA, orgB]);
     await pool.end();
   });
@@ -196,6 +203,12 @@ suite('scope resolver — uniform /search + /ask scope semantics (#37)', () => {
       status: 422,
       error: 'No files match the provided metadata filters',
     });
+  });
+
+  it('a metadata value full of quotes/backslashes is matched by BINDING, not escaping (#38)', async () => {
+    expect(
+      await resolveScope(orgA, { filters: { document_type: QUOTE_VALUE } }),
+    ).toEqual({ fileIds: [fQuote] });
   });
 
   it('filters + collection → INTERSECTION (the #37 bug, fixed)', async () => {
