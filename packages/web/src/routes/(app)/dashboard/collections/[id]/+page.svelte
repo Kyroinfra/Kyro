@@ -225,8 +225,6 @@
                 <p class="collection-description">{collection.description}</p>
               {/if}
               <div class="collection-meta">
-                <span class="slug">/{collection.slug}</span>
-                <span>•</span>
                 <span>created {formatDate(collection.createdAt)}</span>
               </div>
             </div>
