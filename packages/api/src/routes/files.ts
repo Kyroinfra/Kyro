@@ -1,6 +1,6 @@
 import { Router, type Response } from 'express';
 import { db } from '../db';
-import { files, fileMetadata } from '../db/schema';
+import { files } from '../db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { requireScope, resolveUserId, type AuthedRequest } from '../middleware/auth';
 import { upload } from '../middleware/upload';
@@ -238,34 +238,31 @@ router.post('/:id/reprocess', requireScope('write'), async (req: AuthedRequest, 
 });
 
 // ── GET /:id/metadata ─────────────────────────────────────────────────────────
+// Metadata is the file's own jsonb column (#38) — read it straight through.
 
 router.get('/:id/metadata', requireScope('read'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
   const id    = req.params.id as string;
 
-  // Verify ownership
-  const [file] = await db
-    .select({ id: files.id })
+  // Verify ownership and select the column in the same round-trip
+  const [row] = await db
+    .select({ metadata: files.metadata })
     .from(files)
     .where(and(eq(files.id, id), eq(files.orgId, orgId)));
 
-  if (!file) {
+  if (!row) {
     res.status(404).json({ error: 'File not found' });
     return;
   }
 
-  const rows = await db
-    .select({ key: fileMetadata.key, value: fileMetadata.value })
-    .from(fileMetadata)
-    .where(and(eq(fileMetadata.fileId, id), eq(fileMetadata.orgId, orgId)));
-
-  // Return as a flat object — easier to work with than an array of pairs
-  res.json(Object.fromEntries(rows.map(r => [r.key, r.value])));
+  // Always a flat object (the column is NOT NULL DEFAULT '{}'::jsonb)
+  res.json(row.metadata);
 });
 
 // ── PUT /:id/metadata ─────────────────────────────────────────────────────────
 // Upserts metadata keys. Non-destructive: keys not present in the body are
-// left untouched. Send { "key": null } via DELETE /:id/metadata/:key to remove.
+// left untouched (jsonb `||` merge — the new keys win, existing keys not in
+// the body keep their values). Send { "key": null } via DELETE to remove.
 
 router.put('/:id/metadata', requireScope('write'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
@@ -293,22 +290,23 @@ router.put('/:id/metadata', requireScope('write'), async (req: AuthedRequest, re
     return;
   }
 
+  // `metadata || $1::jsonb` is the whole upsert: one bound JSON parameter
+  // (values may contain quotes/backslashes — binding does the work, the
+  // cast keeps the driver from guessing a column type).
   await db
-    .insert(fileMetadata)
-    .values(
-      entries.map(([key, value]) => ({ fileId: id, orgId, key, value })),
-    )
-    // Drizzle emits `ON CONFLICT (file_id, key)` — Postgres infers the
-    // composite uniqueIndex, which is exactly the target we want.
-    .onConflictDoUpdate({
-      target: [fileMetadata.fileId, fileMetadata.key],
-      set:    { value: sql`excluded.value` },
-    });
+    .update(files)
+    .set({
+      // Drizzle spreads the parameterized JSON as $n — `||` merges on top of
+      // the existing object (right side wins per key).
+      metadata: sql`${files.metadata} || ${JSON.stringify(parsed.data)}::jsonb`,
+    })
+    .where(and(eq(files.id, id), eq(files.orgId, orgId)));
 
   res.json(parsed.data);
 });
 
 // ── DELETE /:id/metadata/:key ─────────────────────────────────────────────────
+// jsonb `-` (text) removes one key at a time; a missing key is a no-op.
 
 router.delete('/:id/metadata/:key', requireScope('write'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
@@ -326,14 +324,12 @@ router.delete('/:id/metadata/:key', requireScope('write'), async (req: AuthedReq
   }
 
   await db
-    .delete(fileMetadata)
-    .where(
-      and(
-        eq(fileMetadata.fileId, id),
-        eq(fileMetadata.orgId, orgId),
-        eq(fileMetadata.key, key),
-      ),
-    );
+    .update(files)
+    .set({
+      // key is bound as a parameter (`metadata - $1`)
+      metadata: sql`${files.metadata} - ${key}`,
+    })
+    .where(and(eq(files.id, id), eq(files.orgId, orgId)));
 
   res.status(204).send();
 });
