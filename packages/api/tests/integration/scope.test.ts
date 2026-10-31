@@ -93,17 +93,17 @@ async function seedMetadata(fileId: string, metadata: Record<string, string>) {
   );
 }
 
-async function seedCollection(orgId: string, userId: string, colId: string, slug: string) {
+async function seedCollection(orgId: string, userId: string, colId: string, name: string) {
   await pool.query(
-    'INSERT INTO collections (id, org_id, created_by, name, slug) VALUES ($1, $2, $3, $4, $5)',
-    [colId, orgId, userId, `sweep37-${slug}`, `sweep37-${slug}`],
+    'INSERT INTO collections (id, org_id, created_by, name) VALUES ($1, $2, $3, $4)',
+    [colId, orgId, userId, `sweep37-${name}`],
   );
 }
 
-async function addMember(colId: string, userId: string, fileId: string) {
+async function addMember(colId: string, fileId: string) {
   await pool.query(
-    'INSERT INTO collection_files (collection_id, file_id, added_by) VALUES ($1, $2, $3)',
-    [colId, fileId, userId],
+    'INSERT INTO collection_files (collection_id, file_id) VALUES ($1, $2)',
+    [colId, fileId],
   );
 }
 
@@ -143,9 +143,9 @@ suite('scope resolver — uniform /search + /ask scope semantics (#37)', () => {
     await seedCollection(orgA, userA, cBoth, 'both');
     await seedCollection(orgA, userA, cOps, 'ops');
     await seedCollection(orgA, userA, cEmpty, 'empty');
-    await addMember(cBoth, userA, fContract);
-    await addMember(cBoth, userA, fOps);
-    await addMember(cOps, userA, fOps);
+    await addMember(cBoth, fContract);
+    await addMember(cBoth, fOps);
+    await addMember(cOps, fOps);
 
     mockOrgId = orgA;
   });
