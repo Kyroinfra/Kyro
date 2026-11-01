@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import { randomUUID } from 'crypto';
 import config from '../config';
 
 const UPLOAD_DIR = config.uploadDir;
@@ -21,25 +20,8 @@ export function ensureOrgDirectory(orgId: string): string {
   return orgDir;
 }
 
-export interface UploadedFile {
-  originalname: string;
-  buffer: Buffer;
-  mimetype?: string;
-  size: number;
-}
-
-export async function saveFile(orgId: string, file: UploadedFile): Promise<{ storageKey: string; fileId: string }> {
-  const fileId = randomUUID();
-  const ext = path.extname(file.originalname);
-  const storageKey = path.join(orgId, fileId + ext);
-  const fullPath = path.join(UPLOAD_DIR, storageKey);
-
-  ensureOrgDirectory(orgId);
-
-  await fs.promises.writeFile(fullPath, file.buffer);
-
-  return { storageKey, fileId };
-}
+// (saveFile/UploadedFile were removed with #41 — multer's diskStorage writes
+// the upload straight into the org directory; nothing buffers it anymore.)
 
 export async function deleteFile(storageKey: string): Promise<void> {
   const fullPath = path.join(UPLOAD_DIR, storageKey);

@@ -4,12 +4,12 @@ import { files } from '../db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { requireScope, resolveUserId, type AuthedRequest } from '../middleware/auth';
 import { upload } from '../middleware/upload';
-import { saveFile, deleteFile, getFilePath } from '../lib/storage';
+import { deleteFile, getFilePath } from '../lib/storage';
 import { SUPPORTED_MIME_TYPES_LIST } from '../lib/extractors';
 import { runPipeline } from '../lib/pipeline';
-import config from '../config';
 import fs from 'fs';
 import { z } from 'zod';
+import { createFileUpload } from '../services/files';
 
 const router = Router();
 
@@ -20,8 +20,6 @@ router.post(
   requireScope('write'),
   upload.single('file'),
   async (req: AuthedRequest, res: Response) => {
-    const orgId = req.orgId!;
-
     if (!req.file) {
       res.status(400).json({ error: 'No file uploaded' });
       return;
@@ -36,64 +34,7 @@ router.post(
       return;
     }
 
-    // Deployment-wide disk-safety cap from config — not a per-org quota.
-    const [storageRow] = await db
-      .select({ used: sql`COALESCE(SUM(${files.sizeBytes}), 0)`.mapWith(Number) })
-      .from(files);
-    const usedStorage = storageRow?.used ?? 0;
-
-    if (usedStorage + req.file.size > config.storageLimit) {
-      res.status(507).json({
-        error:      'Storage limit reached',
-        limitBytes: config.storageLimit,
-        usedBytes:  usedStorage,
-      });
-      return;
-    }
-
-    const { storageKey } = await saveFile(orgId, {
-      originalname: req.file.originalname,
-      buffer:       req.file.buffer,
-      mimetype:     req.file.mimetype,
-      size:         req.file.size,
-    });
-
-    const isExtractable = SUPPORTED_MIME_TYPES_LIST.includes(req.file.mimetype ?? '');
-
-    // One status from the moment of insert (#33): extractable files start the
-    // pipeline immediately ('pending' → 'processing' → ...), non-extractable
-    // MIME has nothing to ingest and is 'skipped'.
-    const [fileRecord] = await db
-      .insert(files)
-      .values({
-        orgId,
-        uploadedBy: userId!,
-        name:       req.file.originalname,
-        storageKey,
-        mimeType:   req.file.mimetype,
-        sizeBytes:  req.file.size,
-        status:     isExtractable ? 'pending' : 'skipped',
-      })
-      .returning({
-        id:        files.id,
-        name:      files.name,
-        mimeType:  files.mimeType,
-        sizeBytes: files.sizeBytes,
-        createdAt: files.createdAt,
-        status:    files.status,
-      });
-
-    if (!isExtractable) {
-      res.status(201).json(fileRecord);
-      return;
-    }
-
-    runPipeline({
-      fileId:     fileRecord.id,
-      storageKey,
-      mimeType:   req.file.mimetype ?? '',
-      orgId,
-    });
+    const fileRecord = await createFileUpload(req.orgId!, userId, req.file);
 
     res.status(201).json(fileRecord);
   },
