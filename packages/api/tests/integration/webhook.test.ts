@@ -121,6 +121,31 @@ afterAll(async () => {
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
+/**
+ * Deliveries land 'delivered' a microtask after the stub's response — poll
+ * for the settled rows instead of reading them the instant the hit arrives.
+ */
+async function awaitDelivered(event: string | null, expectedCount: number): Promise<{ count: number; all_delivered: boolean }> {
+  for (let i = 0; i < 100; i++) {
+    const rows = await pool.query<{ count: number; all_delivered: boolean }>(
+      `SELECT count(*)::int AS count,
+              count(*) FILTER (WHERE status = 'delivered')::int = count(*)::int AS all_delivered
+       FROM   webhook_deliveries ${event ? 'WHERE event = $1' : ''}`,
+      event ? [event] : [],
+    );
+    if (rows.rows[0].count >= expectedCount && rows.rows[0].all_delivered) { return rows.rows[0]; }
+    await sleep(10);
+  }
+  // Reflect the final measured state for the assertion message.
+  const rows = await pool.query<{ count: number; all_delivered: boolean }>(
+    `SELECT count(*)::int AS count,
+            count(*) FILTER (WHERE status = 'delivered')::int = count(*)::int AS all_delivered
+     FROM   webhook_deliveries ${event ? 'WHERE event = $1' : ''}`,
+    event ? [event] : [],
+  );
+  return rows.rows[0];
+}
+
 suite('webhook dispatch → wire (#40)', () => {
   it('file.ready reaches every subscribing hook exactly once, signed, and is recorded delivered', async () => {
     const data = { fileId: randomUUID(), chunksCreated: 3, totalTokens: 12 };
@@ -142,13 +167,9 @@ suite('webhook dispatch → wire (#40)', () => {
     expect(stubs[1].hits.length).toBe(0);
 
     // Bookkeeping: one row per subscribing hook, all delivered.
-    const rows = await pool.query<{ count: number; all_delivered: boolean }>(
-      `SELECT count(*)::int AS count,
-              count(*) FILTER (WHERE status = 'delivered')::int = count(*)::int AS all_delivered
-       FROM   webhook_deliveries WHERE event = $1`, ['file.ready'],
-    );
-    expect(rows.rows[0].count).toBe(2);
-    expect(rows.rows[0].all_delivered).toBe(true);
+    const summary = await awaitDelivered('file.ready', 2);
+    expect(summary.count).toBe(2);
+    expect(summary.all_delivered).toBe(true);
   });
 
   it('file.failed reaches failed-subscribers only — ready-only hooks stay silent', async () => {
@@ -171,14 +192,10 @@ suite('webhook dispatch → wire (#40)', () => {
     expect(verifies(hooks[2], hits0[2])).toBe(true);
 
     // Every delivery row has settled to the terminal success state; no
-    // retries hang around as pending.
-    const rows = await pool.query<{ count: number; all_delivered: boolean }>(
-      `SELECT count(*)::int AS count,
-              count(*) FILTER (WHERE status = 'delivered')::int = count(*)::int AS all_delivered
-       FROM   webhook_deliveries`,
-    );
-    expect(rows.rows[0].count).toBe(4);
-    expect(rows.rows[0].all_delivered).toBe(true);
+    // retries hang around as pending (covers both terminals dispatched here).
+    const summary = await awaitDelivered(null, 4);
+    expect(summary.count).toBe(4);
+    expect(summary.all_delivered).toBe(true);
   });
 
   it('delivered hits never produce retry traffic after the fan-out settles', async () => {
