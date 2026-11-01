@@ -7,15 +7,17 @@
 //   - chunk the extracted text           (rag/chunk.ts)
 //   - embed the chunks via Ollama        (rag/ollama.ts)
 //   - persist chunks + status trails in Postgres
-//   - emit the embedding.* webhook events (lib/webhook.ts; moves to
-//     webhooks/dispatch.ts with #40)
+//   - emit the terminal file events file.ready / file.failed (#40;
+//     webhooks/dispatch.ts — the old 9-event list lives nowhere else)
 //
-// Chunk status transitions and webhook payloads are unchanged.
+// Chunk status transitions are unchanged; terminal events map to
+// file.ready / file.failed (skips of no-text/no-chunks are terminal
+// failures from the consumer's point of view — never queryable).
 
 import { db } from '../db';
 import { fileChunks, files } from '../db/schema';
 import { eq, sql } from 'drizzle-orm';
-import { dispatchWebhookEvent, dispatchCollectionEmbeddingEvents } from '../lib/webhook';
+import { dispatchWebhookEvent } from '../webhooks/dispatch';
 import { chunkText } from './chunk';
 import { embed } from './ollama';
 
@@ -44,12 +46,10 @@ export async function embedFile(opts: EmbedFileOptions): Promise<EmbedFileResult
       .set({ status: 'skipped', error: null })
       .where(eq(files.id, fileId));
 
-    await dispatchWebhookEvent(orgId, 'embedding.skipped', {
+    await dispatchWebhookEvent(orgId, 'file.failed', {
       fileId,
-      reason: 'no_extracted_text',
+      error: 'no_extracted_text',
     });
-
-    await dispatchCollectionEmbeddingEvents(orgId, fileId);
 
     return { chunksCreated: 0, skipped: true };
   }
@@ -66,22 +66,15 @@ export async function embedFile(opts: EmbedFileOptions): Promise<EmbedFileResult
       .set({ status: 'skipped', error: null })
       .where(eq(files.id, fileId));
 
-    await dispatchWebhookEvent(orgId, 'embedding.skipped', {
+    await dispatchWebhookEvent(orgId, 'file.failed', {
       fileId,
-      reason: 'no_chunks_produced',
+      error: 'no_chunks_produced',
     });
-
-    await dispatchCollectionEmbeddingEvents(orgId, fileId);
 
     return { chunksCreated: 0, skipped: true };
   }
 
   // ── Embedding: status stays 'processing' (set by the pipeline) ─────────────
-
-  await dispatchWebhookEvent(orgId, 'embedding.started', {
-    fileId,
-    totalChunks: chunks.length,
-  });
 
   // ── Embed in batches ───────────────────────────────────────────────────────
   const allEmbeddings: number[][] = [];
@@ -99,14 +92,13 @@ export async function embedFile(opts: EmbedFileOptions): Promise<EmbedFileResult
       })
       .where(eq(files.id, fileId));
 
-    await dispatchWebhookEvent(orgId, 'embedding.failed', {
+    await dispatchWebhookEvent(orgId, 'file.failed', {
       fileId,
       error:          embedErr instanceof Error ? embedErr.message : 'Unknown embedding error',
       chunksTotal:    chunks.length,
       chunksEmbedded: allEmbeddings.length,
+      stage:          'embed',
     });
-
-    await dispatchCollectionEmbeddingEvents(orgId, fileId);
 
     throw embedErr;
   }
@@ -151,7 +143,7 @@ export async function embedFile(opts: EmbedFileOptions): Promise<EmbedFileResult
       })
       .where(eq(files.id, fileId));
 
-    await dispatchWebhookEvent(orgId, 'embedding.failed', {
+    await dispatchWebhookEvent(orgId, 'file.failed', {
       fileId,
       error:          persistErr instanceof Error ? persistErr.message : 'Failed to persist chunks',
       chunksTotal:    chunks.length,
@@ -159,23 +151,19 @@ export async function embedFile(opts: EmbedFileOptions): Promise<EmbedFileResult
       stage:          'persist',
     });
 
-    await dispatchCollectionEmbeddingEvents(orgId, fileId);
-
     throw persistErr;
   }
 
-  // ── Completed ──────────────────────────────────────────────────────────────
+  // ── Completed — the file is queryable ──────────────────────────────────────
   await db.update(files)
     .set({ status: 'ready', error: null })
     .where(eq(files.id, fileId));
 
-  await dispatchWebhookEvent(orgId, 'embedding.completed', {
+  await dispatchWebhookEvent(orgId, 'file.ready', {
     fileId,
     chunksCreated: chunks.length,
     totalTokens:   chunks.reduce((sum, c) => sum + c.tokenCount, 0),
   });
-
-  await dispatchCollectionEmbeddingEvents(orgId, fileId);
 
   return { chunksCreated: chunks.length, skipped: false };
 }
