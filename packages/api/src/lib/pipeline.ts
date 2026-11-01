@@ -7,11 +7,13 @@
  * so parallel uploads never multiply extraction's RAM/CPU cost:
  *
  *   - upload (extractable MIME) → status = 'pending', pipeline fires
- *   - attempt start             → status = 'processing' (extraction.started)
- *   - extraction ok             → extraction.completed webhook
+ *   - attempt start             → status = 'processing'
+ *   - extraction ok             → text persisted; embedding takes over
  *   - embed ok                  → status = 'ready'   (rag/ingest sets it)
  *   - embed side not needed     → status = 'skipped' (RAG disabled / no text)
- *   - any failure               → status = 'failed' + files.error + *.failed event
+ *   - any failure               → status = 'failed' + files.error + file.failed
+ *                                 event (#40: extract fails here, embed
+ *                                 failures are dispatched by rag/ingest)
  *
  * There are no automatic retries (they were BullMQ's attempts/backoff, and
  * Redis is gone since #49) — re-run via POST /files/:id/reprocess. On process
@@ -26,7 +28,7 @@ import config from '../config';
 import { getFilePath } from './storage';
 import { extractText } from './extractors';
 import { embedFile } from '../rag/ingest';
-import { dispatchWebhookEvent } from './webhook';
+import { dispatchWebhookEvent } from '../webhooks/dispatch';
 import { Semaphore } from './semaphore';
 
 export interface PipelineInput {
@@ -51,13 +53,11 @@ async function processPipeline({ fileId, storageKey, mimeType, orgId }: Pipeline
     .set({ status: 'processing', error: null })
     .where(eq(files.id, fileId));
 
-  await dispatchWebhookEvent(orgId, 'extraction.started', { fileId });
-
   const fail = async (message: string): Promise<void> => {
     await db.update(files)
       .set({ status: 'failed', error: message })
       .where(eq(files.id, fileId));
-    await dispatchWebhookEvent(orgId, 'extraction.failed', { fileId, error: message });
+    await dispatchWebhookEvent(orgId, 'file.failed', { fileId, error: message, stage: 'extract' });
   };
 
   const filePath = getFilePath(storageKey);
@@ -79,11 +79,6 @@ async function processPipeline({ fileId, storageKey, mimeType, orgId }: Pipeline
   await db.update(files)
     .set({ extractedText })
     .where(eq(files.id, fileId));
-
-  await dispatchWebhookEvent(orgId, 'extraction.completed', {
-    fileId,
-    extractedTextLength: extractedText.length,
-  });
 
   console.log(`Pipeline: text extraction completed for file ${fileId} (${extractedText.length} chars)`);
 

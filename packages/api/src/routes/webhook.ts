@@ -11,18 +11,8 @@ const router = Router();
 // ── All subscribable events ───────────────────────────────────────────────────
 
 const WEBHOOK_EVENTS = z.enum([
-    // Extraction
-    'extraction.started',
-    'extraction.completed',
-    'extraction.failed',
-    // Per-file embedding
-    'embedding.started',
-    'embedding.completed',
-    'embedding.failed',
-    'embedding.skipped',
-    // Collection-level embedding rollup
-    'collection.embedding_completed',
-    'collection.embedding_failed',
+    'file.ready',
+    'file.failed',
 ]);
 
 // ── Request schemas ───────────────────────────────────────────────────────────
@@ -155,15 +145,8 @@ router.get('/events', authMiddleware, async (_req: Request, res: Response) => {
     res.json({
         events: WEBHOOK_EVENTS.options,
         descriptions: {
-            'extraction.started': 'A text extraction job has begun processing',
-            'extraction.completed': 'Text extraction finished successfully',
-            'extraction.failed': 'Text extraction failed after all retries',
-            'embedding.started': 'Embedding generation has begun for a file',
-            'embedding.completed': 'All chunks for a file have been embedded successfully',
-            'embedding.failed': 'Embedding failed for a file (includes how many chunks were done)',
-            'embedding.skipped': 'No text was available to embed for a file',
-            'collection.embedding_completed': 'Every file in a collection is now embedded and query-ready',
-            'collection.embedding_failed': 'One or more files in a collection failed to embed',
+            'file.ready': 'A file is queryable — its chunks are persisted and searchable (#40: all intermediate file events are gone)',
+            'file.failed': 'A file will never become queryable in this pass — extraction or embedding failed, or there was nothing to embed (skipped). Re-run via POST /files/:id/reprocess',
         },
     });
 });

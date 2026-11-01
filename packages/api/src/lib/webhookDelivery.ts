@@ -23,7 +23,7 @@ export interface DeliveryInput {
   data:       Record<string, unknown>;
 }
 
-/** Same wire shape lib/webhook.ts documents; kept here to avoid an import cycle. */
+/** Same wire shape webhooks/dispatch.ts documents; kept here to avoid an import cycle. */
 interface DeliveryPayload {
   id:        string;
   event:     string;

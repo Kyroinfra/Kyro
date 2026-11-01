@@ -37,7 +37,7 @@ describe('async route rejections reach the error handler (Express 5 forwarding)'
       request(app)
         .post('/api/v1/webhooks')
         .set('Authorization', `Bearer ${token}`)
-        .send({ url: 'https://example.com/hook', events: ['extraction.completed'] }),
+        .send({ url: 'https://example.com/hook', events: ['file.ready'] }),
     );
 
     expect(res.status).toBe(500);

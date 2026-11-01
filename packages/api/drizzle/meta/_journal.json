@@ -120,6 +120,13 @@
       "when": 1793478092201,
       "tag": "0016_drop-collection-slug",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1793479999415,
+      "tag": "0017_rewrite-webhook-events",
+      "breakpoints": true
     }
   ]
 }
