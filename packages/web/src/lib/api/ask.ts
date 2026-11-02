@@ -1,6 +1,4 @@
 import { request } from "./client";
-import { browser } from "$app/environment";
-import { env } from "$env/dynamic/public";
 
 export interface SemanticSearchResult {
   fileId: string;
@@ -12,7 +10,6 @@ export interface SemanticSearchResult {
 }
 
 export async function semanticSearch(
-  apiKey: string,
   q: string,
   opts: {
     collectionId?: string;
@@ -36,7 +33,6 @@ export async function semanticSearch(
 
   return request(`/api/v1/search?${params.toString()}`, {
     method: "GET",
-    apiKey,
   });
 }
 
@@ -64,20 +60,10 @@ export interface AskNonStreamResponse {
   sources: AskSource[];
 }
 
-function getBaseUrl(): string {
-  if (browser) {
-    return env.PUBLIC_API_URL || "";
-  }
-  return process.env.INTERNAL_API_URL || "http://api:3000";
-}
-
-/**
- * Streams an /ask response. Calls onSources once (when the `sources` event
- * arrives), onChunk for every text token, and resolves when the stream ends
- * (the `done` event) or rejects on an `error` event / network failure.
- */
+// Same-origin streaming (#42): the browser POSTs to its own /api/v1/ask —
+// the SvelteKit proxy forwards unbuffered and injects the session JWT; no
+// API key is ever read in the browser.
 export async function askStream(
-  apiKey: string,
   input: AskInput,
   handlers: {
     onSources?: (sources: AskSource[]) => void;
@@ -86,13 +72,10 @@ export async function askStream(
   },
   signal?: AbortSignal,
 ): Promise<void> {
-  const url = `${getBaseUrl()}/api/v1/ask`;
-
-  const res = await fetch(url, {
+  const res = await fetch("/api/v1/ask", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-API-Key": apiKey,
     },
     body: JSON.stringify({ ...input, stream: true }),
     signal,
@@ -100,7 +83,11 @@ export async function askStream(
 
   if (!res.ok || !res.body) {
     const errBody = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(errBody.error ?? "Ask request failed");
+    throw new Error(
+      typeof errBody.error === "string"
+        ? errBody.error
+        : (errBody.error?.message ?? "Ask request failed"),
+    );
   }
 
   const reader = res.body.getReader();
@@ -145,13 +132,9 @@ export async function askStream(
   }
 }
 
-export async function ask(
-  apiKey: string,
-  input: AskInput,
-): Promise<AskNonStreamResponse> {
+export async function ask(input: AskInput): Promise<AskNonStreamResponse> {
   return request<AskNonStreamResponse>("/api/v1/ask", {
     method: "POST",
-    apiKey,
     body: { ...input, stream: false },
   });
 }

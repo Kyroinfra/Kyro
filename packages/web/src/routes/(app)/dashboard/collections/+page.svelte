@@ -1,23 +1,15 @@
 <script lang="ts">
-  import { apiKey, apiKeyVerified } from "$lib/stores/apiKey";
+  import { onMount } from "svelte";
   import Button from "$lib/components/ui/Button.svelte";
   import Card from "$lib/components/ui/Card.svelte";
   import Badge from "$lib/components/ui/Badge.svelte";
   import Modal from "$lib/components/ui/Modal.svelte";
-  import ApiKeyGate from "$lib/components/ApiKeyGate.svelte";
   import { formatDate } from "$lib/utils/format";
   import {
     getCollections,
     createCollection,
     type Collection,
   } from "$lib/api/collections";
-  import { getFilesV2 } from "$lib/api/files";
-
-  interface Props {
-    data: { hasApiKey: boolean };
-  }
-
-  let { data }: Props = $props();
 
   let collections = $state<Collection[]>([]);
   let loadingCollections = $state(false);
@@ -29,23 +21,22 @@
   let creating = $state(false);
   let createError = $state<string | null>(null);
 
-  async function verifyKey(key: string) {
-    // read-scope smoke test, then load real data
-    await getFilesV2(key, 1);
-    await refreshCollections(key);
-  }
-
-  async function refreshCollections(key = $apiKey) {
+  async function refreshCollections() {
     loadingCollections = true;
     loadError = null;
     try {
-      collections = await getCollections(key);
+      collections = await getCollections();
     } catch (error: any) {
       loadError = error.message || "Failed to load collections";
     } finally {
       loadingCollections = false;
     }
   }
+
+  // Data loads straight on mount (#42) — the session cookie authenticates.
+  onMount(() => {
+    void refreshCollections();
+  });
 
   async function handleCreate() {
     if (!newName.trim()) {
@@ -55,7 +46,7 @@
     creating = true;
     createError = null;
     try {
-      await createCollection($apiKey, {
+      await createCollection({
         name: newName.trim(),
         description: newDescription.trim() || undefined,
       });
@@ -88,87 +79,68 @@
       <span class="prompt">$</span>
       <span class="command">./collections.sh</span>
     </div>
-    {#if $apiKeyVerified}
-      <Button onclick={() => (showCreateModal = true)}>+ new collection</Button>
-    {/if}
+    <Button onclick={() => (showCreateModal = true)}>+ new collection</Button>
   </header>
 
-  {#if !data.hasApiKey}
-    <Card>
-      <div class="empty-state">
-        <span class="empty-icon">🔑</span>
-        <h3>API Key Required</h3>
-        <p>You need at least one API key with read/write scope to manage collections.</p>
-        <a href="/dashboard/keys">
-          <Button>Create API Key</Button>
-        </a>
-      </div>
-    </Card>
-  {:else}
-    <ApiKeyGate verify={verifyKey} />
-
-    {#if $apiKeyVerified}
-      {#if loadingCollections}
-        <Card>
-          <p class="loading-text">Loading collections…</p>
-        </Card>
-      {:else if loadError}
-        <Card>
-          <p class="error-text">// {loadError}</p>
-        </Card>
-      {:else if collections.length === 0}
-        <Card>
-          <div class="empty-state">
-            <span class="empty-icon">🗂️</span>
-            <h3>No collections yet</h3>
-            <p>
-              Collections group files together so you can scope semantic
-              search and the Ask endpoint to a specific set of documents.
-            </p>
-            <Button onclick={() => (showCreateModal = true)}>+ create first collection</Button>
-          </div>
-        </Card>
-      {:else}
-        <div class="collections-grid">
-          {#each collections as collection}
-            {@const status = statusBadge(collection)}
-            <a href="/dashboard/collections/{collection.id}" class="collection-card-link">
-              <Card>
-                <div class="collection-card">
-                  <div class="collection-card-header">
-                    <span class="collection-name">{collection.name}</span>
-                    <Badge variant={status.variant}>{status.label}</Badge>
-                  </div>
-                  {#if collection.description}
-                    <p class="collection-desc">{collection.description}</p>
-                  {/if}
-                  <div class="collection-stats">
-                    <span class="stat">
-                      <span class="stat-value">{collection.fileCount}</span>
-                      <span class="stat-label">files</span>
-                    </span>
-                    <span class="stat">
-                      <span class="stat-value">{collection.embeddedCount}</span>
-                      <span class="stat-label">embedded</span>
-                    </span>
-                    {#if collection.pendingCount > 0}
-                      <span class="stat">
-                        <span class="stat-value">{collection.pendingCount}</span>
-                        <span class="stat-label">pending</span>
-                      </span>
-                    {/if}
-                  </div>
-                  <div class="collection-footer">
-                    <span class="collection-date">created {formatDate(collection.createdAt)}</span>
-                  </div>
-                </div>
-              </Card>
-            </a>
-          {/each}
+    {#if loadingCollections}
+      <Card>
+        <p class="loading-text">Loading collections…</p>
+      </Card>
+    {:else if loadError}
+      <Card>
+        <p class="error-text">// {loadError}</p>
+      </Card>
+    {:else if collections.length === 0}
+      <Card>
+        <div class="empty-state">
+          <span class="empty-icon">🗂️</span>
+          <h3>No collections yet</h3>
+          <p>
+            Collections group files together so you can scope semantic
+            search and the Ask endpoint to a specific set of documents.
+          </p>
+          <Button onclick={() => (showCreateModal = true)}>+ create first collection</Button>
         </div>
-      {/if}
+      </Card>
+    {:else}
+      <div class="collections-grid">
+        {#each collections as collection}
+          {@const status = statusBadge(collection)}
+          <a href="/dashboard/collections/{collection.id}" class="collection-card-link">
+            <Card>
+              <div class="collection-card">
+                <div class="collection-card-header">
+                  <span class="collection-name">{collection.name}</span>
+                  <Badge variant={status.variant}>{status.label}</Badge>
+                </div>
+                {#if collection.description}
+                  <p class="collection-desc">{collection.description}</p>
+                {/if}
+                <div class="collection-stats">
+                  <span class="stat">
+                    <span class="stat-value">{collection.fileCount}</span>
+                    <span class="stat-label">files</span>
+                  </span>
+                  <span class="stat">
+                    <span class="stat-value">{collection.embeddedCount}</span>
+                    <span class="stat-label">embedded</span>
+                  </span>
+                  {#if collection.pendingCount > 0}
+                    <span class="stat">
+                      <span class="stat-value">{collection.pendingCount}</span>
+                      <span class="stat-label">pending</span>
+                    </span>
+                  {/if}
+                </div>
+                <div class="collection-footer">
+                  <span class="collection-date">created {formatDate(collection.createdAt)}</span>
+                </div>
+              </div>
+            </Card>
+          </a>
+        {/each}
+      </div>
     {/if}
-  {/if}
 </div>
 
 <Modal

@@ -1,12 +1,11 @@
 <script lang="ts">
-  import { apiKey, apiKeyVerified } from "$lib/stores/apiKey";
+  import { onMount } from "svelte";
   import { user } from "$lib/stores/auth";
   import Button from "$lib/components/ui/Button.svelte";
   import Card from "$lib/components/ui/Card.svelte";
   import Badge from "$lib/components/ui/Badge.svelte";
   import Modal from "$lib/components/ui/Modal.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
-  import ApiKeyGate from "$lib/components/ApiKeyGate.svelte";
   import { formatBytes, formatDate, formatDateTime } from "$lib/utils/format";
   import {
     getCollection,
@@ -22,7 +21,7 @@
   import { goto } from "$app/navigation";
 
   interface Props {
-    data: { hasApiKey: boolean; collectionId: string };
+    data: { collectionId: string };
   }
 
   let { data }: Props = $props();
@@ -36,17 +35,13 @@
     $user?.role === "owner" || $user?.role === "admin",
   );
 
-  async function verifyKey(key: string) {
-    await loadAll(key);
-  }
-
-  async function loadAll(key = $apiKey) {
+  async function loadAll() {
     loading = true;
     loadError = null;
     try {
       const [detail, filesPage] = await Promise.all([
-        getCollection(key, data.collectionId),
-        getCollectionFiles(key, data.collectionId, 100, 0),
+        getCollection(data.collectionId),
+        getCollectionFiles(data.collectionId, 100, 0),
       ]);
       collection = detail;
       collectionFiles = filesPage.data;
@@ -56,6 +51,11 @@
       loading = false;
     }
   }
+
+  // Data loads straight on mount (#42) — the session cookie authenticates.
+  onMount(() => {
+    void loadAll();
+  });
 
   // ── Edit modal ──────────────────────────────────────────────────────────────
   let showEditModal = $state(false);
@@ -81,7 +81,7 @@
     savingEdit = true;
     editError = null;
     try {
-      await updateCollection($apiKey, collection.id, {
+      await updateCollection(collection.id, {
         name: editName.trim(),
         description: editDescription.trim() || undefined,
       });
@@ -100,7 +100,7 @@
   async function handleDeleteCollection() {
     if (!collection) return;
     try {
-      await deleteCollection($apiKey, collection.id);
+      await deleteCollection(collection.id);
       goto("/dashboard/collections");
     } catch (error: any) {
       console.error("Failed to delete collection:", error);
@@ -123,7 +123,7 @@
     selectedFileIds = new Set();
     loadingOrgFiles = true;
     try {
-      const result = await getFilesV2($apiKey, 100);
+      const result = await getFilesV2(100);
       const existingIds = new Set(collectionFiles.map((f) => f.id));
       orgFiles = result.files.filter((f) => !existingIds.has(f.id));
     } catch (error: any) {
@@ -145,7 +145,7 @@
     addingFiles = true;
     addFilesError = null;
     try {
-      await addFilesToCollection($apiKey, collection.id, Array.from(selectedFileIds));
+      await addFilesToCollection(collection.id, Array.from(selectedFileIds));
       showAddFilesModal = false;
       await loadAll();
     } catch (error: any) {
@@ -167,7 +167,7 @@
   async function handleRemoveFile() {
     if (!collection || !fileToRemove) return;
     try {
-      await removeFileFromCollection($apiKey, collection.id, fileToRemove.id);
+      await removeFileFromCollection(collection.id, fileToRemove.id);
       collectionFiles = collectionFiles.filter((f) => f.id !== fileToRemove!.id);
       await loadAll();
     } catch (error: any) {
@@ -197,119 +197,102 @@
     </div>
   </header>
 
-  {#if !data.hasApiKey}
-    <Card>
-      <div class="empty-state">
-        <span class="empty-icon">🔑</span>
-        <h3>API Key Required</h3>
-        <p>You need an API key with read/write scope to view this collection.</p>
-        <a href="/dashboard/keys">
-          <Button>Create API Key</Button>
-        </a>
-      </div>
-    </Card>
-  {:else}
-    <ApiKeyGate verify={verifyKey} />
-
-    {#if $apiKeyVerified}
-      {#if loading}
-        <Card><p class="loading-text">Loading collection…</p></Card>
-      {:else if loadError}
-        <Card><p class="error-text">// {loadError}</p></Card>
-      {:else if collection}
-        <Card>
-          <div class="collection-header">
-            <div class="collection-header-main">
-              <h1 class="collection-title">{collection.name}</h1>
-              {#if collection.description}
-                <p class="collection-description">{collection.description}</p>
-              {/if}
-              <div class="collection-meta">
-                <span>created {formatDate(collection.createdAt)}</span>
-              </div>
+    {#if loading}
+      <Card><p class="loading-text">Loading collection…</p></Card>
+    {:else if loadError}
+      <Card><p class="error-text">// {loadError}</p></Card>
+    {:else if collection}
+      <Card>
+        <div class="collection-header">
+          <div class="collection-header-main">
+            <h1 class="collection-title">{collection.name}</h1>
+            {#if collection.description}
+              <p class="collection-description">{collection.description}</p>
+            {/if}
+            <div class="collection-meta">
+              <span>created {formatDate(collection.createdAt)}</span>
             </div>
-            {#if canManage}
-              <div class="collection-header-actions">
-                <Button variant="secondary" size="sm" onclick={openEdit}>Edit</Button>
-                <Button variant="danger" size="sm" onclick={() => (showDeleteConfirm = true)}>
-                  Delete
-                </Button>
-              </div>
-            {/if}
           </div>
-
-          <div class="status-row">
-            <Badge variant={collection.queryReady ? "success" : "warning"}>
-              {collection.queryReady ? "query ready" : "embedding in progress"}
-            </Badge>
-            <span class="status-stat">{collection.fileCount} files</span>
-            <span class="status-stat">{collection.embeddedCount} embedded</span>
-            {#if collection.pendingCount > 0}
-              <span class="status-stat">{collection.pendingCount} pending</span>
-            {/if}
-            {#if collection.failedCount > 0}
-              <span class="status-stat status-stat-danger">{collection.failedCount} failed</span>
-            {/if}
-          </div>
-
-          <div class="quick-actions">
-            <a href="/dashboard/ask?collectionId={collection.id}">
-              <Button variant="secondary" size="sm">Ask this collection</Button>
-            </a>
-          </div>
-        </Card>
-
-        <div class="files-section-header">
-          <span class="section-label">// Files in this collection</span>
           {#if canManage}
-            <Button size="sm" onclick={openAddFiles}>+ add files</Button>
+            <div class="collection-header-actions">
+              <Button variant="secondary" size="sm" onclick={openEdit}>Edit</Button>
+              <Button variant="danger" size="sm" onclick={() => (showDeleteConfirm = true)}>
+                Delete
+              </Button>
+            </div>
           {/if}
         </div>
 
-        {#if collectionFiles.length === 0}
-          <Card>
-            <div class="empty-state">
-              <span class="empty-icon">📁</span>
-              <h3>No files in this collection</h3>
-              <p>Add files from your organisation to build this collection.</p>
-              {#if canManage}
-                <Button onclick={openAddFiles}>+ add files</Button>
-              {/if}
-            </div>
-          </Card>
-        {:else}
-          <div class="files-list">
-            {#each collectionFiles as file}
-              <Card>
-                <div class="file-row">
-                  <div class="file-info">
-                    <div class="file-name-row">
-                      <span class="file-name">{file.name}</span>
-                      <Badge variant={embedBadgeVariant(file.status)}>
-                        {file.status}
-                      </Badge>
-                    </div>
-                    <div class="file-meta">
-                      <span>{formatBytes(file.sizeBytes)}</span>
-                      <span>•</span>
-                      <span>{file.mimeType}</span>
-                      <span>•</span>
-                      <span>added {formatDateTime(String(file.addedAt))}</span>
-                    </div>
-                  </div>
-                  {#if canManage}
-                    <Button variant="danger" size="sm" onclick={() => confirmRemove(file)}>
-                      Remove
-                    </Button>
-                  {/if}
-                </div>
-              </Card>
-            {/each}
-          </div>
+        <div class="status-row">
+          <Badge variant={collection.queryReady ? "success" : "warning"}>
+            {collection.queryReady ? "query ready" : "embedding in progress"}
+          </Badge>
+          <span class="status-stat">{collection.fileCount} files</span>
+          <span class="status-stat">{collection.embeddedCount} embedded</span>
+          {#if collection.pendingCount > 0}
+            <span class="status-stat">{collection.pendingCount} pending</span>
+          {/if}
+          {#if collection.failedCount > 0}
+            <span class="status-stat status-stat-danger">{collection.failedCount} failed</span>
+          {/if}
+        </div>
+
+        <div class="quick-actions">
+          <a href="/dashboard/ask?collectionId={collection.id}">
+            <Button variant="secondary" size="sm">Ask this collection</Button>
+          </a>
+        </div>
+      </Card>
+
+      <div class="files-section-header">
+        <span class="section-label">// Files in this collection</span>
+        {#if canManage}
+          <Button size="sm" onclick={openAddFiles}>+ add files</Button>
         {/if}
+      </div>
+
+      {#if collectionFiles.length === 0}
+        <Card>
+          <div class="empty-state">
+            <span class="empty-icon">📁</span>
+            <h3>No files in this collection</h3>
+            <p>Add files from your organisation to build this collection.</p>
+            {#if canManage}
+              <Button onclick={openAddFiles}>+ add files</Button>
+            {/if}
+          </div>
+        </Card>
+      {:else}
+        <div class="files-list">
+          {#each collectionFiles as file}
+            <Card>
+              <div class="file-row">
+                <div class="file-info">
+                  <div class="file-name-row">
+                    <span class="file-name">{file.name}</span>
+                    <Badge variant={embedBadgeVariant(file.status)}>
+                      {file.status}
+                    </Badge>
+                  </div>
+                  <div class="file-meta">
+                    <span>{formatBytes(file.sizeBytes)}</span>
+                    <span>•</span>
+                    <span>{file.mimeType}</span>
+                    <span>•</span>
+                    <span>added {formatDateTime(String(file.addedAt))}</span>
+                  </div>
+                </div>
+                {#if canManage}
+                  <Button variant="danger" size="sm" onclick={() => confirmRemove(file)}>
+                    Remove
+                  </Button>
+                {/if}
+              </div>
+            </Card>
+          {/each}
+        </div>
       {/if}
     {/if}
-  {/if}
 </div>
 
 <!-- Edit collection modal -->

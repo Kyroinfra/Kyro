@@ -38,61 +38,55 @@ export interface PaginatedCollectionFiles {
 	};
 }
 
-export async function getCollections(apiKey: string): Promise<Collection[]> {
-	return request<Collection[]>('/api/v1/collections', { method: 'GET', apiKey });
+export async function getCollections(): Promise<Collection[]> {
+	return request<Collection[]>('/api/v1/collections', { method: 'GET' });
 }
 
-export async function getCollection(apiKey: string, id: string): Promise<CollectionDetail> {
-	return request<CollectionDetail>(`/api/v1/collections/${id}`, { method: 'GET', apiKey });
+export async function getCollection(id: string): Promise<CollectionDetail> {
+	return request<CollectionDetail>(`/api/v1/collections/${id}`, { method: 'GET' });
 }
 
 export async function createCollection(
-	apiKey: string,
 	input: { name: string; description?: string }
 ): Promise<Collection> {
-	return request<Collection>('/api/v1/collections', { method: 'POST', apiKey, body: input });
+	return request<Collection>('/api/v1/collections', { method: 'POST', body: input });
 }
 
 export async function updateCollection(
-	apiKey: string,
 	id: string,
 	input: { name?: string; description?: string }
 ): Promise<Collection> {
-	return request<Collection>(`/api/v1/collections/${id}`, { method: 'PATCH', apiKey, body: input });
+	return request<Collection>(`/api/v1/collections/${id}`, { method: 'PATCH', body: input });
 }
 
-export async function deleteCollection(apiKey: string, id: string): Promise<void> {
-	await request<void>(`/api/v1/collections/${id}`, { method: 'DELETE', apiKey });
+export async function deleteCollection(id: string): Promise<void> {
+	await request<void>(`/api/v1/collections/${id}`, { method: 'DELETE' });
 }
 
 export async function getCollectionFiles(
-	apiKey: string,
 	id: string,
 	limit = 100,
 	offset = 0
 ): Promise<PaginatedCollectionFiles> {
 	return request<PaginatedCollectionFiles>(
 		`/api/v1/collections/${id}/files?limit=${limit}&offset=${offset}`,
-		{ method: 'GET', apiKey }
+		{ method: 'GET' }
 	);
 }
 
 export async function addFilesToCollection(
-	apiKey: string,
 	id: string,
 	fileIds: string[]
 ): Promise<{ added: number; collectionId: string }> {
 	return request(`/api/v1/collections/${id}/files`, {
 		method: 'POST',
-		apiKey,
 		body: { fileIds }
 	});
 }
 
 export async function removeFileFromCollection(
-	apiKey: string,
 	id: string,
 	fileId: string
 ): Promise<void> {
-	await request<void>(`/api/v1/collections/${id}/files/${fileId}`, { method: 'DELETE', apiKey });
+	await request<void>(`/api/v1/collections/${id}/files/${fileId}`, { method: 'DELETE' });
 }

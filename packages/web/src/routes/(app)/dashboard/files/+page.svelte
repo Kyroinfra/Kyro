@@ -1,14 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { user } from "$lib/stores/auth";
-  import { apiKey, apiKeyVerified } from "$lib/stores/apiKey";
   import Button from "$lib/components/ui/Button.svelte";
   import Card from "$lib/components/ui/Card.svelte";
   import Badge from "$lib/components/ui/Badge.svelte";
   import Modal from "$lib/components/ui/Modal.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import ProgressBar from "$lib/components/ui/ProgressBar.svelte";
-  import ApiKeyGate from "$lib/components/ApiKeyGate.svelte";
   import { formatBytes, formatDateTime } from "$lib/utils/format";
   import {
     uploadFile,
@@ -22,17 +20,6 @@
     type FileStatus,
   } from "$lib/api/files";
   import { getCollections, addFilesToCollection, type Collection } from "$lib/api/collections";
-
-  interface Props {
-    data: {
-      hasApiKey: boolean;
-      apiKeyPrefix: string | null;
-    };
-  }
-
-  let { data }: Props = $props();
-
-  let hasApiKey = $state(data.hasApiKey);
 
   // Pagination state
   let files = $state<FileItemV2[]>([]);
@@ -66,29 +53,17 @@
   );
 
   // ── Data loading ─────────────────────────────────────────────────────────────
-  // `verifyKey` is called by ApiKeyGate after verifying (including on mount
-  // when a persisted key exists). This is the primary data-loading path.
-  async function verifyKey(key: string) {
-    const result = await getFilesV2(key, 100);
-    files = result.files;
-    nextCursor = result.nextCursor;
-    hasMore = result.hasMore;
-  }
-
-  // Safety net: if the store is already verified when this page mounts
-  // (e.g. navigating between dashboard pages client-side), load files directly
-  // without waiting for ApiKeyGate's onMount to fire.
-  onMount(async () => {
-    if ($apiKeyVerified && $apiKey && files.length === 0) {
-      await refreshFiles();
-    }
+  // First page loads on mount (#42) — the session cookie authenticates; no
+  // key gate to pass first.
+  onMount(() => {
+    void refreshFiles();
   });
 
   async function loadMore() {
     if (!nextCursor || loadingMore) return;
     loadingMore = true;
     try {
-      const result = await getFilesV2($apiKey, 100, nextCursor);
+      const result = await getFilesV2(100, nextCursor);
       files = [...files, ...result.files];
       nextCursor = result.nextCursor;
       hasMore = result.hasMore;
@@ -100,10 +75,9 @@
   }
 
   async function refreshFiles() {
-    if (!$apiKeyVerified || !$apiKey) return;
     loadingFiles = true;
     try {
-      const result = await getFilesV2($apiKey, 100);
+      const result = await getFilesV2(100);
       files = result.files;
       nextCursor = result.nextCursor;
       hasMore = result.hasMore;
@@ -116,7 +90,7 @@
 
   async function handleFileSelect(e: Event) {
     const input = e.target as HTMLInputElement;
-    if (input.files?.length && $apiKeyVerified) {
+    if (input.files?.length) {
       selectedFile = input.files[0];
       await uploadSelectedFile();
       input.value = "";
@@ -127,11 +101,6 @@
     e.preventDefault();
     dragOver = false;
 
-    if (!$apiKeyVerified) {
-      uploadError = "Please verify your API key first";
-      return;
-    }
-
     const droppedFiles = e.dataTransfer?.files;
     if (droppedFiles?.length) {
       selectedFile = droppedFiles[0];
@@ -140,14 +109,14 @@
   }
 
   async function uploadSelectedFile() {
-    if (!selectedFile || !$apiKeyVerified) return;
+    if (!selectedFile) return;
 
     uploading = true;
     uploadProgress = 0;
     uploadError = null;
 
     try {
-      const uploaded = await uploadFile($apiKey, selectedFile, (pct) => {
+      const uploaded = await uploadFile(selectedFile, (pct) => {
         uploadProgress = pct;
       });
 
@@ -185,10 +154,10 @@
   }
 
   async function handleDelete() {
-    if (!fileToDelete || !$apiKey) return;
+    if (!fileToDelete) return;
 
     try {
-      await deleteFile($apiKey, fileToDelete.id);
+      await deleteFile(fileToDelete.id);
       files = files.filter((f) => f.id !== fileToDelete!.id);
     } catch (error: any) {
       console.error("Delete failed:", error);
@@ -204,14 +173,13 @@
   }
 
   function downloadFile(file: FileItemV2) {
-    if (!$apiKey) return;
-    window.open(getDownloadUrl(file.id, $apiKey), "_blank");
+    window.open(getDownloadUrl(file.id), "_blank");
   }
 
   async function handleReprocess(file: FileItemV2) {
     extracting = { ...extracting, [file.id]: true };
     try {
-      const result = await triggerExtraction($apiKey, file.id);
+      const result = await triggerExtraction(file.id);
       files = files.map((f) =>
         f.id === file.id ? { ...f, status: result.status } : f,
       );
@@ -231,7 +199,7 @@
     collectionAddedMessage = null;
     loadingCollections = true;
     try {
-      collections = await getCollections($apiKey);
+      collections = await getCollections();
     } catch (error: any) {
       collectionAddError = error.message || "Failed to load collections";
     } finally {
@@ -244,7 +212,7 @@
     addingToCollection = true;
     collectionAddError = null;
     try {
-      const result = await addFilesToCollection($apiKey, collectionId, [fileForCollection.id]);
+      const result = await addFilesToCollection(collectionId, [fileForCollection.id]);
       if (result.added === 0) {
         collectionAddedMessage = "Already in this collection";
       } else {
@@ -283,150 +251,131 @@
     </div>
   </header>
 
-  {#if !hasApiKey}
     <Card>
-      <div class="empty-state">
-        <span class="empty-icon">🔑</span>
-        <h3>API Key Required</h3>
-        <p>
-          You need at least one API key with read/write scope to manage files.
-        </p>
-        <a href="/dashboard/keys">
-          <Button>Create API Key</Button>
-        </a>
-      </div>
-    </Card>
-  {:else}
-    <ApiKeyGate verify={verifyKey} />
-
-    {#if $apiKeyVerified}
-      <Card>
-        <div
-          class="upload-zone"
-          class:drag-over={dragOver}
-          ondrop={handleDrop}
-          ondragover={handleDragOver}
-          ondragleave={handleDragLeave}
-        >
-          {#if uploading}
-            <div class="upload-progress">
-              <span class="upload-filename"
-                >{selectedFile?.name || "Uploading..."}</span
-              >
-              <ProgressBar value={uploadProgress} max={100} showLabel />
-            </div>
-          {:else}
-            <span class="upload-icon">📤</span>
-            <span class="upload-text">Drag and drop files here, or</span>
-            <label class="upload-btn">
-              <input
-                type="file"
-                class="file-input"
-                id="file-input"
-                onchange={handleFileSelect}
-                accept="*/*"
-              />
-              <Button
-                onclick={() => document.getElementById("file-input")?.click()}
-              >
-                Browse Files
-              </Button>
-            </label>
-          {/if}
-        </div>
-        {#if uploadError}
-          <div class="upload-error">{uploadError}</div>
+      <div
+        class="upload-zone"
+        class:drag-over={dragOver}
+        ondrop={handleDrop}
+        ondragover={handleDragOver}
+        ondragleave={handleDragLeave}
+      >
+        {#if uploading}
+          <div class="upload-progress">
+            <span class="upload-filename"
+              >{selectedFile?.name || "Uploading..."}</span
+            >
+            <ProgressBar value={uploadProgress} max={100} showLabel />
+          </div>
+        {:else}
+          <span class="upload-icon">📤</span>
+          <span class="upload-text">Drag and drop files here, or</span>
+          <label class="upload-btn">
+            <input
+              type="file"
+              class="file-input"
+              id="file-input"
+              onchange={handleFileSelect}
+              accept="*/*"
+            />
+            <Button
+              onclick={() => document.getElementById("file-input")?.click()}
+            >
+              Browse Files
+            </Button>
+          </label>
         {/if}
-      </Card>
+      </div>
+      {#if uploadError}
+        <div class="upload-error">{uploadError}</div>
+      {/if}
+    </Card>
 
-      {#if loadingFiles}
-        <Card>
-          <div class="loading-state">
-            <span class="loading-text">Loading files…</span>
-          </div>
-        </Card>
-      {:else if files.length === 0}
-        <Card>
-          <div class="empty-state">
-            <span class="empty-icon">📁</span>
-            <h3>No files yet</h3>
-            <p>Upload your first file to get started.</p>
-          </div>
-        </Card>
-      {:else}
-        <div class="files-list">
-          {#each files as file}
-            <Card>
-              <div class="file-card">
-                <div class="file-info">
-                  <div class="file-name-row">
-                    <span class="file-name">{file.name}</span>
-                    <Badge variant={statusBadgeVariant(file.status)}>
-                      {file.status}
-                    </Badge>
-                  </div>
-                  <div class="file-meta">
-                    <span>{formatBytes(file.sizeBytes)}</span>
-                    <span>•</span>
-                    <span>{file.mimeType}</span>
-                    <span>•</span>
-                    <span>{formatDateTime(file.createdAt)}</span>
-                  </div>
+    {#if loadingFiles}
+      <Card>
+        <div class="loading-state">
+          <span class="loading-text">Loading files…</span>
+        </div>
+      </Card>
+    {:else if files.length === 0}
+      <Card>
+        <div class="empty-state">
+          <span class="empty-icon">📁</span>
+          <h3>No files yet</h3>
+          <p>Upload your first file to get started.</p>
+        </div>
+      </Card>
+    {:else}
+      <div class="files-list">
+        {#each files as file}
+          <Card>
+            <div class="file-card">
+              <div class="file-info">
+                <div class="file-name-row">
+                  <span class="file-name">{file.name}</span>
+                  <Badge variant={statusBadgeVariant(file.status)}>
+                    {file.status}
+                  </Badge>
                 </div>
-                <div class="file-actions">
-                  {#if file.status !== 'processing' && file.status !== 'pending'}
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      loading={extracting[file.id]}
-                      onclick={() => handleReprocess(file)}
-                    >
-                      Reprocess
-                    </Button>
-                  {/if}
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onclick={() => openCollectionModal(file)}
-                  >
-                    + Collection
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onclick={() => downloadFile(file)}
-                  >
-                    Download
-                  </Button>
-                  {#if canManage}
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      onclick={() => confirmDelete(file)}
-                    >
-                      Delete
-                    </Button>
-                  {/if}
+                <div class="file-meta">
+                  <span>{formatBytes(file.sizeBytes)}</span>
+                  <span>•</span>
+                  <span>{file.mimeType}</span>
+                  <span>•</span>
+                  <span>{formatDateTime(file.createdAt)}</span>
                 </div>
               </div>
-            </Card>
-          {/each}
-
-          {#if hasMore}
-            <div class="load-more">
-              <Button
-                variant="secondary"
-                loading={loadingMore}
-                onclick={loadMore}
-              >
-                {loadingMore ? "Loading..." : "Load more files"}
-              </Button>
+              <div class="file-actions">
+                {#if file.status !== 'processing' && file.status !== 'pending'}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    loading={extracting[file.id]}
+                    onclick={() => handleReprocess(file)}
+                  >
+                    Reprocess
+                  </Button>
+                {/if}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onclick={() => openCollectionModal(file)}
+                >
+                  + Collection
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onclick={() => downloadFile(file)}
+                >
+                  Download
+                </Button>
+                {#if canManage}
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onclick={() => confirmDelete(file)}
+                  >
+                    Delete
+                  </Button>
+                {/if}
+              </div>
             </div>
-          {/if}
-        </div>
-      {/if}
+          </Card>
+        {/each}
+
+        {#if hasMore}
+          <div class="load-more">
+            <Button
+              variant="secondary"
+              loading={loadingMore}
+              onclick={loadMore}
+            >
+              {loadingMore ? "Loading..." : "Load more files"}
+            </Button>
+          </div>
+        {/if}
+      </div>
     {/if}
-  {/if}
 </div>
 
 <ConfirmDialog
