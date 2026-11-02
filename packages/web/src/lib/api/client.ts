@@ -52,7 +52,10 @@ export async function request<T>(
   const res = await fetch(url, {
     method,
     headers,
-    body: body ? JSON.stringify(body) : undefined,
+    // #43: FormData bodies pass through untouched (fetch sets the multipart
+    // boundary header) — the old code deleted Content-Type and then
+    // JSON.stringify'd the FormData anyway.
+    body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
   });
 
   if (!res.ok) {
