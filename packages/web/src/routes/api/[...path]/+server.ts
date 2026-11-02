@@ -4,10 +4,10 @@ import type { RequestHandler } from './$types';
 // the API only same-origin — this handler forwards /api/* to the API service
 // and keeps the session off the wire to the browser.
 //
-// Auth injection mirrors the API's own precedence (API key wins):
-//   ?key=<apiKey>    -> X-API-Key header   (ApiKeyGate, legacy until #42)
-//   kyro_token cookie -> Authorization: Bearer (dashboard session JWT)
-// An Authorization header the client already sent is passed through as-is.
+// Auth injection (#42, final): the dashboard session cookie's JWT becomes the
+// Authorization header. There is no browser API key and no key-in-URL
+// (?key=) path into this proxy anymore. If the client already sent its own
+// Authorization header, it is passed through as-is.
 //
 // Responses stream straight through unbuffered — required for POST /ask's
 // SSE event stream.
@@ -38,19 +38,12 @@ const handler: RequestHandler = async ({ request, params, url: requestUrl, cooki
     }
   });
 
-  // Auth injection — only what the client did not already provide.
-  if (request.headers.get('x-api-key') === null) {
-    const queryKey = requestUrl.searchParams.get('key');
-    if (queryKey) {
-      headers.set('x-api-key', queryKey);
-      // The API-side precedence is key-first anyway; drop any bearer so the
-      // resolved credential is unambiguous.
-      headers.delete('authorization');
-    } else {
-      const token = cookies.get('kyro_token');
-      if (token) {
-        headers.set('authorization', `Bearer ${token}`);
-      }
+  // Auth injection — the session JWT unless the client already sent its own
+  // Authorization header.
+  if (request.headers.get('authorization') === null) {
+    const token = cookies.get('kyro_token');
+    if (token) {
+      headers.set('authorization', `Bearer ${token}`);
     }
   }
 

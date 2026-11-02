@@ -1,5 +1,4 @@
 import { browser } from "$app/environment";
-import { env } from "$env/dynamic/public";
 
 export class ApiError extends Error {
   constructor(
@@ -15,12 +14,18 @@ type RequestOptions = {
   method?: string;
   body?: unknown;
   token?: string;
-  apiKey?: string;
 };
 
+/**
+ * Base URL by environment (#42, same-origin finish):
+ * - browser: "" — the dashboard talks only to its own origin; the SvelteKit
+ *   catch-all proxy at /api forwards everything to the API service and
+ *   injects the session cookie's JWT. There is no PUBLIC_API_URL anymore.
+ * - SSR (page server loads): straight to the API container, INTERNAL_API_URL.
+ */
 function getBaseUrl(): string {
   if (browser) {
-    return env.PUBLIC_API_URL || "";
+    return "";
   }
   return process.env.INTERNAL_API_URL || "http://api:3000";
 }
@@ -29,14 +34,13 @@ export async function request<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const { method = "GET", body, token, apiKey } = options;
+  const { method = "GET", body, token } = options;
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
 
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  if (apiKey) headers["X-API-Key"] = apiKey;
 
   const isFormData = body instanceof FormData;
   if (isFormData) {
@@ -53,7 +57,12 @@ export async function request<T>(
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ error: res.statusText }));
-    throw new ApiError(res.status, error.error ?? "Request failed");
+    throw new ApiError(
+      res.status,
+      typeof error.error === "string"
+        ? error.error
+        : (error.error?.message ?? "Request failed"),
+    );
   }
 
   // 204 No Content (and any other empty response) — return void

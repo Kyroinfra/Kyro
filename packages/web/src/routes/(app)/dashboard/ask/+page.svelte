@@ -1,21 +1,12 @@
 <script lang="ts">
   import { page } from "$app/stores";
-  import { apiKey, apiKeyVerified } from "$lib/stores/apiKey";
   import Button from "$lib/components/ui/Button.svelte";
   import Card from "$lib/components/ui/Card.svelte";
   import Badge from "$lib/components/ui/Badge.svelte";
-  import ApiKeyGate from "$lib/components/ApiKeyGate.svelte";
   import { Send } from "$lib/components/icons";
   import { thread, ask, clearThread, note } from "$lib/stores/askThread.svelte";
   import { getCollections, type Collection } from "$lib/api/collections";
-  import { getFilesV2 } from "$lib/api/files";
   import { onMount } from "svelte";
-
-  interface Props {
-    data: { hasApiKey: boolean };
-  }
-
-  let { data }: Props = $props();
 
   // The thread + stream loop live in the module-scoped ask store so prompts
   // keep processing when the user navigates away (the page's effects are torn
@@ -33,15 +24,10 @@
   let selectedCollectionId = $state<string>("");
   let loadingCollections = $state(false);
 
-  async function verifyKey(key: string) {
-    await getFilesV2(key, 1);
-    await loadCollections(key);
-  }
-
-  async function loadCollections(key = $apiKey) {
+  async function loadCollections() {
     loadingCollections = true;
     try {
-      collections = await getCollections(key);
+      collections = await getCollections();
     } catch (error) {
       console.error("Failed to load collections:", error);
     } finally {
@@ -55,6 +41,9 @@
       scope = "collection";
       selectedCollectionId = fromQuery;
     }
+    // Collections load straight on mount (#42) — the session cookie
+    // authenticates; no key gate to pass first.
+    loadCollections();
   });
 
   function scrollToBottom() {
@@ -77,7 +66,6 @@
     // The store owns the loop from here — navigating away mid-answer no
     // longer kills it; the answer keeps streaming into the shared thread.
     await ask(q, {
-      apiKey: $apiKey,
       ...(scope === "collection" ? { collectionId: selectedCollectionId } : {}),
     });
     scrollToBottom();
@@ -121,133 +109,116 @@
     {/if}
   </header>
 
-  {#if !data.hasApiKey}
-    <Card>
-      <div class="empty-state">
-        <span class="empty-icon">🔑</span>
-        <h3>API Key Required</h3>
-        <p>You need an API key with read scope to ask questions over your files.</p>
-        <a href="/dashboard/keys">
-          <Button>Create API Key</Button>
-        </a>
+    <Card padding="sm">
+      <div class="scope-bar">
+        <span class="scope-label">scope:</span>
+        <div class="scope-toggle">
+          <button
+            class="scope-btn"
+            class:active={scope === "org"}
+            onclick={() => (scope = "org")}
+          >
+            whole org
+          </button>
+          <button
+            class="scope-btn"
+            class:active={scope === "collection"}
+            onclick={() => (scope = "collection")}
+          >
+            collection
+          </button>
+        </div>
+        {#if scope === "collection"}
+          {#if loadingCollections}
+            <span class="scope-loading">loading…</span>
+          {:else if collections.length === 0}
+            <span class="scope-empty">
+              no collections — <a href="/dashboard/collections">create one</a>
+            </span>
+          {:else}
+            <select class="scope-select" bind:value={selectedCollectionId}>
+              <option value="" disabled>select a collection</option>
+              {#each collections as c}
+                <option value={c.id}>{c.name} ({c.fileCount} files)</option>
+              {/each}
+            </select>
+          {/if}
+        {/if}
       </div>
     </Card>
-  {:else}
-    <ApiKeyGate verify={verifyKey} />
 
-    {#if $apiKeyVerified}
-      <Card padding="sm">
-        <div class="scope-bar">
-          <span class="scope-label">scope:</span>
-          <div class="scope-toggle">
-            <button
-              class="scope-btn"
-              class:active={scope === "org"}
-              onclick={() => (scope = "org")}
-            >
-              whole org
-            </button>
-            <button
-              class="scope-btn"
-              class:active={scope === "collection"}
-              onclick={() => (scope = "collection")}
-            >
-              collection
-            </button>
-          </div>
-          {#if scope === "collection"}
-            {#if loadingCollections}
-              <span class="scope-loading">loading…</span>
-            {:else if collections.length === 0}
-              <span class="scope-empty">
-                no collections — <a href="/dashboard/collections">create one</a>
-              </span>
-            {:else}
-              <select class="scope-select" bind:value={selectedCollectionId}>
-                <option value="" disabled>select a collection</option>
-                {#each collections as c}
-                  <option value={c.id}>{c.name} ({c.fileCount} files)</option>
-                {/each}
-              </select>
-            {/if}
+    <div class="chat-area">
+      {#if messages.length === 0}
+        <div class="chat-empty">
+          <span class="chat-empty-prompt">$</span>
+          <span class="chat-empty-text">
+            Ask anything about your {scope === "org" ? "organisation's files" : "collection"}.
+          </span>
+        </div>
+      {/if}
+
+      {#each messages as msg}
+        <div class="message message-{msg.role}">
+          {#if msg.role === "user"}
+            <div class="message-bubble message-bubble-user">
+              <span class="message-marker">›</span>
+              {msg.content}
+            </div>
+          {:else}
+            <div class="message-bubble message-bubble-assistant">
+              {#if msg.content}
+                <p class="message-text">{msg.content}{#if msg.streaming}<span class="cursor-blink"></span>{/if}</p>
+              {:else if msg.streaming}
+                <p class="message-text thinking">thinking<span class="dots"><span>.</span><span>.</span><span>.</span></span></p>
+              {/if}
+
+              {#if msg.error}
+                <p class="message-error">// {msg.error}</p>
+              {/if}
+
+              {#if msg.sources && msg.sources.length > 0}
+                <details class="sources-block">
+                  <summary>{msg.sources.length} source{msg.sources.length === 1 ? "" : "s"}</summary>
+                  <div class="sources-list">
+                    {#each msg.sources as source, si}
+                      <div class="source-item">
+                        <div class="source-header">
+                          <span class="source-index">[{si + 1}]</span>
+                          <span class="source-name">{source.fileName}</span>
+                          <Badge size="sm">chunk {source.chunkIndex}</Badge>
+                        </div>
+                        <p class="source-content">{source.content}</p>
+                      </div>
+                    {/each}
+                  </div>
+                </details>
+              {/if}
+            </div>
           {/if}
         </div>
-      </Card>
+      {/each}
 
-      <div class="chat-area">
-        {#if messages.length === 0}
-          <div class="chat-empty">
-            <span class="chat-empty-prompt">$</span>
-            <span class="chat-empty-text">
-              Ask anything about your {scope === "org" ? "organisation's files" : "collection"}.
-            </span>
-          </div>
-        {/if}
+      <div bind:this={scrollAnchor}></div>
+    </div>
 
-        {#each messages as msg}
-          <div class="message message-{msg.role}">
-            {#if msg.role === "user"}
-              <div class="message-bubble message-bubble-user">
-                <span class="message-marker">›</span>
-                {msg.content}
-              </div>
-            {:else}
-              <div class="message-bubble message-bubble-assistant">
-                {#if msg.content}
-                  <p class="message-text">{msg.content}{#if msg.streaming}<span class="cursor-blink"></span>{/if}</p>
-                {:else if msg.streaming}
-                  <p class="message-text thinking">thinking<span class="dots"><span>.</span><span>.</span><span>.</span></span></p>
-                {/if}
-
-                {#if msg.error}
-                  <p class="message-error">// {msg.error}</p>
-                {/if}
-
-                {#if msg.sources && msg.sources.length > 0}
-                  <details class="sources-block">
-                    <summary>{msg.sources.length} source{msg.sources.length === 1 ? "" : "s"}</summary>
-                    <div class="sources-list">
-                      {#each msg.sources as source, si}
-                        <div class="source-item">
-                          <div class="source-header">
-                            <span class="source-index">[{si + 1}]</span>
-                            <span class="source-name">{source.fileName}</span>
-                            <Badge size="sm">chunk {source.chunkIndex}</Badge>
-                          </div>
-                          <p class="source-content">{source.content}</p>
-                        </div>
-                      {/each}
-                    </div>
-                  </details>
-                {/if}
-              </div>
-            {/if}
-          </div>
-        {/each}
-
-        <div bind:this={scrollAnchor}></div>
-      </div>
-
-      <div class="composer">
-        <textarea
-          class="composer-input"
-          bind:value={question}
-          onkeydown={handleKeydown}
-          placeholder="Ask a question about your files…"
-          rows="2"
-          disabled={asking}
-        ></textarea>
-        <button
-          class="composer-send"
-          onclick={handleAsk}
-          disabled={asking || !question.trim()}
-          aria-label="Send"
-        >
-          <Send size={16} />
-        </button>
-      </div>
-    {/if}
-  {/if}
+    <div class="composer">
+      <textarea
+        class="composer-input"
+        bind:value={question}
+        onkeydown={handleKeydown}
+        placeholder="Ask a question about your files…"
+        rows="2"
+        disabled={asking}
+      ></textarea>
+      <button
+        class="composer-send"
+        onclick={handleAsk}
+        disabled={asking || !question.trim()}
+        aria-label="Send"
+      >
+        <Send size={16} />
+      </button>
+    </div>
 </div>
 
 <style>

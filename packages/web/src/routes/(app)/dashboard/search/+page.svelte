@@ -1,22 +1,13 @@
 <script lang="ts">
   import { page } from "$app/stores";
-  import { apiKey, apiKeyVerified } from "$lib/stores/apiKey";
   import Button from "$lib/components/ui/Button.svelte";
   import Card from "$lib/components/ui/Card.svelte";
   import Badge from "$lib/components/ui/Badge.svelte";
-  import ApiKeyGate from "$lib/components/ApiKeyGate.svelte";
   import { Search, Copy } from "$lib/components/icons";
   import { semanticSearch, type SemanticSearchResult } from "$lib/api/ask";
   import { getCollections, type Collection } from "$lib/api/collections";
-  import { getFilesV2 } from "$lib/api/files";
   import { toast } from "$lib/stores/toast";
   import { onMount } from "svelte";
-
-  interface Props {
-    data: { hasApiKey: boolean };
-  }
-
-  let { data }: Props = $props();
 
   // ── Scope selection ─────────────────────────────────────────────────────────
   // /search resolves collection_id server-side (rag/scope.ts); file_ids exist
@@ -39,15 +30,10 @@
 
   let queryInput = $state<HTMLInputElement | undefined>(undefined);
 
-  async function verifyKey(key: string) {
-    await getFilesV2(key, 1);
-    await loadCollections(key);
-  }
-
-  async function loadCollections(key = $apiKey) {
+  async function loadCollections() {
     loadingCollections = true;
     try {
-      collections = await getCollections(key);
+      collections = await getCollections();
     } catch (error) {
       console.error("Failed to load collections:", error);
     } finally {
@@ -63,6 +49,9 @@
       scope = "collection";
       selectedCollectionId = fromQuery;
     }
+    // Collections load straight on mount (#42) — the session cookie
+    // authenticates; no key gate to pass first.
+    loadCollections();
     queryInput?.focus();
   });
 
@@ -78,7 +67,7 @@
     searching = true;
     const started = performance.now();
     try {
-      const res = await semanticSearch($apiKey, q, {
+      const res = await semanticSearch(q, {
         limit,
         ...(scope === "collection" ? { collectionId: selectedCollectionId } : {}),
       });
@@ -122,133 +111,116 @@
     </div>
   </header>
 
-  {#if !data.hasApiKey}
-    <Card>
-      <div class="empty-state">
-        <span class="empty-icon">🔑</span>
-        <h3>API Key Required</h3>
-        <p>You need an API key with read scope to search over your files.</p>
-        <a href="/dashboard/keys">
-          <Button>Create API Key</Button>
-        </a>
+    <Card padding="sm">
+      <div class="scope-bar">
+        <span class="scope-label">scope:</span>
+        <div class="scope-toggle">
+          <button
+            class="scope-btn"
+            class:active={scope === "org"}
+            onclick={() => (scope = "org")}
+          >
+            whole org
+          </button>
+          <button
+            class="scope-btn"
+            class:active={scope === "collection"}
+            onclick={() => (scope = "collection")}
+          >
+            collection
+          </button>
+        </div>
+        {#if scope === "collection"}
+          {#if loadingCollections}
+            <span class="scope-loading">loading…</span>
+          {:else if collections.length === 0}
+            <span class="scope-empty">
+              no collections — <a href="/dashboard/collections">create one</a>
+            </span>
+          {:else}
+            <select class="scope-select" bind:value={selectedCollectionId}>
+              <option value="" disabled>select a collection</option>
+              {#each collections as c}
+                <option value={c.id}>{c.name} ({c.fileCount} files)</option>
+              {/each}
+            </select>
+          {/if}
+        {/if}
+
+        <span class="scope-label">limit:</span>
+        <select class="scope-select limit-select" bind:value={limit}>
+          {#each LIMITS as n}
+            <option value={n}>{n}</option>
+          {/each}
+        </select>
+      </div>
+
+      <div class="search-row">
+        <input
+          bind:this={queryInput}
+          bind:value={query}
+          class="search-input"
+          type="text"
+          placeholder="hybrid search over your chunks…"
+          onkeydown={handleKeydown}
+          disabled={searching}
+        />
+        <Button onclick={handleSearch} disabled={searching}>
+          <span class="search-btn-label">
+            <Search size={14} />
+            {searching ? "searching…" : "search"}
+          </span>
+        </Button>
       </div>
     </Card>
-  {:else}
-    <ApiKeyGate verify={verifyKey} />
 
-    {#if $apiKeyVerified}
-      <Card padding="sm">
-        <div class="scope-bar">
-          <span class="scope-label">scope:</span>
-          <div class="scope-toggle">
-            <button
-              class="scope-btn"
-              class:active={scope === "org"}
-              onclick={() => (scope = "org")}
-            >
-              whole org
-            </button>
-            <button
-              class="scope-btn"
-              class:active={scope === "collection"}
-              onclick={() => (scope = "collection")}
-            >
-              collection
-            </button>
-          </div>
-          {#if scope === "collection"}
-            {#if loadingCollections}
-              <span class="scope-loading">loading…</span>
-            {:else if collections.length === 0}
-              <span class="scope-empty">
-                no collections — <a href="/dashboard/collections">create one</a>
-              </span>
-            {:else}
-              <select class="scope-select" bind:value={selectedCollectionId}>
-                <option value="" disabled>select a collection</option>
-                {#each collections as c}
-                  <option value={c.id}>{c.name} ({c.fileCount} files)</option>
-                {/each}
-              </select>
-            {/if}
-          {/if}
+    {#if results.length > 0 || latencyMs !== null}
+      <div class="results-meta">
+        <span class="meta-text">{results.length} results</span>
+        {#if latencyMs !== null}
+          <span class="meta-text">· {latencyMs.toFixed(0)} ms round trip</span>
+        {/if}
+      </div>
+    {/if}
 
-          <span class="scope-label">limit:</span>
-          <select class="scope-select limit-select" bind:value={limit}>
-            {#each LIMITS as n}
-              <option value={n}>{n}</option>
-            {/each}
-          </select>
-        </div>
-
-        <div class="search-row">
-          <input
-            bind:this={queryInput}
-            bind:value={query}
-            class="search-input"
-            type="text"
-            placeholder="hybrid search over your chunks…"
-            onkeydown={handleKeydown}
-            disabled={searching}
-          />
-          <Button onclick={handleSearch} disabled={searching}>
-            <span class="search-btn-label">
-              <Search size={14} />
-              {searching ? "searching…" : "search"}
-            </span>
-          </Button>
+    {#if results.length > 0}
+      <div class="results">
+        {#each results as r}
+          <Card padding="sm">
+            <div class="result-head">
+              <span class="result-file">{r.fileName}</span>
+              <div class="result-tags">
+                {#if r.rerankScore !== undefined}
+                  <Badge variant="info">rerank {r.rerankScore}</Badge>
+                {/if}
+                <Badge variant="success">rrf {r.rrfScore}</Badge>
+                <Badge variant="default">chunk {r.chunkIndex}</Badge>
+                <button
+                  class="copy-btn"
+                  title="copy chunk content"
+                  onclick={() => copyContent(r.content)}
+                >
+                  <Copy size={14} />
+                </button>
+              </div>
+            </div>
+            <pre class="result-content">{r.content.trim()}</pre>
+          </Card>
+        {/each}
+      </div>
+      <details class="raw-pane">
+        <summary>raw response</summary>
+        <pre class="raw-json">{rawResponse}</pre>
+      </details>
+    {:else if latencyMs !== null}
+      <Card>
+        <div class="no-results">
+          <span class="empty-icon">◌</span>
+          <p>No chunks matched this query — the vector arm's distance threshold
+          and the full-text arm both came back empty.</p>
         </div>
       </Card>
-
-      {#if results.length > 0 || latencyMs !== null}
-        <div class="results-meta">
-          <span class="meta-text">{results.length} results</span>
-          {#if latencyMs !== null}
-            <span class="meta-text">· {latencyMs.toFixed(0)} ms round trip</span>
-          {/if}
-        </div>
-      {/if}
-
-      {#if results.length > 0}
-        <div class="results">
-          {#each results as r}
-            <Card padding="sm">
-              <div class="result-head">
-                <span class="result-file">{r.fileName}</span>
-                <div class="result-tags">
-                  {#if r.rerankScore !== undefined}
-                    <Badge variant="info">rerank {r.rerankScore}</Badge>
-                  {/if}
-                  <Badge variant="success">rrf {r.rrfScore}</Badge>
-                  <Badge variant="default">chunk {r.chunkIndex}</Badge>
-                  <button
-                    class="copy-btn"
-                    title="copy chunk content"
-                    onclick={() => copyContent(r.content)}
-                  >
-                    <Copy size={14} />
-                  </button>
-                </div>
-              </div>
-              <pre class="result-content">{r.content.trim()}</pre>
-            </Card>
-          {/each}
-        </div>
-        <details class="raw-pane">
-          <summary>raw response</summary>
-          <pre class="raw-json">{rawResponse}</pre>
-        </details>
-      {:else if latencyMs !== null}
-        <Card>
-          <div class="no-results">
-            <span class="empty-icon">◌</span>
-            <p>No chunks matched this query — the vector arm's distance threshold
-            and the full-text arm both came back empty.</p>
-          </div>
-        </Card>
-      {/if}
     {/if}
-  {/if}
 </div>
 
 <style>

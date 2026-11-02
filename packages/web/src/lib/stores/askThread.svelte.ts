@@ -103,7 +103,6 @@ function buildHistory(): Array<{ role: "user" | "assistant"; content: string }> 
 }
 
 export interface AskScope {
-  apiKey: string;
   collectionId?: string;
 }
 
@@ -130,7 +129,6 @@ export async function ask(question: string, scope: AskScope): Promise<void> {
 
   try {
     await askStream(
-      scope.apiKey,
       {
         question: q,
         ...(scope.collectionId ? { collectionId: scope.collectionId } : {}),
