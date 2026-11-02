@@ -4,6 +4,7 @@
   import { page } from "$app/stores";
   import Chart from "chart.js/auto";
   import Card from "$lib/components/ui/Card.svelte";
+  import PageHeader from "$lib/components/PageHeader.svelte";
   import { formatBytes, formatNumber } from "$lib/utils/format";
 
   interface Props {
@@ -141,12 +142,7 @@
 </svelte:head>
 
 <div class="usage-page">
-  <header class="page-header">
-    <div class="header-content">
-      <span class="prompt">$</span>
-      <span class="command">./usage.sh</span>
-    </div>
-  </header>
+  <PageHeader command="usage.sh" />
 
   <div class="stats-grid">
     <Card>
@@ -241,28 +237,6 @@
 <style>
   .usage-page {
     max-width: 1200px;
-  }
-
-  .page-header {
-    margin-bottom: var(--space-5);
-  }
-
-  .header-content {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-
-  .prompt {
-    font-family: var(--font-mono);
-    color: var(--color-success);
-    font-weight: 600;
-  }
-
-  .command {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
   }
 
   .stats-grid {

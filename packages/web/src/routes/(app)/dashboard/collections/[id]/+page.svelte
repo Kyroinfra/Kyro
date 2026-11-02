@@ -4,6 +4,8 @@
   import Button from "$lib/components/ui/Button.svelte";
   import Card from "$lib/components/ui/Card.svelte";
   import Badge from "$lib/components/ui/Badge.svelte";
+  import PageHeader from "$lib/components/PageHeader.svelte";
+  import EmptyState from "$lib/components/EmptyState.svelte";
   import Modal from "$lib/components/ui/Modal.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import { formatBytes, formatDate, formatDateTime } from "$lib/utils/format";
@@ -191,11 +193,11 @@
 </svelte:head>
 
 <div class="collection-detail-page">
-  <header class="page-header">
-    <div class="header-content">
+  <PageHeader>
+    {#snippet left()}
       <a href="/dashboard/collections" class="back-link">← collections</a>
-    </div>
-  </header>
+    {/snippet}
+  </PageHeader>
 
     {#if loading}
       <Card><p class="loading-text">Loading collection…</p></Card>
@@ -253,14 +255,17 @@
 
       {#if collectionFiles.length === 0}
         <Card>
-          <div class="empty-state">
-            <span class="empty-icon">📁</span>
-            <h3>No files in this collection</h3>
-            <p>Add files from your organisation to build this collection.</p>
-            {#if canManage}
-              <Button onclick={openAddFiles}>+ add files</Button>
-            {/if}
-          </div>
+          <EmptyState
+            icon="📁"
+            title="No files in this collection"
+            hint="Add files from your organisation to build this collection."
+          >
+            {#snippet actions()}
+              {#if canManage}
+                <Button onclick={openAddFiles}>+ add files</Button>
+              {/if}
+            {/snippet}
+          </EmptyState>
         </Card>
       {:else}
         <div class="files-list">
@@ -378,10 +383,6 @@
     max-width: 900px;
   }
 
-  .page-header {
-    margin-bottom: var(--space-5);
-  }
-
   .back-link {
     font-family: var(--font-mono);
     font-size: var(--font-size-sm);
@@ -390,31 +391,6 @@
 
   .back-link:hover {
     color: var(--color-text);
-  }
-
-  .empty-state {
-    text-align: center;
-    padding: var(--space-8) var(--space-4);
-  }
-
-  .empty-icon {
-    display: block;
-    margin-bottom: var(--space-3);
-    font-size: 24px;
-  }
-
-  .empty-state h3 {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-sm);
-    font-weight: 600;
-    color: var(--color-text);
-    margin: 0 0 var(--space-2);
-  }
-
-  .empty-state p {
-    color: var(--color-text-muted);
-    font-size: var(--font-size-sm);
-    margin: 0 0 var(--space-4);
   }
 
   .loading-text,

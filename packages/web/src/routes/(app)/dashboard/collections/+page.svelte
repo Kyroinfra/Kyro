@@ -3,6 +3,8 @@
   import Button from "$lib/components/ui/Button.svelte";
   import Card from "$lib/components/ui/Card.svelte";
   import Badge from "$lib/components/ui/Badge.svelte";
+  import PageHeader from "$lib/components/PageHeader.svelte";
+  import EmptyState from "$lib/components/EmptyState.svelte";
   import Modal from "$lib/components/ui/Modal.svelte";
   import { formatDate } from "$lib/utils/format";
   import {
@@ -74,13 +76,9 @@
 </svelte:head>
 
 <div class="collections-page">
-  <header class="page-header">
-    <div class="header-content">
-      <span class="prompt">$</span>
-      <span class="command">./collections.sh</span>
-    </div>
+  <PageHeader command="collections.sh">
     <Button onclick={() => (showCreateModal = true)}>+ new collection</Button>
-  </header>
+  </PageHeader>
 
     {#if loadingCollections}
       <Card>
@@ -92,15 +90,15 @@
       </Card>
     {:else if collections.length === 0}
       <Card>
-        <div class="empty-state">
-          <span class="empty-icon">🗂️</span>
-          <h3>No collections yet</h3>
-          <p>
-            Collections group files together so you can scope semantic
-            search and the Ask endpoint to a specific set of documents.
-          </p>
-          <Button onclick={() => (showCreateModal = true)}>+ create first collection</Button>
-        </div>
+        <EmptyState
+          icon="🗂️"
+          title="No collections yet"
+          hint="Collections group files together so you can scope semantic search and the Ask endpoint to a specific set of documents."
+        >
+          {#snippet actions()}
+            <Button onclick={() => (showCreateModal = true)}>+ create first collection</Button>
+          {/snippet}
+        </EmptyState>
       </Card>
     {:else}
       <div class="collections-grid">
@@ -181,62 +179,6 @@
 <style>
   .collections-page {
     max-width: 980px;
-  }
-
-  .page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: var(--space-5);
-    flex-wrap: wrap;
-    gap: var(--space-3);
-  }
-
-  .header-content {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-
-  .prompt {
-    font-family: var(--font-mono);
-    color: var(--color-success);
-    font-weight: 600;
-  }
-
-  .command {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
-  }
-
-  .empty-state {
-    text-align: center;
-    padding: var(--space-8) var(--space-4);
-  }
-
-  .empty-icon {
-    display: block;
-    margin-bottom: var(--space-3);
-    color: var(--color-text-muted);
-    font-size: 24px;
-  }
-
-  .empty-state h3 {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-sm);
-    font-weight: 600;
-    color: var(--color-text);
-    margin: 0 0 var(--space-2);
-  }
-
-  .empty-state p {
-    color: var(--color-text-muted);
-    font-size: var(--font-size-sm);
-    margin: 0 0 var(--space-4);
-    max-width: 420px;
-    margin-left: auto;
-    margin-right: auto;
   }
 
   .loading-text,

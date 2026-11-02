@@ -6,6 +6,7 @@
   import Button from "$lib/components/ui/Button.svelte";
   import Card from "$lib/components/ui/Card.svelte";
   import Badge from "$lib/components/ui/Badge.svelte";
+  import PageHeader from "$lib/components/PageHeader.svelte";
   import Modal from "$lib/components/ui/Modal.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import { formatDate, formatDateTime } from "$lib/utils/format";
@@ -109,12 +110,11 @@
 </svelte:head>
 
 <div class="keys-page">
-  <header class="page-header">
-    <div class="section-label">// api keys</div>
+  <PageHeader command="keys.sh">
     {#if canManage}
       <Button onclick={() => (showCreateModal = true)}>+ new key</Button>
     {/if}
-  </header>
+  </PageHeader>
 
   {#if newKey}
     <div class="key-reveal">
@@ -172,7 +172,7 @@
                 <Badge variant="success">active</Badge>
               {/if}
             </div>
-            <div class="key-prefix">key_{key.prefix}***</div>
+            <div class="key-prefix">key_{key.prefix.replace(/^kyro_live_/, '')}***</div>
             <div class="key-meta">
               <span>created {formatDate(key.createdAt)}</span>
               <span class="meta-sep">·</span>
@@ -288,21 +288,6 @@
 <style>
   .keys-page {
     max-width: 880px;
-  }
-
-  .page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: var(--space-5);
-  }
-
-  .section-label {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-2xs);
-    color: var(--color-text-ghost);
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
   }
 
   /* Key reveal banner */
@@ -605,11 +590,6 @@
   @media (max-width: 640px) {
     .keys-page {
       max-width: 100%;
-    }
-
-    .page-header {
-      flex-wrap: wrap;
-      gap: var(--space-3);
     }
 
     .key-row {
