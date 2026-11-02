@@ -1,5 +1,6 @@
 <script lang="ts">
   import { enhance } from "$app/forms";
+  import { invalidateAll } from "$app/navigation";
   import { user } from "$lib/stores/auth";
   import Button from "$lib/components/ui/Button.svelte";
   import Card from "$lib/components/ui/Card.svelte";
@@ -63,7 +64,8 @@
     });
     showRemoveConfirm = false;
     memberToRemove = null;
-    window.location.reload();
+    // #43: re-run the server load in place — no full page reload flash.
+    await invalidateAll();
   }
 
   function handleInviteSubmit() {
@@ -183,7 +185,8 @@
       return async ({ result }) => {
         if (result.type === "success") {
           showInviteModal = false;
-          window.location.reload();
+          // #43: re-run loads in place — no full page reload flash.
+          await invalidateAll();
         } else if (result.type === "failure") {
           const data = (result as any).data;
           inviteError = data?.error || "Failed to invite member";

@@ -6,7 +6,7 @@
 	import Logo from '$lib/components/Logo.svelte';
 
 	interface Props {
-		data: { user: { id: string; orgId: string; role: string } };
+		data: { user: { id: string; orgId: string; role: string; email: string } };
 		children: Snippet;
 	}
 
@@ -16,7 +16,7 @@
 	$effect(() => {
 		user.set({
 			id: data.user.id,
-			email: '',
+			email: data.user.email,
 			role: data.user.role as 'owner' | 'admin' | 'member',
 			orgId: data.user.orgId
 		});
