@@ -1,5 +1,6 @@
 <script lang="ts">
   import { enhance } from "$app/forms";
+  import { invalidateAll } from "$app/navigation";
   import { page } from "$app/stores";
   import { user } from "$lib/stores/auth";
   import Button from "$lib/components/ui/Button.svelte";
@@ -98,7 +99,8 @@
     await fetch("?/delete", { method: "POST", body: formData });
     showDeleteConfirm = false;
     keyToDelete = null;
-    window.location.reload();
+    // #43: re-run the server load in place — no full page reload flash.
+    await invalidateAll();
   }
 </script>
 
