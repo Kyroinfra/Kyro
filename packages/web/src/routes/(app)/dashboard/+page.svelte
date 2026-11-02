@@ -1,5 +1,6 @@
 <script lang="ts">
   import Card from '$lib/components/ui/Card.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import Badge from '$lib/components/ui/Badge.svelte';
   import { Key, File, Usage, Settings, Collection, Chat } from '$lib/components/icons';
   import { formatBytes, formatDate, formatDateTime } from '$lib/utils/format';
@@ -72,12 +73,7 @@
 <div class="dashboard">
 
   <!-- Header -->
-  <header class="page-header">
-    <div class="header-left">
-      <span class="prompt">$</span>
-      <span class="command">./dashboard.sh</span>
-    </div>
-  </header>
+  <PageHeader command="dashboard.sh" />
 
   <!-- ── Stats row ── -->
   <div class="section-label">// statistics</div>
@@ -238,32 +234,6 @@
 <style>
   .dashboard {
     max-width: 920px;
-  }
-
-  /* ── Header ── */
-  .page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: var(--space-6);
-  }
-
-  .header-left {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-
-  .prompt {
-    font-family: var(--font-mono);
-    color: var(--color-success);
-    font-weight: 600;
-  }
-
-  .command {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
   }
 
   /* ── Section label ── */

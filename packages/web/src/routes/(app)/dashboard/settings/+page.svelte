@@ -5,6 +5,7 @@
   import Button from "$lib/components/ui/Button.svelte";
   import Card from "$lib/components/ui/Card.svelte";
   import Badge from "$lib/components/ui/Badge.svelte";
+  import PageHeader from "$lib/components/PageHeader.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import Modal from "$lib/components/ui/Modal.svelte";
   import { formatDate } from "$lib/utils/format";
@@ -79,12 +80,7 @@
 </svelte:head>
 
 <div class="settings-page">
-  <header class="page-header">
-    <div class="header-content">
-      <span class="prompt">$</span>
-      <span class="command">./settings.sh</span>
-    </div>
-  </header>
+  <PageHeader command="settings.sh" />
 
   {#if org}
     <Card>
@@ -148,28 +144,6 @@
       {/if}
     </div>
   </Card>
-
-  {#if isOwner}
-    <Card>
-      <div class="section danger-zone">
-        <h2>Danger Zone</h2>
-        <p class="danger-warning">
-          These actions are irreversible. Please proceed with caution.
-        </p>
-        <div class="danger-actions">
-          <div class="danger-item">
-            <div class="danger-info">
-              <span class="danger-label">Delete Organization</span>
-              <span class="danger-desc"
-                >Permanently delete this organization and all its data.</span
-              >
-            </div>
-            <Button variant="danger">Delete Organization</Button>
-          </div>
-        </div>
-      </div>
-    </Card>
-  {/if}
 </div>
 
 <Modal
@@ -251,22 +225,6 @@
 <style>
   .settings-page {
     max-width: 800px;
-  }
-
-  .page-header {
-    margin-bottom: var(--space-6);
-  }
-
-  .page-header h1 {
-    font-size: var(--font-size-2xl);
-    font-weight: 600;
-    color: var(--color-text);
-    margin: 0;
-  }
-
-  .subtitle {
-    color: var(--color-text-muted);
-    margin-top: var(--space-1);
   }
 
   .section {
@@ -351,51 +309,6 @@
     color: var(--color-text-muted);
   }
 
-  .danger-zone {
-    border-top: 1px solid var(--color-border);
-    margin-top: var(--space-4);
-    padding-top: var(--space-4);
-  }
-
-  .danger-warning {
-    color: var(--color-text-muted);
-    font-size: var(--font-size-sm);
-    margin: 0 0 var(--space-4);
-  }
-
-  .danger-actions {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-  }
-
-  .danger-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: var(--space-4);
-    padding: var(--space-4);
-    background: rgba(239, 68, 68, 0.1);
-    border: 1px solid var(--color-danger);
-    border-radius: var(--radius-md);
-  }
-
-  .danger-info {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-  }
-
-  .danger-label {
-    font-weight: 500;
-    color: var(--color-danger);
-  }
-
-  .danger-desc {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
-  }
-
   .form-group {
     margin-bottom: var(--space-4);
   }
@@ -459,11 +372,6 @@
 
     .member-role {
       margin-left: auto;
-    }
-
-    .danger-item {
-      flex-direction: column;
-      align-items: flex-start;
     }
 
     .form-actions {

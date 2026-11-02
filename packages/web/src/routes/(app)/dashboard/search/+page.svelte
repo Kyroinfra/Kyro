@@ -3,6 +3,7 @@
   import Button from "$lib/components/ui/Button.svelte";
   import Card from "$lib/components/ui/Card.svelte";
   import Badge from "$lib/components/ui/Badge.svelte";
+  import PageHeader from "$lib/components/PageHeader.svelte";
   import { Search, Copy } from "$lib/components/icons";
   import { semanticSearch, type SemanticSearchResult } from "$lib/api/ask";
   import { getCollections, type Collection } from "$lib/api/collections";
@@ -104,12 +105,7 @@
 </svelte:head>
 
 <div class="search-page">
-  <header class="page-header">
-    <div class="header-content">
-      <span class="prompt">$</span>
-      <span class="command">./search.sh</span>
-    </div>
-  </header>
+  <PageHeader command="search.sh" />
 
     <Card padding="sm">
       <div class="scope-bar">
@@ -226,43 +222,6 @@
 <style>
   .search-page {
     max-width: 900px;
-  }
-
-  .page-header {
-    margin-bottom: var(--space-5);
-  }
-
-  .header-content {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-
-  .prompt {
-    font-family: var(--font-mono);
-    color: var(--color-success);
-    font-weight: 600;
-  }
-
-  .command {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
-  }
-
-  .empty-state {
-    text-align: center;
-    padding: var(--space-8) var(--space-4);
-  }
-
-  .empty-state h3 {
-    margin: var(--space-3) 0 var(--space-2);
-  }
-
-  .empty-state p {
-    color: var(--color-text-muted);
-    margin-bottom: var(--space-4);
-    font-size: var(--font-size-sm);
   }
 
   .empty-icon {

@@ -7,6 +7,8 @@
   import Modal from "$lib/components/ui/Modal.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import ProgressBar from "$lib/components/ui/ProgressBar.svelte";
+  import PageHeader from "$lib/components/PageHeader.svelte";
+  import EmptyState from "$lib/components/EmptyState.svelte";
   import { formatBytes, formatDateTime } from "$lib/utils/format";
   import {
     uploadFile,
@@ -244,12 +246,7 @@
 </svelte:head>
 
 <div class="files-page">
-  <header class="page-header">
-    <div class="header-content">
-      <span class="prompt">$</span>
-      <span class="command">./files.sh</span>
-    </div>
-  </header>
+  <PageHeader command="files.sh" />
 
     <Card>
       <div
@@ -298,11 +295,11 @@
       </Card>
     {:else if files.length === 0}
       <Card>
-        <div class="empty-state">
-          <span class="empty-icon">📁</span>
-          <h3>No files yet</h3>
-          <p>Upload your first file to get started.</p>
-        </div>
+        <EmptyState
+          icon="📁"
+          title="No files yet"
+          hint="Upload your first file to get started."
+        />
       </Card>
     {:else}
       <div class="files-list">
@@ -425,53 +422,6 @@
 <style>
   .files-page {
     max-width: 900px;
-  }
-
-  .page-header {
-    margin-bottom: var(--space-5);
-  }
-
-  .header-content {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-
-  .prompt {
-    font-family: var(--font-mono);
-    color: var(--color-success);
-    font-weight: 600;
-  }
-
-  .command {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
-  }
-
-  .empty-state {
-    text-align: center;
-    padding: var(--space-8) var(--space-4);
-  }
-
-  .empty-icon {
-    display: block;
-    margin-bottom: var(--space-3);
-    color: var(--color-text-muted);
-  }
-
-  .empty-state h3 {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-sm);
-    font-weight: 600;
-    color: var(--color-text);
-    margin: 0 0 var(--space-2);
-  }
-
-  .empty-state p {
-    color: var(--color-text-muted);
-    font-size: var(--font-size-sm);
-    margin: 0 0 var(--space-4);
   }
 
   .loading-state {

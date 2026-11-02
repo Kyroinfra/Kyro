@@ -3,6 +3,7 @@
   import Button from "$lib/components/ui/Button.svelte";
   import Card from "$lib/components/ui/Card.svelte";
   import Badge from "$lib/components/ui/Badge.svelte";
+  import PageHeader from "$lib/components/PageHeader.svelte";
   import { Send } from "$lib/components/icons";
   import { thread, ask, clearThread, note } from "$lib/stores/askThread.svelte";
   import { getCollections, type Collection } from "$lib/api/collections";
@@ -99,15 +100,11 @@
 </svelte:head>
 
 <div class="ask-page">
-  <header class="page-header">
-    <div class="header-content">
-      <span class="prompt">$</span>
-      <span class="command">./ask.sh</span>
-    </div>
+  <PageHeader command="ask.sh">
     {#if messages.length > 0}
       <Button variant="ghost" size="sm" onclick={clearChat}>clear</Button>
     {/if}
-  </header>
+  </PageHeader>
 
     <Card padding="sm">
       <div class="scope-bar">
@@ -227,57 +224,6 @@
     display: flex;
     flex-direction: column;
     height: calc(100vh - var(--space-5) * 2 - 42px);
-  }
-
-  .page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: var(--space-4);
-    flex-shrink: 0;
-  }
-
-  .header-content {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-
-  .prompt {
-    font-family: var(--font-mono);
-    color: var(--color-success);
-    font-weight: 600;
-  }
-
-  .command {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
-  }
-
-  .empty-state {
-    text-align: center;
-    padding: var(--space-8) var(--space-4);
-  }
-
-  .empty-icon {
-    display: block;
-    margin-bottom: var(--space-3);
-    font-size: 24px;
-  }
-
-  .empty-state h3 {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-sm);
-    font-weight: 600;
-    color: var(--color-text);
-    margin: 0 0 var(--space-2);
-  }
-
-  .empty-state p {
-    color: var(--color-text-muted);
-    font-size: var(--font-size-sm);
-    margin: 0 0 var(--space-4);
   }
 
   .scope-bar {
