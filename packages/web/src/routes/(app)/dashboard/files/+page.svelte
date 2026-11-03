@@ -14,10 +14,8 @@
     uploadFile,
     deleteFile,
     getDownloadUrl,
-  } from "$lib/api/files";
-  import {
     getFilesV2,
-    triggerExtraction,
+    reprocessFile,
     type FileItemV2,
     type FileStatus,
   } from "$lib/api/files";
@@ -38,9 +36,6 @@
   let dragOver = $state(false);
   let uploadError = $state<string | null>(null);
 
-  // Reprocess state, keyed by file id (one pipeline, one status — #33)
-  let extracting = $state<Record<string, boolean>>({});
-
   // Add-to-collection modal
   let showCollectionModal = $state(false);
   let fileForCollection = $state<FileItemV2 | null>(null);
@@ -59,6 +54,8 @@
   // key gate to pass first.
   onMount(() => {
     void refreshFiles();
+    // Leave no background timers behind (#45).
+    return () => stopPolling();
   });
 
   async function loadMore() {
@@ -83,11 +80,72 @@
       files = result.files;
       nextCursor = result.nextCursor;
       hasMore = result.hasMore;
+      // Resume polling when a load lands mid-pipeline (#45).
+      if (!document.hidden && inFlight()) startPolling();
     } catch (error: any) {
       console.error("Failed to refresh files:", error);
     } finally {
       loadingFiles = false;
     }
+  }
+
+  // ── In-flight polling (#45) ──────────────────────────────────────────────────
+  // While any listed file is pending/processing, poll every 3s and patch the
+  // new status/error in place. The patch is deliberately not a full refresh —
+  // it must not clobber load-more pagination or flash the loading spinner.
+  // Polling stops when everything is settled, on page hide, and on unmount.
+  const POLL_INTERVAL = 3000;
+  let pollTimer: ReturnType<typeof setInterval> | null = null;
+  let pollBusy = false;
+
+  function inFlight() {
+    return files.some(
+      (f) => f.status === "pending" || f.status === "processing",
+    );
+  }
+
+  function startPolling() {
+    if (pollTimer) return;
+    pollTimer = setInterval(pollTick, POLL_INTERVAL);
+  }
+
+  function stopPolling() {
+    if (pollTimer === null) return;
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+
+  async function pollTick() {
+    if (pollBusy) return;
+    if (!inFlight()) {
+      stopPolling();
+      return;
+    }
+    pollBusy = true;
+    try {
+      const result = await getFilesV2(100);
+      const updates = new Map(result.files.map((u) => [u.id, u]));
+      files = files.map((f) => {
+        const u = updates.get(f.id);
+        return u ? { ...f, status: u.status, error: u.error } : f;
+      });
+    } catch (error: any) {
+      // Transient failures keep polling; the next tick retries.
+      console.error("Failed to poll file statuses:", error);
+    } finally {
+      pollBusy = false;
+      if (!inFlight()) stopPolling();
+    }
+  }
+
+  function handleVisibilityChange() {
+    // Stop on page hide; catch up immediately on return.
+    if (document.hidden) {
+      stopPolling();
+      return;
+    }
+    if (inFlight()) void pollTick();
+    startPolling();
   }
 
   async function handleFileSelect(e: Event) {
@@ -137,7 +195,8 @@
       selectedFile = null;
       uploadProgress = 0;
 
-      setTimeout(refreshFiles, 1500);
+      // The new row starts pending — poll until the pipeline settles (#45).
+      startPolling();
     } catch (error: any) {
       uploadError = error.message || "Upload failed";
     } finally {
@@ -179,18 +238,18 @@
   }
 
   async function handleReprocess(file: FileItemV2) {
-    extracting = { ...extracting, [file.id]: true };
     try {
-      const result = await triggerExtraction(file.id);
-      files = files.map((f) =>
-        f.id === file.id ? { ...f, status: result.status } : f,
-      );
-      // The pipeline is async — poll once for the settled status.
-      setTimeout(refreshFiles, 1500);
+      const result = await reprocessFile(file.id);
+      // The row resets to pending; drop the stale error and poll until the
+      // pipeline settles (#45).
+      files = files.map((f) => {
+        if (f.id !== file.id) return f;
+        const { error: _stale, ...rest } = f;
+        return { ...rest, status: result.status };
+      });
+      startPolling();
     } catch (error: any) {
       console.error("Reprocess failed:", error);
-    } finally {
-      extracting = { ...extracting, [file.id]: false };
     }
   }
 
@@ -244,6 +303,8 @@
 <svelte:head>
   <title>Files - Kyro</title>
 </svelte:head>
+
+<svelte:document onvisibilitychange={handleVisibilityChange} />
 
 <div class="files-page">
   <PageHeader command="files.sh" />
@@ -309,9 +370,15 @@
               <div class="file-info">
                 <div class="file-name-row">
                   <span class="file-name">{file.name}</span>
-                  <Badge variant={statusBadgeVariant(file.status)}>
-                    {file.status}
-                  </Badge>
+                  {#if file.status === "failed" && file.error}
+                    <span class="failed-badge" title={file.error}>
+                      <Badge variant="danger">{file.status}</Badge>
+                    </span>
+                  {:else}
+                    <Badge variant={statusBadgeVariant(file.status)}>
+                      {file.status}
+                    </Badge>
+                  {/if}
                 </div>
                 <div class="file-meta">
                   <span>{formatBytes(file.sizeBytes)}</span>
@@ -326,7 +393,6 @@
                   <Button
                     variant="secondary"
                     size="sm"
-                    loading={extracting[file.id]}
                     onclick={() => handleReprocess(file)}
                   >
                     Reprocess
@@ -518,6 +584,12 @@
     font-weight: 600;
     color: var(--color-text);
     word-break: break-all;
+  }
+
+  /* Failed badge carrier — carries the file.error tooltip (#45). */
+  .failed-badge {
+    display: inline-flex;
+    cursor: help;
   }
 
   .file-meta {
