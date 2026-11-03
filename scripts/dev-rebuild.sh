@@ -1,8 +1,5 @@
 #!/bin/bash
+# Rebuild dev images and restart everything. Use for Dockerfile changes or
+# dependency installs outside the bind-mounted paths.
 set -e
-
-docker compose \
-  -f compose.yml \
-  -f compose.dev.yml \
-  --env-file .env.dev \
-  up --build --force-recreate "$@"
+docker compose up --build --force-recreate "$@"

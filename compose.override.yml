@@ -1,55 +1,30 @@
+# ─── Dev overrides ───────────────────────────────────────────────────────────
+# Auto-loaded by plain `docker compose ...` beside compose.yml — a flagless
+# `docker compose up` IS the dev stack. Prod must bypass this file by running
+# with an explicit compose file (`docker compose -f compose.yml ...`, see
+# scripts/prod.sh): nothing here belongs in prod — hot-reload builds, source
+# bind mounts, published ports, ollama, pgadmin.
+#
+# Merge semantics: maps (environment/build) merge per key, lists (volumes)
+# union by mount target — so the canonical api/web env blocks stand unless a
+# specific key overrides here.
 services:
-  migrate:
-    build:
-      context: .
-      dockerfile: packages/api/Dockerfile.dev
-    command: pnpm migrate
-    environment:
-      - NODE_ENV=development
-      - PORT=3000
-      - JWT_SECRET=dev-secret
-      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: on-failure
-    networks:
-      - kyro-net
-
   api:
     build:
-      context: .
       dockerfile: packages/api/Dockerfile.dev
-    deploy:
-      replicas: 1
     command: pnpm dev
     environment:
-      - PORT=3000
-      - NODE_ENV=development
-      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      - JWT_SECRET=${JWT_SECRET:-dev-secret}
-      - UPLOAD_DIR=/app/uploads
-      - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text}
-      - CHAT_MODEL=${CHAT_MODEL:-llama3.2}
-      - ALLOW_SIGNUP=${ALLOW_SIGNUP:-}
+      NODE_ENV: development
+      JWT_SECRET: ${JWT_SECRET:-dev-secret}
+      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
     volumes:
       - ./packages/api/src:/app/packages/api/src
       - ./packages/shared:/app/packages/shared
-      - uploads_data:/app/uploads
     ports:
       - "3000:3000"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     depends_on:
-      postgres:
-        condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
       ollama:
         condition: service_healthy
-    networks:
-      - kyro-net
 
   # Containerized Ollama for the dev stack. Bind-mounts the host's existing
   # model store read-only, so downloaded models are reused, never re-downloaded,
@@ -76,15 +51,9 @@ services:
 
   web:
     build:
-      context: .
       dockerfile: packages/web/Dockerfile.dev
     environment:
-      - NODE_ENV=development
-      - PORT=3001
-      - JWT_SECRET=${JWT_SECRET:-dev-secret}
-      - INTERNAL_API_URL=http://api:3000
-      # PUBLIC_API_URL stays UNSET: the browser goes same-origin through the
-      # SvelteKit catch-all proxy at /api (cors removed, #29).
+      NODE_ENV: development
     volumes:
       - ./packages/web/src:/app/packages/web/src
       - ./packages/web/static:/app/packages/web/static
@@ -93,5 +62,28 @@ services:
       - "3001:3001"
     depends_on:
       - api
+
+  pgadmin:
+    image: dpage/pgadmin4
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+    ports:
+      - "127.0.0.1:5050:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/misc/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     networks:
       - kyro-net
+
+volumes:
+  pgadmin_data:
