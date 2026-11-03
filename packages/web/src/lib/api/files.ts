@@ -27,6 +27,8 @@ export type FileStatus = 'pending' | 'processing' | 'ready' | 'failed' | 'skippe
 
 export type FileItemV2 = FileItem & {
 	status: FileStatus;
+	// Present only on 'failed' rows — the list route emits it conditionally (#45).
+	error?: string;
 };
 
 export interface PaginatedFilesV2 {
@@ -129,9 +131,10 @@ export async function getFileText(id: string): Promise<ExtractedTextResponse> {
 	return request<ExtractedTextResponse>(`/api/v1/files/${id}/text`, { method: 'GET' });
 }
 
-// POST /files/:id/reprocess — re-runs the whole pipeline (extract → embed).
-// The separate /:id/embed step is gone with the second status (#33).
-export async function triggerExtraction(
+// POST /files/:id/reprocess — re-runs the whole ingest pipeline (#33: one
+// pipeline, one status). Resets the row to 'pending' and clears its error;
+// the page polls until the row settles (#45).
+export async function reprocessFile(
 	id: string
 ): Promise<{ fileId: string; status: FileStatus; message?: string }> {
 	return request(`/api/v1/files/${id}/reprocess`, { method: 'POST' });

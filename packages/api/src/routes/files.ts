@@ -66,6 +66,7 @@ router.get('/', requireScope('read'), async (req: AuthedRequest, res: Response) 
       sizeBytes: files.sizeBytes,
       createdAt: files.createdAt,
       status:    files.status,
+      error:     files.error,
     })
     .from(files)
     .where(and(eq(files.orgId, orgId), cursorCondition))
@@ -75,8 +76,14 @@ router.get('/', requireScope('read'), async (req: AuthedRequest, res: Response) 
   const hasMore = result.length > limit;
   const items   = hasMore ? result.slice(0, limit) : result;
 
-  // Rows already carry files.status — no derived heuristics (#33).
-  const data = items;
+  // Rows already carry files.status — no derived heuristics (#33). Failed
+  // rows expose files.error so the files page can tooltip it (#45); other
+  // rows keep the exact prior shape (no error key, not even null).
+  const data = items.map(({ error, status, ...item }) =>
+    status === 'failed'
+      ? { ...item, status, error }
+      : { ...item, status },
+  );
 
   const nextCursor = hasMore
     ? Buffer.from(
