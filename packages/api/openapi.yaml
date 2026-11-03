@@ -1,878 +1,1459 @@
-openapi: 3.1.0
+# Kyro API — the one hand-written OpenAPI spec.
+#
+# This file is hand-maintained on purpose (issue #47): the generated
+# openapi-*.{json,yaml} files and the swagger-jsdoc generator are gone.
+# Keep it in sync with the routers under src/routes/ — when a route is
+# added, removed, or retyped, update this file in the same PR.
+
+openapi: 3.0.3
 info:
   title: Kyro API
   version: 1.0.0
   description: |
-    Kyro is a language-agnostic API platform for file storage and management.
-    
+    Self-hosted document storage and RAG API. Upload documents, extract and
+    embed their text locally, group files into collections, and ask questions
+    grounded in your own files — no data leaves your server.
+
     ## Authentication
-    Kyro supports two authentication methods:
-    
-    ### Bearer Token (JWT)
-    For dashboard/API management operations:
-    ```
-    Authorization: Bearer <jwt_token>
-    ```
-    
-    ### API Key
-    For file operations:
+    A single auth gate accepts both credential types on the same endpoints;
+    an explicit `X-API-Key` wins when both headers are sent.
+
+    ### API key
     ```
     X-API-Key: kyro_live_<key>
     ```
-    
-    ## Base URL
-    - Production: `https://api.kyro.io/api/v1`
-    - Development: `http://localhost:3000/api/v1`
-    
-    ## Response Format
-    
-    ### Success Response
-    ```json
-    {
-      "data": { ... }
-    }
+    Created via `POST /keys` (owner/admin). Carries scopes `read` and/or
+    `write`; write-scoped operations answer `403 Required scope: write` for
+    read-only keys. The full key value is returned once, at creation.
+
+    ### Bearer token (JWT)
     ```
-    
-    ### Error Response
-    ```json
-    {
-      "error": {
-        "message": "Error description",
-        "code": "error_code",
-        "details": [ ... ]
-      }
-    }
+    Authorization: Bearer <jwt_token>
     ```
-    
-    ## Rate Limiting
-    - 100 requests per minute per API key
-    - Returns `429 Too Many Requests` when exceeded
-    
+    Session token issued by `POST /auth/register` or `POST /auth/login`.
+    JWT scopes derive from the user's role, re-read from the database on
+    every request: owner/admin → `read, write`, member → `read`. Role-gated
+    endpoints (member/key/webhook management) answer `401` for API-key
+    credentials — role checks require a session. Read-only GETs on the
+    dashboard family (org, usage, webhooks) pass the same single gate, so a
+    valid API key also obtains them; the per-endpoint `security` listing
+    below documents the primary credential.
+
+    ## Surfaces
+    - The versioned API lives under `/api/v1` (both servers below).
+    - `GET /health` sits at the **origin root**, outside `/api/v1`; its path
+      entry carries its own server override.
+
     ## Pagination
-    List endpoints support cursor-based pagination via `limit` and `cursor` query parameters.
+    Two styles, matching the implementation:
+    - **Offset** (`offset`/`limit` + `pagination.total/hasMore`): org members,
+      API keys, collection files.
+    - **Cursor** (opaque `cursor` + `pagination.nextCursor/hasMore`): files.
+      The cursor is base64url of `{"createdAt","id"}`; invalid cursors are 400.
 
-  contact:
-    name: Kyro Support
-    url: https://kyro.io
-  license:
-    name: Proprietary
+    ## Rate limiting
+    File, search and ask traffic is rate-limited to **100 requests per
+    credential per minute** (in-memory sliding window, per process). Exceeding
+    it answers `429` with `error` and `retryAfter` (seconds).
 
+    ## Error envelopes
+    Two shapes are live, taken from the actual code paths:
+    - Inline route errors: `{ "error": "string", "details": [...] }` — the
+      optional `details` array carries zod issue objects on 400 validation.
+    - Anything that throws (multer rejections, quota cap, unknown routes):
+      `{ "error": { "message": "string", "stack": "..." } }` — `stack` is
+      included only in development.
 servers:
   - url: http://localhost:3000/api/v1
     description: Development
   - url: https://api.kyro.io/api/v1
     description: Production
-
 tags:
-  - name: Authentication
-    description: User registration and login
+  - name: Auth
+    description: Registration, login, session introspection and setup status.
   - name: Organisation
-    description: Workspace management
+    description: Workspace profile and member management (owner/admin actions).
   - name: API Keys
-    description: API key lifecycle management
-  - name: Files
-    description: File upload, download, and management
+    description: Org-scoped API keys and their scopes.
   - name: Usage
-    description: Usage analytics and reporting
+    description: Aggregate and per-day request/byte metrics.
+  - name: Webhooks
+    description: HTTP webhook subscriptions for file pipeline events.
+  - name: Files
+    description: Upload, download, delete, text, reprocess and metadata.
+  - name: Collections
+    description: Named groups of files queried as a unit.
+  - name: Search
+    description: Hybrid (keyword + embedding) search with RRF scoring.
+  - name: Ask
+    description: RAG question answering with SSE streaming.
+  - name: Health
+    description: Backend readiness of the deployment.
 
 paths:
+  # ── Auth ────────────────────────────────────────────────────────────────────
   /auth/register:
     post:
-      tags:
-        - Authentication
-      summary: Register new user and organisation
+      summary: Register an organisation and its first owner
+      description: |
+        Open only while the deployment has no organisation, or when the
+        operator sets `ALLOW_SIGNUP=true`. The first registration creates the
+        org (a unique slug is derived from `orgName`) and an owner user,
+        atomically.
+      tags: [Auth]
+      security: []
       operationId: register
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required:
-                - email
-                - password
-                - orgName
-              properties:
-                email:
-                  type: string
-                  format: email
-                  description: User email address
-                  example: john@example.com
-                password:
-                  type: string
-                  format: password
-                  minLength: 8
-                  description: User password (min 8 characters)
-                  example: securePassword123
-                orgName:
-                  type: string
-                  minLength: 1
-                  maxLength: 255
-                  description: Organisation name
-                  example: Acme Inc
+            schema: { $ref: '#/components/schemas/RegisterInput' }
       responses:
         '201':
-          description: User registered successfully
+          description: Organisation and owner created; session token issued.
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  token:
-                    type: string
-                    description: JWT authentication token
-                  user:
-                    $ref: '#/components/schemas/User'
-              example:
-                token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-                user:
-                  id: 550e8400-e29b-41d4-a716-446655440000
-                  email: john@example.com
-                  role: owner
-                  orgId: 550e8400-e29b-41d4-a716-446655440001
+              schema: { $ref: '#/components/schemas/Session' }
         '400':
-          $ref: '#/components/responses/BadRequest'
-        '409':
-          $ref: '#/components/responses/Conflict'
+          description: Invalid input, or the email is already registered.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+        '403':
+          description: Signup locked (`ALLOW_SIGNUP` unset after first org).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
 
   /auth/login:
     post:
-      tags:
-        - Authentication
-      summary: Login user
+      summary: Log in to an existing account
+      tags: [Auth]
+      security: []
       operationId: login
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required:
-                - email
-                - password
-              properties:
-                email:
-                  type: string
-                  format: email
-                  example: john@example.com
-                password:
-                  type: string
-                  format: password
-                  example: securePassword123
+            schema: { $ref: '#/components/schemas/LoginInput' }
       responses:
         '200':
-          description: Login successful
+          description: Session token issued.
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  token:
-                    type: string
-                  user:
-                    $ref: '#/components/schemas/User'
+              schema: { $ref: '#/components/schemas/Session' }
+        '400':
+          description: Invalid input.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          description: Unknown email or wrong password.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
 
   /auth/me:
     get:
-      tags:
-        - Authentication
-      summary: Get current user
-      operationId: getMe
-      security:
-        - bearerAuth: []
+      summary: Current user
+      tags: [Auth]
+      security: [{ bearerAuth: [] }]
+      operationId: getCurrentUser
       responses:
         '200':
-          description: Current user details
+          description: The authenticated user.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401':
+          description: Missing or invalid token.
+        '404':
+          description: User no longer exists.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+
+  /auth/setup-status:
+    get:
+      summary: Whether the deployment has been bootstrapped
+      description: |
+        Public probe used by the web onboarding flow: `configured: true` once
+        at least one organisation exists. On a database outage it degrades to
+        a 500 with `configured: false` instead of an error body.
+      tags: [Auth]
+      security: []
+      operationId: getSetupStatus
+      responses:
+        '200':
+          description: Setup state.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
+                type: object
+                required: [configured]
+                properties:
+                  configured: { type: boolean }
+        '500':
+          description: Database outage, reported as unconfigured.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [configured]
+                properties:
+                  configured: { type: boolean, example: false }
 
+  # ── Organisation ────────────────────────────────────────────────────────────
   /org:
     get:
-      tags:
-        - Organisation
-      summary: Get current organisation
-      operationId: getOrg
-      security:
-        - bearerAuth: []
+      summary: Current organisation
+      tags: [Organisation]
+      security: [{ bearerAuth: [] }]
+      operationId: getOrganisation
       responses:
         '200':
-          description: Organisation details
+          description: The authenticated user's organisation.
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/Organisation'
+              schema: { $ref: '#/components/schemas/Organisation' }
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          description: Missing or invalid token.
+        '404':
+          description: Organisation not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
 
   /org/members:
     get:
-      tags:
-        - Organisation
-      summary: List organisation members
+      summary: List members (offset pagination)
+      tags: [Organisation]
+      security: [{ bearerAuth: [] }]
       operationId: listMembers
-      security:
-        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, maximum: 100 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
       responses:
         '200':
-          description: List of members
+          description: Members of the authenticated user's organisation.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Member'
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Member' }
+                  pagination: { $ref: '#/components/schemas/OffsetPagination' }
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          description: Missing or invalid token.
     post:
-      tags:
-        - Organisation
-      summary: Invite new member
-      operationId: inviteMember
-      security:
-        - bearerAuth: []
+      summary: Create a member
+      description: Requires the `owner` role; membership joins by email+password.
+      tags: [Organisation]
+      security: [{ bearerAuth: [] }]
+      operationId: createMember
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required:
-                - email
-                - password
-              properties:
-                email:
-                  type: string
-                  format: email
-                password:
-                  type: string
-                  format: password
-                role:
-                  type: string
-                  enum: [owner, admin, member]
-                  default: member
+            schema: { $ref: '#/components/schemas/CreateMemberInput' }
       responses:
         '201':
-          description: Member invited
+          description: Member created.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Member'
+                type: object
+                required: [id, email, role]
+                properties:
+                  id: { type: string, format: uuid }
+                  email: { type: string, format: email }
+                  role: { type: string, enum: [admin, member] }
         '400':
-          $ref: '#/components/responses/BadRequest'
+          description: Invalid input, or the email is already in use.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          description: Missing or invalid token.
         '403':
-          $ref: '#/components/responses/Forbidden'
+          description: Not the owner.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
 
   /org/members/{id}:
     delete:
-      tags:
-        - Organisation
-      summary: Remove member
-      operationId: removeMember
-      security:
-        - bearerAuth: []
+      summary: Remove a member
+      description: |
+        Requires `owner` or `admin`. Owners cannot be removed; admins cannot
+        remove other admins.
+      tags: [Organisation]
+      security: [{ bearerAuth: [] }]
+      operationId: deleteMember
       parameters:
         - name: id
           in: path
           required: true
-          schema:
-            type: string
-            format: uuid
+          schema: { type: string, format: uuid }
       responses:
         '204':
-          description: Member removed
+          description: Member removed.
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          description: Missing or invalid token.
         '403':
-          $ref: '#/components/responses/Forbidden'
+          description: Owners are irremovable; admins cannot remove other admins.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
         '404':
-          $ref: '#/components/responses/NotFound'
+          description: Member not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
 
+  # ── API Keys ────────────────────────────────────────────────────────────────
   /keys:
     get:
-      tags:
-        - API Keys
-      summary: List API keys
-      operationId: listKeys
-      security:
-        - bearerAuth: []
+      summary: List API keys (offset pagination)
+      tags: [API Keys]
+      security: [{ bearerAuth: [] }]
+      operationId: listApiKeys
       parameters:
         - name: limit
           in: query
-          schema:
-            type: integer
-            default: 100
-            maximum: 100
-        - name: cursor
+          schema: { type: integer, default: 50, maximum: 100 }
+        - name: offset
           in: query
-          schema:
-            type: string
-          description: Pagination cursor
+          schema: { type: integer, default: 0 }
       responses:
         '200':
-          description: List of API keys
+          description: The org's keys; the secret value is never returned here.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ApiKey'
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ApiKey' }
+                  pagination: { $ref: '#/components/schemas/OffsetPagination' }
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          description: Missing or invalid token.
+        '403':
+          description: Role not in owner/admin/member.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
     post:
-      tags:
-        - API Keys
-      summary: Create API key
-      operationId: createKey
-      security:
-        - bearerAuth: []
+      summary: Create an API key
+      description: |
+        Requires the `owner` or `admin` role. The plaintext `key` value is
+        returned exactly once, on creation; later list/read responses only
+        carry `key_prefix`. Revocate with `DELETE /keys/{id}` (soft).
+      tags: [API Keys]
+      security: [{ bearerAuth: [] }]
+      operationId: createApiKey
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required:
-                - name
-              properties:
-                name:
-                  type: string
-                  minLength: 1
-                  maxLength: 255
-                  description: Key name
-                scopes:
-                  type: array
-                  items:
-                    type: string
-                    enum: [read, write, admin]
-                  default: [read]
-                  description: Key permissions
+            schema: { $ref: '#/components/schemas/CreateApiKeyInput' }
       responses:
         '201':
-          description: API key created
+          description: Key created; `key` is the only copy of the secret.
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  id:
-                    type: string
-                    format: uuid
-                  name:
-                    type: string
-                  key_prefix:
-                    type: string
-                  scopes:
-                    type: array
-                    items:
-                      type: string
-                  last_used_at:
-                    type: string
-                    format: date-time
-                    nullable: true
-                  revoked_at:
-                    type: string
-                    format: date-time
-                    nullable: true
-                  created_at:
-                    type: string
-                    format: date-time
-                  key:
-                    type: string
-                    description: The raw API key - only shown once at creation!
-              example:
-                id: 550e8400-e29b-41d4-a716-446655440000
-                name: Production Key
-                key_prefix: kyro_live_abc
-                scopes: ["read", "write"]
-                last_used_at: null
-                revoked_at: null
-                created_at: 2024-01-15T10:30:00Z
-                key: kyro_live_abc123def456...
+              schema: { $ref: '#/components/schemas/ApiKeyCreated' }
         '400':
-          $ref: '#/components/responses/BadRequest'
+          description: Invalid input.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          description: Missing or invalid token.
         '403':
-          $ref: '#/components/responses/Forbidden'
+          description: Not owner/admin.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
 
   /keys/{id}:
     delete:
-      tags:
-        - API Keys
-      summary: Revoke API key
-      operationId: revokeKey
-      security:
-        - bearerAuth: []
+      summary: Revoke an API key
+      description: |
+        Requires the `owner` or `admin` role. Keys are soft-revoked —
+        `revoked_at` is stamped, the row is kept for audit.
+      tags: [API Keys]
+      security: [{ bearerAuth: [] }]
+      operationId: revokeApiKey
       parameters:
         - name: id
           in: path
           required: true
-          schema:
-            type: string
-            format: uuid
+          schema: { type: string, format: uuid }
       responses:
         '200':
-          description: Key revoked
+          description: Key revoked.
           content:
             application/json:
               schema:
                 type: object
+                required: [message, id]
                 properties:
-                  message:
-                    type: string
-                  id:
-                    type: string
+                  message: { type: string, example: 'API key revoked' }
+                  id: { type: string, format: uuid }
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          description: Missing or invalid token.
         '403':
-          $ref: '#/components/responses/Forbidden'
+          description: Not owner/admin.
         '404':
-          $ref: '#/components/responses/NotFound'
+          description: Key unknown for the org or already revoked.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
 
-  /files:
+  # ── Usage ───────────────────────────────────────────────────────────────────
+  /usage:
     get:
-      tags:
-        - Files
-      summary: List files
-      operationId: listFiles
-      security:
-        - apiKey: []
+      summary: Usage summary
+      description: |
+        Aggregates over the logged request window. `start_date`/`end_date`
+        span whole days inclusive (an end date counts that entire day);
+        without them the window is all time.
+      tags: [Usage]
+      security: [{ bearerAuth: [] }]
+      operationId: getUsage
       parameters:
-        - name: limit
+        - name: start_date
           in: query
-          schema:
-            type: integer
-            default: 100
-            maximum: 100
-        - name: cursor
+          schema: { type: string, format: date }
+        - name: end_date
           in: query
-          schema:
-            type: string
+          schema: { type: string, format: date }
       responses:
         '200':
-          description: List of files
+          description: Aggregated usage.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UsageSummary' }
+        '401':
+          description: Missing or invalid token.
+
+  /usage/daily:
+    get:
+      summary: Daily usage series, newest first
+      description: Defaults to the trailing 30 days when dates are omitted.
+      tags: [Usage]
+      security: [{ bearerAuth: [] }]
+      operationId: getDailyUsage
+      parameters:
+        - name: start_date
+          in: query
+          schema: { type: string, format: date }
+        - name: end_date
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: One row per day with activity.
           content:
             application/json:
               schema:
                 type: array
-                items:
-                  $ref: '#/components/schemas/File'
+                items: { $ref: '#/components/schemas/DailyUsagePoint' }
         '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
+          description: Missing or invalid token.
+
+  # ── Webhooks ────────────────────────────────────────────────────────────────
+  /webhooks:
+    get:
+      summary: List webhooks, newest first
+      tags: [Webhooks]
+      security: [{ bearerAuth: [] }]
+      operationId: listWebhooks
+      responses:
+        '200':
+          description: The org's webhooks (no secrets).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Webhook' }
+        '401':
+          description: Missing or invalid token.
     post:
-      tags:
-        - Files
-      summary: Upload file
+      summary: Create a webhook
+      description: |
+        Requires the `owner` or `admin` role. The signing `secret` is returned
+        only on creation.
+      tags: [Webhooks]
+      security: [{ bearerAuth: [] }]
+      operationId: createWebhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateWebhookInput' }
+      responses:
+        '201':
+          description: Webhook created with its signing secret.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookCreated' }
+        '400':
+          description: Invalid input.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+        '401':
+          description: Missing or invalid token.
+        '403':
+          description: Not owner/admin.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+
+  /webhooks/{id}:
+    patch:
+      summary: Update a webhook
+      description: Requires the `owner` or `admin` role; all fields optional.
+      tags: [Webhooks]
+      security: [{ bearerAuth: [] }]
+      operationId: updateWebhook
+      parameters:
+        - $ref: '#/components/parameters/WebhookId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateWebhookInput' }
+      responses:
+        '200':
+          description: Updated webhook.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Webhook' }
+        '400':
+          description: Invalid input.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+        '401':
+          description: Missing or invalid token.
+        '403':
+          description: Not owner/admin.
+        '404':
+          description: Webhook not found in the org.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+    delete:
+      summary: Delete a webhook
+      description: Requires the `owner` or `admin` role; hard delete.
+      tags: [Webhooks]
+      security: [{ bearerAuth: [] }]
+      operationId: deleteWebhook
+      parameters:
+        - $ref: '#/components/parameters/WebhookId'
+      responses:
+        '204':
+          description: Webhook deleted.
+        '401':
+          description: Missing or invalid token.
+        '403':
+          description: Not owner/admin.
+        '404':
+          description: Webhook not found in the org.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+
+  /webhooks/{id}/deliveries:
+    get:
+      summary: Delivery history for a webhook (latest 50)
+      tags: [Webhooks]
+      security: [{ bearerAuth: [] }]
+      operationId: listWebhookDeliveries
+      parameters:
+        - $ref: '#/components/parameters/WebhookId'
+      responses:
+        '200':
+          description: Recent delivery attempts, newest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/WebhookDelivery' }
+        '401':
+          description: Missing or invalid token.
+        '404':
+          description: Webhook not found in the org.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+
+  /webhooks/events:
+    get:
+      summary: Subscribable events
+      tags: [Webhooks]
+      security: [{ bearerAuth: [] }]
+      operationId: listWebhookEvents
+      responses:
+        '200':
+          description: Event names with human descriptions.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events, descriptions]
+                properties:
+                  events:
+                    type: array
+                    items:
+                      type: string
+                      enum: [file.ready, file.failed]
+                  descriptions:
+                    type: object
+                    additionalProperties: { type: string }
+        '401':
+          description: Missing or invalid token.
+
+  # ── Files ───────────────────────────────────────────────────────────────────
+  /files:
+    post:
+      summary: Upload a file
+      description: |
+        Multipart upload. Extractable types (see below) start the pipeline
+        immediately: `pending` → `processing` → `ready` (or `failed`); CSV and
+        JSON are stored without extraction as `skipped` — everything else is
+        rejected with 415. Deployment-wide storage cap answers 507.
+      tags: [Files]
+      security: [{ apiKey: [] }, { bearerAuth: [] }]
       operationId: uploadFile
-      security:
-        - apiKey: []
+      x-scope: write
       requestBody:
         required: true
         content:
           multipart/form-data:
             schema:
               type: object
-              required:
-                - file
+              required: [file]
               properties:
                 file:
                   type: string
                   format: binary
-                  description: File to upload
+                  description: >-
+                    PDF, DOCX, DOC and TXT are extracted; CSV and JSON are
+                    stored as `skipped`; any other type is rejected with 415.
       responses:
         '201':
-          description: File uploaded
+          description: File stored; pipeline queued for extractable types.
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/File'
+              schema: { $ref: '#/components/schemas/FileRecord' }
+          links:
+            FileById: { operationId: getFile, parameters: { id: '$response.body#/id' } }
         '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '413':
-          $ref: '#/components/responses/PayloadTooLarge'
-
-  /files/{id}:
-    get:
-      tags:
-        - Files
-      summary: Download file
-      operationId: downloadFile
-      security:
-        - apiKey: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: File content
+          description: No file field in the multipart body.
           content:
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          description: Missing or invalid credentials.
         '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    delete:
-      tags:
-        - Files
-      summary: Delete file
-      operationId: deleteFile
-      security:
-        - apiKey: []
+          description: Not write-scoped.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+        '413':
+          description: File exceeds the 100 MB limit.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '415':
+          description: Unsupported file type.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '507':
+          description: Deployment storage limit reached.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    get:
+      summary: List files (cursor pagination, newest first)
+      tags: [Files]
+      security: [{ apiKey: [] }, { bearerAuth: [] }]
+      operationId: listFiles
+      x-scope: read
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-          description: File UUID
+        - name: limit
+          in: query
+          schema: { type: integer, default: 100, maximum: 100 }
+        - name: cursor
+          in: query
+          description: Opaque cursor from `pagination.nextCursor` of the previous page (base64url of `{"createdAt","id"}`).
+          schema: { type: string }
       responses:
         '200':
-          description: File deleted
+          description: Paginated file list; failed rows additionally carry `error`.
           content:
             application/json:
               schema:
                 type: object
+                required: [data, pagination]
                 properties:
-                  message:
-                    type: string
-                  id:
-                    type: string
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/FileListItem' }
+                  pagination: { $ref: '#/components/schemas/CursorPagination' }
+        '400':
+          description: Malformed or expired cursor.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
         '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
+          description: Missing or invalid credentials.
 
-  /usage:
+  /files/{id}:
     get:
-      tags:
-        - Usage
-      summary: Get usage statistics
-      operationId: getUsage
-      security:
-        - bearerAuth: []
+      summary: Download a file
+      description: Streams the original bytes as an attachment.
+      tags: [Files]
+      security: [{ apiKey: [] }, { bearerAuth: [] }]
+      operationId: getFile
+      x-scope: read
       parameters:
-        - name: start_date
-          in: query
-          schema:
-            type: string
-            format: date
-          description: Start date (YYYY-MM-DD)
-        - name: end_date
-          in: query
-          schema:
-            type: string
-            format: date
-          description: End date (YYYY-MM-DD)
+        - $ref: '#/components/parameters/FileId'
       responses:
         '200':
-          description: Usage statistics
+          description: The file (attachment).
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        '401':
+          description: Missing or invalid credentials.
+        '404':
+          description: Unknown file, or the bytes are missing on disk.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+    delete:
+      summary: Delete a file
+      description: |
+        Hard delete — removes the record, the on-disk bytes and cascading
+        rows (chunks, metadata, collection membership).
+      tags: [Files]
+      security: [{ apiKey: [] }, { bearerAuth: [] }]
+      operationId: deleteFile
+      x-scope: write
+      parameters:
+        - $ref: '#/components/parameters/FileId'
+      responses:
+        '200':
+          description: Deleted.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UsageStats'
+                type: object
+                required: [message, id]
+                properties:
+                  message: { type: string, example: 'File deleted' }
+                  id: { type: string, format: uuid }
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          description: Missing or invalid credentials.
+        '403':
+          description: Not write-scoped.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+        '404':
+          description: Unknown file.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
 
-  /usage/daily:
+  /files/{id}/text:
     get:
-      tags:
-        - Usage
-      summary: Get daily usage breakdown
-      operationId: getDailyUsage
-      security:
-        - bearerAuth: []
+      summary: Extracted text for a file
+      tags: [Files]
+      security: [{ apiKey: [] }, { bearerAuth: [] }]
+      operationId: getFileText
+      x-scope: read
       parameters:
-        - name: start_date
-          in: query
-          schema:
-            type: string
-            format: date
-        - name: end_date
-          in: query
-          schema:
-            type: string
-            format: date
+        - $ref: '#/components/parameters/FileId'
       responses:
         '200':
-          description: Daily usage data
+          description: Extraction state and (where present) the text.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FileText' }
+        '401':
+          description: Missing or invalid credentials.
+        '404':
+          description: Unknown file.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+
+  /files/{id}/reprocess:
+    post:
+      summary: Re-run the pipeline for a file
+      description: |
+        Resets the file to `pending` and re-runs extract → embed in one flow.
+        400 (with `supportedTypes`) for non-extractable MIME; 409 while a
+        pipeline run is already in progress.
+      tags: [Files]
+      security: [{ apiKey: [] }, { bearerAuth: [] }]
+      operationId: reprocessFile
+      x-scope: write
+      parameters:
+        - $ref: '#/components/parameters/FileId'
+      responses:
+        '202':
+          description: Reprocess started.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReprocessResult' }
+        '400':
+          description: The file type has nothing to reprocess.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error, supportedTypes]
+                properties:
+                  error: { type: string }
+                  supportedTypes:
+                    type: array
+                    items: { type: string }
+        '401':
+          description: Missing or invalid credentials.
+        '403':
+          description: Not write-scoped.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+        '404':
+          description: Unknown file.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+        '409':
+          description: A pipeline run is already in progress.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error, status]
+                properties:
+                  error: { type: string, example: 'Pipeline already in progress' }
+                  status: { type: string }
+                example:
+                  error: 'Pipeline already in progress'
+                  status: 'processing'
+
+  /files/{id}/metadata:
+    get:
+      summary: File metadata
+      description: Always a flat object (the column is jsonb, non-null).
+      tags: [Files]
+      security: [{ apiKey: [] }, { bearerAuth: [] }]
+      operationId: getFileMetadata
+      x-scope: read
+      parameters:
+        - $ref: '#/components/parameters/FileId'
+      responses:
+        '200':
+          description: Flat metadata map.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MetadataMap' }
+        '401':
+          description: Missing or invalid credentials.
+        '404':
+          description: Unknown file.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+    put:
+      summary: Upsert file metadata
+      description: |
+        Non-destructive merge — keys not in the body keep their values, body
+        keys win. Values must be strings. An empty body answers `{}`.
+      tags: [Files]
+      security: [{ apiKey: [] }, { bearerAuth: [] }]
+      operationId: putFileMetadata
+      x-scope: write
+      parameters:
+        - $ref: '#/components/parameters/FileId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MetadataMap' }
+      responses:
+        '200':
+          description: The upserted keys (the body, as stored).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MetadataMap' }
+        '400':
+          description: Body is not a flat object of string values.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+        '401':
+          description: Missing or invalid credentials.
+        '403':
+          description: Not write-scoped.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+        '404':
+          description: Unknown file.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+
+  /files/{id}/metadata/{key}:
+    delete:
+      summary: Delete one metadata key
+      description: A missing key is a no-op; only an unknown file is an error.
+      tags: [Files]
+      security: [{ apiKey: [] }, { bearerAuth: [] }]
+      operationId: deleteFileMetadataKey
+      x-scope: write
+      parameters:
+        - $ref: '#/components/parameters/FileId'
+        - name: key
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '204':
+          description: Key removed (or was already absent).
+        '401':
+          description: Missing or invalid credentials.
+        '403':
+          description: Not write-scoped.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+        '404':
+          description: Unknown file.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+
+  # ── Collections ─────────────────────────────────────────────────────────────
+  /collections:
+    get:
+      summary: List collections, newest first
+      tags: [Collections]
+      security: [{ apiKey: [] }, { bearerAuth: [] }]
+      operationId: listCollections
+      x-scope: read
+      responses:
+        '200':
+          description: Collections with file-count roll-ups.
           content:
             application/json:
               schema:
                 type: array
-                items:
-                  type: object
-                  properties:
-                    date:
-                      type: string
-                      format: date
-                    requests:
-                      type: integer
-                    bytes_in:
-                      type: integer
-                    bytes_out:
-                      type: integer
+                items: { $ref: '#/components/schemas/CollectionWithCounts' }
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          description: Missing or invalid credentials.
+    post:
+      summary: Create a collection
+      tags: [Collections]
+      security: [{ apiKey: [] }, { bearerAuth: [] }]
+      operationId: createCollection
+      x-scope: write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCollectionInput' }
+      responses:
+        '201':
+          description: Collection created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Collection' }
+        '400':
+          description: Invalid input.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+        '401':
+          description: Missing or invalid credentials.
 
-  /health:
+  /collections/{id}:
     get:
-      tags:
-        - Health
-      summary: Health check endpoint
-      operationId: healthCheck
+      summary: Collection detail
+      description: Adds `skippedCount` and `queryReady` to the count roll-up.
+      tags: [Collections]
+      security: [{ apiKey: [] }, { bearerAuth: [] }]
+      operationId: getCollection
+      x-scope: read
+      parameters:
+        - $ref: '#/components/parameters/CollectionId'
       responses:
         '200':
-          description: Service healthy
+          description: The collection.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CollectionDetail' }
+        '401':
+          description: Missing or invalid credentials.
+        '404':
+          description: Collection not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+    patch:
+      summary: Update a collection
+      description: |
+        Partial update; renaming to the current name is a plain no-op (no
+        slug state exists), so no conflict status exists.
+      tags: [Collections]
+      security: [{ apiKey: [] }, { bearerAuth: [] }]
+      operationId: updateCollection
+      x-scope: write
+      parameters:
+        - $ref: '#/components/parameters/CollectionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateCollectionInput' }
+      responses:
+        '200':
+          description: Updated collection.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Collection' }
+        '400':
+          description: Invalid input.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+        '401':
+          description: Missing or invalid credentials.
+        '404':
+          description: Collection not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+    delete:
+      summary: Delete a collection
+      description: Membership rows detach; the files themselves are kept.
+      tags: [Collections]
+      security: [{ apiKey: [] }, { bearerAuth: [] }]
+      operationId: deleteCollection
+      x-scope: write
+      parameters:
+        - $ref: '#/components/parameters/CollectionId'
+      responses:
+        '204':
+          description: Collection deleted.
+        '401':
+          description: Missing or invalid credentials.
+        '404':
+          description: Collection not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+
+  /collections/{id}/files:
+    get:
+      summary: List a collection's files (offset pagination)
+      tags: [Collections]
+      security: [{ apiKey: [] }, { bearerAuth: [] }]
+      operationId: listCollectionFiles
+      x-scope: read
+      parameters:
+        - $ref: '#/components/parameters/CollectionId'
+        - name: limit
+          in: query
+          schema: { type: integer, default: 100, maximum: 100 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        '200':
+          description: Files in the collection, newest added first.
           content:
             application/json:
               schema:
                 type: object
+                required: [data, pagination]
                 properties:
-                  status:
-                    type: string
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/CollectionFile' }
+                  pagination: { $ref: '#/components/schemas/OffsetPagination' }
+        '401':
+          description: Missing or invalid credentials.
+        '404':
+          description: Collection not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+    post:
+      summary: Add files to a collection
+      description: Adds an org-owned set of files; duplicates are ignored.
+      tags: [Collections]
+      security: [{ apiKey: [] }, { bearerAuth: [] }]
+      operationId: addCollectionFiles
+      x-scope: write
+      parameters:
+        - $ref: '#/components/parameters/CollectionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddCollectionFilesInput' }
+      responses:
+        '200':
+          description: Files added.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [added, collectionId]
+                properties:
+                  added: { type: integer }
+                  collectionId: { type: string, format: uuid }
+        '400':
+          description: Invalid input, or some files are unknown/not org-owned (then `invalidFileIds` lists them).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties:
+                  error: { type: string }
+                  invalidFileIds:
+                    type: array
+                    items: { type: string, format: uuid }
+        '401':
+          description: Missing or invalid credentials.
+        '404':
+          description: Collection not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+
+  /collections/{id}/files/{fileId}:
+    delete:
+      summary: Remove a file from a collection
+      tags: [Collections]
+      security: [{ apiKey: [] }, { bearerAuth: [] }]
+      operationId: removeCollectionFile
+      x-scope: write
+      parameters:
+        - $ref: '#/components/parameters/CollectionId'
+        - name: fileId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: File removed from the collection.
+        '401':
+          description: Missing or invalid credentials.
+        '404':
+          description: Collection unknown, or the file is not a member.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+
+  # ── Search ──────────────────────────────────────────────────────────────────
+  /search:
+    get:
+      summary: Hybrid search across embedded chunks
+      description: |
+        Combines keyword and embedding retrieval and ranks with Reciprocal
+        Rank Fusion (`rrfScore`, higher = better). Scope with exactly one of
+        `collection_id` or `file_ids` — passing both, or neither with a scope
+        filter, is a 400; unknown scopes answer 404; empty scopes answer 422.
+
+        `filters` carries metadata filters as a **URL-encoded JSON object**
+        whose values are strings or arrays of strings, e.g.
+        `?filters=%7B%22document_type%22%3A%5B%22contract%22%5D%7D`.
+      tags: [Search]
+      security: [{ apiKey: [] }, { bearerAuth: [] }]
+      operationId: search
+      x-scope: read
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 10, maximum: 50 }
+        - name: collection_id
+          in: query
+          description: Restrict to one collection's embedded files.
+          schema: { type: string, format: uuid }
+        - name: file_ids
+          in: query
+          description: Comma-separated list of org file UUIDs to scope to.
+          schema: { type: string }
+        - name: filters
+          in: query
+          description: URL-encoded JSON object of metadata filters (string or string[] values).
+          schema: { type: string }
+      responses:
+        '200':
+          description: Ranked chunks for the query.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SearchResult' }
+        '400':
+          description: Missing `q`, both scopes given, or malformed `filters`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+        '401':
+          description: Missing or invalid credentials.
+        '404':
+          description: Unknown collection or no owned files among `file_ids`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+        '422':
+          description: Empty collection, no filter match, or empty intersection.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+
+  # ── Ask ─────────────────────────────────────────────────────────────────────
+  /ask:
+    post:
+      summary: Answer a question from retrieved context
+      description: |
+        Retrieves top-k chunks (hybrid search, same ranking as `/search`),
+        builds a document-grounded prompt with citations, then either:
+        - `stream: true` (default) — answers over **Server-Sent Events**
+          (`text/event-stream`). Every event is an unnamed `data:` frame:
+          1. `{"type":"sources","sources":[{fileId,fileName,chunkIndex,content,rrfScore}…]}`
+          2. `{"type":"chunk","text":"…"}` — one per generated delta
+          3. `{"type":"done"}` — terminal
+          4. `{"type":"error","message":"…"}` — in-band failure (LLM error after
+             the stream opened must not change the status code)
+        - `stream: false` — one JSON response `{"answer","sources"}`.
+
+        Scope the question with `collectionId` or `fileIds` (mutually
+        exclusive; at most 20 file ids); without either it searches the org's
+        embedded corpus. `history` replays prior turns to the LLM for
+        multi-take follow-ups while retrieval stays fresh. Requires a
+        configured `OLLAMA_URL` — otherwise 400.
+      tags: [Ask]
+      security: [{ apiKey: [] }, { bearerAuth: [] }]
+      operationId: ask
+      x-scope: read
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AskInput' }
+      responses:
+        '200':
+          description: |
+            Answer. `text/event-stream` when the body requested streaming
+            (sources → chunk* → done), `application/json` otherwise.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AskOutput' }
+            text/event-stream:
+              schema: { type: string }
+              example: |
+                data: {"type":"sources","sources":[{"fileId":"0f0…","fileName":"contract.pdf","chunkIndex":3,"content":"The payment terms are…","rrfScore":0.032}]}
+
+                data: {"type":"chunk","text":"According to [1], the payment terms…"}
+
+                data: {"type":"done"}
+        '400':
+          description: Invalid input (including `fileIds` together with `collectionId`), or the endpoint is disabled because `OLLAMA_URL` is unset.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+        '401':
+          description: Missing or invalid credentials.
+        '404':
+          description: Unknown collection or no owned files among `file_ids`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+        '422':
+          description: Empty collection, no filter match, or empty intersection.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
+
+  # ── Health ──────────────────────────────────────────────────────────────────
+  /health:
+    get:
+      summary: Backend health
+      description: |
+        Sits at the **origin root**, not under `/api/v1`. Reports database
+        reachability only; degraded answers 503.
+      tags: [Health]
+      security: []
+      operationId: getHealth
+      servers:
+        - url: http://localhost:3000
+          description: Development (origin root)
+        - url: https://api.kyro.io
+          description: Production (origin root)
+      responses:
+        '200':
+          description: Healthy.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthReport' }
+        '503':
+          description: Degraded (database unreachable).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthReport' }
 
 components:
+  parameters:
+    FileId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    CollectionId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    WebhookId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: |
-        JWT token obtained from `/auth/login` or `/auth/register`.
-        Include in Authorization header: `Bearer <token>`
+      description: Session JWT from POST /auth/register or POST /auth/login.
     apiKey:
       type: apiKey
       in: header
       name: X-API-Key
       description: |
-        API key with `kyro_live_` prefix. Obtained from `/keys` endpoint.
-        Required for file operations.
-
-  responses:
-    BadRequest:
-      description: Invalid request body
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
-          example:
-            error:
-              message: Invalid input
-              code: invalid_request
-              details:
-                - message: Email is required
-                  path: email
-
-    Unauthorized:
-      description: Authentication required
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
-          example:
-            error:
-              message: No token provided
-              code: unauthorized
-
-    Forbidden:
-      description: Insufficient permissions
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
-          example:
-            error:
-              message: Insufficient permissions
-              code: forbidden
-
-    NotFound:
-      description: Resource not found
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
-          example:
-            error:
-              message: Resource not found
-              code: not_found
-
-    Conflict:
-      description: Resource already exists
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
-          example:
-            error:
-              message: Email already registered
-              code: conflict
-
-    PayloadTooLarge:
-      description: File too large
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
-          example:
-            error:
-              message: File too large
-              code: payload_too_large
-
-    TooManyRequests:
-      description: Rate limit exceeded
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              error:
-                type: object
-                properties:
-                  message:
-                    type: string
-                  retryAfter:
-                    type: number
-          example:
-            error:
-              message: Too many requests
-              retryAfter: 30
-
-    InternalServerError:
-      description: Internal server error
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
-          example:
-            error:
-              message: Internal server error
-              code: internal_error
+        Org API key from POST /keys (`kyro_live_…`). Carries read/write
+        scopes; the plaintext value is only shown at creation.
 
   schemas:
-    Error:
-      type: object
-      properties:
-        error:
-          type: object
-          properties:
-            message:
-              type: string
-              description: Human-readable error message
-            code:
-              type: string
-              description: Machine-readable error code
-            details:
-              type: array
-              items:
-                type: object
-                properties:
-                  message:
-                    type: string
-                  path:
-                    type: string
-
     User:
       type: object
+      required: [id, email, role, orgId]
       properties:
-        id:
-          type: string
-          format: uuid
-        email:
-          type: string
-          format: email
-        role:
-          type: string
-          enum: [owner, admin, member]
-        orgId:
-          type: string
-          format: uuid
-      example:
-        id: 550e8400-e29b-41d4-a716-446655440000
-        email: john@example.com
-        role: owner
-        orgId: 550e8400-e29b-41d4-a716-446655440001
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        role: { $ref: '#/components/schemas/Role' }
+        orgId: { type: string, format: uuid }
+
+    Role:
+      type: string
+      enum: [owner, admin, member]
+
+    Session:
+      type: object
+      required: [token, user]
+      properties:
+        token: { type: string }
+        user: { $ref: '#/components/schemas/User' }
+
+    RegisterInput:
+      type: object
+      required: [orgName, email, password]
+      properties:
+        orgName: { type: string, minLength: 1, maxLength: 255 }
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8, maxLength: 100 }
+
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
 
     Organisation:
       type: object
+      required: [id, name, slug, createdAt]
       properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        slug:
-          type: string
-        plan:
-          type: string
-          enum: [free, pro, enterprise]
-          default: free
-        createdAt:
-          type: string
-          format: date-time
-      example:
-        id: 550e8400-e29b-41d4-a716-446655440001
-        name: Acme Inc
-        slug: acme-inc
-        plan: free
-        createdAt: 2024-01-15T10:00:00Z
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        createdAt: { type: string, format: date-time }
 
     Member:
       type: object
+      required: [id, email, role, createdAt]
       properties:
-        id:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        role: { $ref: '#/components/schemas/Role' }
+        createdAt: { type: string, format: date-time }
+
+    CreateMemberInput:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8, maxLength: 100 }
+        role: { type: string, enum: [admin, member], default: member }
+
+    OffsetPagination:
+      type: object
+      required: [total, limit, offset, hasMore]
+      properties:
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+        hasMore: { type: boolean }
+
+    CursorPagination:
+      type: object
+      required: [limit, hasMore, nextCursor]
+      properties:
+        limit: { type: integer }
+        hasMore: { type: boolean }
+        nextCursor:
           type: string
-          format: uuid
-        email:
-          type: string
-          format: email
-        role:
-          type: string
-          enum: [owner, admin, member]
-        createdAt:
-          type: string
-          format: date-time
+          nullable: true
+          description: Base64url cursor for the next page; null on the last page.
 
     ApiKey:
       type: object
+      required: [id, name, key_prefix, scopes, last_used_at, revoked_at, created_at]
       properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        key_prefix:
-          type: string
-          description: First 16 characters of the key
+        id: { type: string, format: uuid }
+        name: { type: string }
+        key_prefix: { type: string }
         scopes:
           type: array
-          items:
-            type: string
-            enum: [read, write, admin]
+          items: { type: string, enum: [read, write] }
         last_used_at:
           type: string
           format: date-time
@@ -881,56 +1462,348 @@ components:
           type: string
           format: date-time
           nullable: true
-        created_at:
+        created_at: { type: string, format: date-time }
+
+    CreateApiKeyInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        scopes:
+          type: array
+          items: { type: string, enum: [read, write] }
+          default: [read]
+
+    ApiKeyCreated:
+      type: object
+      required: [id, name, key_prefix, scopes, created_at, key]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        key_prefix: { type: string }
+        scopes:
+          type: array
+          items: { type: string, enum: [read, write] }
+        created_at: { type: string, format: date-time }
+        key:
+          type: string
+          description: The plaintext key (`kyro_live_…`); shown exactly once.
+
+    UsageSummary:
+      type: object
+      required: [total_requests, total_bytes_in, total_bytes_out, total_storage, active_api_keys, storage_limit]
+      properties:
+        total_requests: { type: integer }
+        total_bytes_in: { type: integer }
+        total_bytes_out: { type: integer }
+        total_storage: { type: integer }
+        active_api_keys: { type: integer }
+        storage_limit: { type: integer }
+
+    DailyUsagePoint:
+      type: object
+      required: [date, requests, bytes_in, bytes_out]
+      properties:
+        date: { type: string, format: date }
+        requests:
+          type: string
+          description: Row count as a string (safe serialization of the count).
+        bytes_in: { type: integer }
+        bytes_out: { type: integer }
+
+    Webhook:
+      type: object
+      required: [id, url, events, enabled, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        url: { type: string, format: uri }
+        events:
+          type: array
+          items: { type: string, enum: [file.ready, file.failed] }
+        enabled: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    WebhookCreated:
+      type: object
+      required: [id, url, events, enabled, createdAt, secret]
+      properties:
+        id: { type: string, format: uuid }
+        url: { type: string, format: uri }
+        events:
+          type: array
+          items: { type: string, enum: [file.ready, file.failed] }
+        enabled: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        secret:
+          type: string
+          description: HMAC signing secret (hex); returned only here.
+
+    CreateWebhookInput:
+      type: object
+      required: [url, events]
+      properties:
+        url: { type: string, format: uri }
+        events:
+          type: array
+          minItems: 1
+          items: { type: string, enum: [file.ready, file.failed] }
+
+    UpdateWebhookInput:
+      type: object
+      minProperties: 1
+      properties:
+        url: { type: string, format: uri }
+        events:
+          type: array
+          minItems: 1
+          items: { type: string, enum: [file.ready, file.failed] }
+        enabled: { type: boolean, default: true }
+
+    WebhookDelivery:
+      type: object
+      required: [id, event, status, statusCode, attempts, lastAttemptAt, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        event: { type: string, enum: [file.ready, file.failed] }
+        status: { type: string, enum: [pending, delivered, failed] }
+        statusCode:
+          type: integer
+          nullable: true
+          description: The last HTTP status from the consumer, when an attempt was made.
+        attempts: { type: integer }
+        lastAttemptAt:
           type: string
           format: date-time
+          nullable: true
+        createdAt: { type: string, format: date-time }
 
-    File:
+    FileStatus:
+      type: string
+      enum: [pending, processing, ready, failed, skipped]
+      description: >
+        Pipeline state: pending → processing → ready | failed. Skipped marks
+        types stored without extraction.
+
+    FileRecord:
       type: object
+      required: [id, name, mimeType, sizeBytes, createdAt, status]
       properties:
-        id:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        mimeType: { type: string }
+        sizeBytes: { type: integer }
+        createdAt: { type: string, format: date-time }
+        status: { $ref: '#/components/schemas/FileStatus' }
+
+    FileListItem:
+      type: object
+      required: [id, name, mimeType, sizeBytes, createdAt, status]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        mimeType: { type: string }
+        sizeBytes: { type: integer }
+        createdAt: { type: string, format: date-time }
+        status: { $ref: '#/components/schemas/FileStatus' }
+        error:
+          type: string
+          nullable: true
+          description: Present only on failed rows.
+
+    FileText:
+      type: object
+      required: [fileId, status, extractedText]
+      properties:
+        fileId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/FileStatus' }
+        extractedText:
+          type: string
+          nullable: true
+        error:
+          type: string
+          nullable: true
+          description: Present only on failed rows.
+
+    ReprocessResult:
+      type: object
+      required: [fileId, status, message]
+      properties:
+        fileId: { type: string, format: uuid }
+        status: { type: string, example: 'pending' }
+        message: { type: string }
+
+    MetadataMap:
+      type: object
+      additionalProperties: { type: string }
+      description: Flat key/value map; values are always strings.
+
+    SearchHit:
+      type: object
+      required: [fileId, fileName, chunkIndex, content, rrfScore]
+      properties:
+        fileId: { type: string, format: uuid }
+        fileName: { type: string }
+        chunkIndex: { type: integer }
+        content: { type: string }
+        rrfScore: { type: number, description: Reciprocal Rank Fusion score; higher is better. }
+
+    SearchResult:
+      type: object
+      required: [data, query, limit]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/SearchHit' }
+        query: { type: string }
+        limit: { type: integer }
+
+    AskTurn:
+      type: object
+      required: [role, content]
+      properties:
+        role: { type: string, enum: [user, assistant] }
+        content: { type: string, minLength: 1, maxLength: 2000 }
+
+    AskInput:
+      type: object
+      required: [question]
+      properties:
+        question: { type: string, minLength: 1, maxLength: 2000 }
+        fileIds:
+          type: array
+          maxItems: 20
+          items: { type: string, format: uuid }
+          description: Scope to specific files; mutually exclusive with collectionId.
+        collectionId:
           type: string
           format: uuid
-        name:
-          type: string
-          description: Original filename
-        mimeType:
-          type: string
-          description: MIME type
-        sizeBytes:
+          description: Scope to one collection; mutually exclusive with fileIds.
+        filters:
+          type: object
+          additionalProperties:
+            oneOf:
+              - { type: string }
+              - type: array
+                items: { type: string }
+          description: Metadata filters, same shape as the /search query parameter.
+        topK:
           type: integer
-          description: File size in bytes
-        createdAt:
+          minimum: 1
+          maximum: 20
+          default: 8
+        model:
           type: string
-          format: date-time
-      example:
-        id: 550e8400-e29b-41d4-a716-446655440002
-        name: document.pdf
-        mimeType: application/pdf
-        sizeBytes: 1048576
-        createdAt: 2024-01-15T10:30:00Z
+          description: Chat model override; defaults to the deployment's configured model.
+        stream:
+          type: boolean
+          default: true
+        history:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/AskTurn' }
+          description: Prior user/assistant turns for multi-turn conversations.
 
-    UsageStats:
+    AskOutput:
       type: object
+      required: [answer, sources]
       properties:
-        total_requests:
-          type: integer
-          description: Total API requests
-        total_bytes_in:
-          type: integer
-          description: Total bytes received
-        total_bytes_out:
-          type: integer
-          description: Total bytes sent
-        total_storage:
-          type: integer
-          description: Total storage used in bytes
-        active_api_keys:
-          type: integer
-          description: Number of active API keys
-      example:
-        total_requests: 1523
-        total_bytes_in: 52428800
-        total_bytes_out: 104857600
-        total_storage: 1073741824
-        active_api_keys: 3
+        answer: { type: string }
+        sources:
+          type: array
+          items: { $ref: '#/components/schemas/SearchHit' }
+
+    Collection:
+      type: object
+      required: [id, name, description, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CollectionWithCounts:
+      allOf:
+        - $ref: '#/components/schemas/Collection'
+        - type: object
+          required: [fileCount, embeddedCount, pendingCount, failedCount]
+          properties:
+            fileCount: { type: integer }
+            embeddedCount: { type: integer }
+            pendingCount: { type: integer }
+            failedCount: { type: integer }
+
+    CollectionDetail:
+      allOf:
+        - $ref: '#/components/schemas/CollectionWithCounts'
+        - type: object
+          required: [skippedCount, queryReady]
+          properties:
+            skippedCount: { type: integer }
+            queryReady: { type: boolean, description: True when the collection has files and none are pending/processing/failed. }
+
+    CreateCollectionInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        description: { type: string, maxLength: 2000 }
+
+    UpdateCollectionInput:
+      type: object
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        description: { type: string, maxLength: 2000 }
+
+    CollectionFile:
+      type: object
+      required: [id, name, mimeType, sizeBytes, status, createdAt, addedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        mimeType: { type: string }
+        sizeBytes: { type: integer }
+        status: { $ref: '#/components/schemas/FileStatus' }
+        createdAt: { type: string, format: date-time }
+        addedAt: { type: string, format: date-time }
+
+    AddCollectionFilesInput:
+      type: object
+      required: [fileIds]
+      properties:
+        fileIds:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { type: string, format: uuid }
+
+    HealthReport:
+      type: object
+      required: [status, uptime, timestamp, database]
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        uptime: { type: integer, description: Seconds since API start. }
+        timestamp: { type: string, format: date-time }
+        database: { type: string, enum: [connected, disconnected] }
+
+    SimpleError:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+        details:
+          type: array
+          items: { type: object }
+          description: Zod issue objects, present only on 400 validation errors.
+
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [message]
+          properties:
+            message: { type: string }
+            stack: { type: string, description: Present in development only. }

@@ -22,7 +22,6 @@
     "vite": "^5.4.0"
   },
   "dependencies": {
-    "@kyro/shared": "workspace:*",
     "chart.js": "^4.5.1",
     "jsonwebtoken": "^9.0.2"
   }

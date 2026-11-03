@@ -11,7 +11,6 @@ RUN npm install -g pnpm@11.28.4
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/api/package.json packages/api/
 COPY packages/web/package.json packages/web/
-COPY packages/shared/package.json packages/shared/
 RUN CI=true pnpm install --frozen-lockfile
 
 # Sources last — editing code no longer busts the dependency layer.
