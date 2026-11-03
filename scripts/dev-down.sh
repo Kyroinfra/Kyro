@@ -1,7 +1,4 @@
 #!/bin/bash
+# Dev counterpart of dev.sh (same flagless compose resolution).
 set -e
-docker compose \
-    -f compose.yml \
-    -f compose.dev.yml \
-    --env-file .env.dev \
-    down
+docker compose down

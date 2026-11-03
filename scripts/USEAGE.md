@@ -1,5 +1,14 @@
 # Scripts
 
+All scripts rely on the same two compose conventions (#46):
+
+- **Dev**: plain `docker compose …` — Docker auto-loads `compose.yml` +
+  `compose.override.yml` and the root `.env`. Nothing to stitch.
+- **Prod**: `docker compose -f compose.yml …` — the explicit `-f` bypasses the
+  dev override file, which is what keeps hot-reload builds, source bind
+  mounts, published ports, ollama and pgadmin out of prod. Nginx lives behind
+  the `prod` profile.
+
 ## dev.sh
 Starts the development environment.
 
@@ -7,8 +16,8 @@ Starts the development environment.
 ./scripts/dev.sh
 ```
 
-Runs all services using `compose.yml` + `compose.dev.yml` with `.env.dev`.
-Hot reload is enabled for the API and web via bind mounts.
+Equivalent to `docker compose up` with no extra flags. Hot reload is enabled
+for the api and web via bind mounts; `ollama` and `pgadmin` start too.
 
 ## dev-down.sh
 Stops the development environment.
@@ -17,8 +26,8 @@ Stops the development environment.
 ./scripts/dev-down.sh
 ```
 
-Stops and removes all development containers but keeps volumes intact,
-so your database and uploads are preserved.
+Stops and removes all development containers but keeps volumes intact, so
+your database and uploads are preserved.
 
 ## dev-rebuild.sh
 Rebuilds all Docker images and restarts all services.
@@ -27,57 +36,50 @@ Rebuilds all Docker images and restarts all services.
 ./scripts/dev-rebuild.sh
 ```
 
-Use this when you change a Dockerfile, install new dependencies, or add new files
-that aren't covered by bind mounts (e.g. files outside `src/`).
+Use this when you change a Dockerfile, install new dependencies, or add new
+files that aren't covered by bind mounts (e.g. files outside `src/`).
 
-## reset.sh
+## dev-reset.sh
 Wipes everything and starts fresh.
 
 ```bash
 ./scripts/dev-reset.sh
 ```
 
-This will:
-- Stop and remove all containers
-- Delete all volumes (database, redis, uploads)
-- Rebuild all images from scratch
-- Start all services
-
-⚠️ You will lose all local data including your database. Use with caution.
+This runs `down --volumes --remove-orphans` and starts clean — the database,
+uploads and pgadmin state are lost. Migrations re-run automatically at api
+startup (advisory-locked), so the fresh boot is fully self-sufficient.
 
 ## prod.sh
-Starts the production environment in detached mode.
+Starts the production stack.
 
 ```bash
 ./scripts/prod.sh
 ```
 
-Runs all services using `compose.yml` + `compose.prod.yml` with `.env`.
-Runs in the background — use `prodDown.sh` to stop.
+Runs `docker compose -f compose.yml --profile prod --scale api=3 up -d`.
+`API_REPLICAS` scales the api replicas (e.g. `API_REPLICAS=1 ./scripts/prod.sh`).
+Migrations run inside each api start under an advisory lock, so scaled
+replicas queue instead of racing.
 
 ## prod-down.sh
-Stops the production environment.
+Stops the production stack (same file/profile resolution as prod.sh).
 
 ```bash
 ./scripts/prod-down.sh
 ```
 
-Stops and removes all production containers but keeps volumes intact.
-
-
 ## prod-rebuild.sh
-Rebuild Containers for prod.
+Rebuilds the production images and restarts (same resolution as prod.sh).
 
 ```bash
 ./scripts/prod-rebuild.sh
 ```
 
-
-## prod-down.sh
-Stops the production environment.
+## log.sh
+Tails the dev stack logs.
 
 ```bash
-./scripts/prod-down.sh
+./scripts/log.sh            # all services
+./scripts/log.sh api        # one service
 ```
-
-Stop all containers in production environment.

@@ -1,14 +1,6 @@
 #!/bin/bash
+# Wipes everything (volumes included) and starts fresh — DB data, uploads and
+# pgadmin state are gone.
 set -e
-
-docker compose \
-  -f compose.yml \
-  -f compose.dev.yml \
-  --env-file .env.dev \
-  down --volumes --remove-orphans
-
-docker compose \
-  -f compose.yml \
-  -f compose.dev.yml \
-  --env-file .env.dev \
-  up --build "$@"
+docker compose down --volumes --remove-orphans
+docker compose up --build "$@"

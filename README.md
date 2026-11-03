@@ -41,7 +41,6 @@ Edit `.env` and fill in your values:
 POSTGRES_USER=kyro
 POSTGRES_PASSWORD=changeme
 POSTGRES_DB=kyro
-REDIS_PASSWORD=changeme
 JWT_SECRET=changeme
 
 PGADMIN_EMAIL=admin@example.com
@@ -73,25 +72,27 @@ Or manually:
 ```bash
 docker compose \
   -f compose.yml \
-  -f compose.prod.yml \
-  --env-file .env \
+  --profile prod \
+  --scale api=3 \
   up -d
 ```
 
-The API will be available at `http://localhost/api/v2`. Migrations run automatically on first start.
+The API will be available at `http://localhost/api/v2`. Migrations run at api startup under a Postgres advisory lock — concurrent starts (replica scale-ups, a racing restart) queue instead of colliding.
+
+> The explicit `-f compose.yml` matters: it bypasses `compose.override.yml`
+> (the dev-only file Docker auto-loads alongside `compose.yml` — hot-reload
+> builds, source bind mounts, published ports, ollama, pgadmin).
 
 ## Architecture
 
 | Service | Description |
 |---|---|
-| `api` | REST API — 3 replicas behind nginx |
-| `worker` | Text extraction and embedding worker — 2 replicas |
-| `webhook-worker` | Webhook delivery worker |
+| `api` | REST API — runs migrations at startup (advisory lock) and the pipeline + webhook delivery inline |
+| `web` | SvelteKit dashboard and same-origin API proxy |
 | `postgres` | PostgreSQL with pgvector |
-| `redis` | Job queue and rate limiting |
-| `nginx` | Reverse proxy |
+| `nginx` | Reverse proxy (prod profile) |
 
-Ollama runs separately and is referenced via `OLLAMA_URL`. For production, a dedicated GPU server for Ollama is recommended.
+Dev-only services (`compose.override.yml`): `pgadmin` (GUI at :5050) and a containerized `ollama` that reuses the host's model store. In prod, Ollama stays external via `OLLAMA_URL` — a dedicated GPU server for it is recommended.
 
 ## Using the API
 
