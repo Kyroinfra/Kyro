@@ -19,7 +19,6 @@
 
 ![Kyro Dashboard](as/dashboard.png)
 
-<!-- TODO: replace with a 20-30s demo GIF: upload a PDF → ask a question → streamed answer with sources -->
 
 ## Why Kyro
 
