@@ -2,46 +2,666 @@
   import { onMount } from "svelte";
   import Logo from "$lib/components/Logo.svelte";
 
+  // The single canonical OpenAPI spec lives at packages/api/openapi.yaml
+  // (main). This object is the docs-site projection of that file, authored
+  // to match it field-for-field (order, tags, paths, scopes, examples).
+  // When a route changes, update the yaml and this object in the same PR.
   const openapiSpec = {
-    openapi: "3.0.0",
+    openapi: "3.0.3",
     info: {
       title: "Kyro API",
-      version: "2.0.0",
+      version: "1.0.0",
       description:
         "Self-hosted RAG API. Upload documents, embed them locally, and ask questions grounded in your own files — no data leaves your server.",
     },
     servers: [
-      { url: "http://localhost:3000/api/v2" },
-      { url: "https://your-kyro-instance.internal/api/v2" },
+      { url: "http://localhost:3000/api/v1" },
+      { url: "https://api.kyro.io/api/v1" },
     ],
     tags: [
+      { name: "Auth", description: "Registration, login, session introspection and setup status." },
+      { name: "Organisation", description: "Workspace profile and member management (owner/admin actions)." },
+      { name: "API Keys", description: "Org-scoped API keys and their scopes." },
+      { name: "Usage", description: "Aggregate and per-day request/byte metrics." },
+      { name: "Webhooks", description: "HTTP webhook subscriptions for file pipeline events." },
       {
         name: "Files",
-        description:
-          "Upload, list, download, delete, and extract text from files stored on your server.",
-      },
-      {
-        name: "Embeddings",
-        description:
-          "Trigger chunk embedding via your local Ollama model and query embedded files.",
+        description: "Upload, download, delete, text, reprocess and metadata.",
       },
       {
         name: "Collections",
-        description:
-          "Group files into named collections and query them as a unit.",
+        description: "Named groups of files queried as a unit.",
       },
+      { name: "Search", description: "Hybrid (keyword + embedding) search with RRF scoring." },
+      { name: "Ask", description: "RAG question answering with SSE streaming." },
       {
         name: "Health",
-        description:
-          "Check whether the Kyro backend and its dependencies are reachable.",
+        description: "Backend readiness of the deployment.",
       },
     ],
     paths: {
+      "/auth/register": {
+        post: {
+          summary: "Register an organisation and its first owner",
+          tags: ["Auth"],
+          // Open only to bootstrap the first org (or with ALLOW_SIGNUP=true).
+          security: [],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["orgName", "email", "password"],
+                  properties: {
+                    orgName: { type: "string", minLength: 1, maxLength: 255 },
+                    email: { type: "string", format: "email" },
+                    password: {
+                      type: "string",
+                      minLength: 8,
+                      maxLength: 100,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "201": { description: "Organisation and owner created; JWT issued." },
+            "400": { description: "Invalid input or email already registered." },
+            "403": { description: "Signup locked after the first organisation." },
+          },
+          "x-response-example": JSON.stringify({
+            token: "eyJhbGciOi…",
+            user: {
+              id: "u_owner1",
+              email: "owner@example.com",
+              role: "owner",
+              orgId: "o_kyro",
+            },
+          }),
+        },
+      },
+      "/auth/login": {
+        post: {
+          summary: "Log in to an existing account",
+          tags: ["Auth"],
+          security: [],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["email", "password"],
+                  properties: {
+                    email: { type: "string", format: "email" },
+                    password: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": { description: "Session token issued." },
+            "400": { description: "Invalid input." },
+            "401": { description: "Unknown email or wrong password." },
+          },
+          "x-response-example": JSON.stringify({
+            token: "eyJhbGciOi…",
+            user: {
+              id: "u_owner1",
+              email: "test@example.com",
+              role: "owner",
+              orgId: "o_kyro",
+            },
+          }),
+        },
+      },
+      "/auth/me": {
+        get: {
+          summary: "Current user",
+          tags: ["Auth"],
+          security: [{ bearerAuth: [] }],
+          responses: {
+            "200": { description: "The authenticated user." },
+            "401": { description: "Missing or invalid token." },
+            "404": { description: "User no longer exists." },
+          },
+          "x-response-example": JSON.stringify({
+            id: "u_owner1",
+            email: "test@example.com",
+            role: "owner",
+            orgId: "o_kyro",
+          }),
+        },
+      },
+      "/auth/setup-status": {
+        get: {
+          summary: "Whether the deployment has been bootstrapped",
+          description:
+            "Public probe for the onboarding flow. On a database outage it degrades to a 500 with configured: false instead of an error body.",
+          tags: ["Auth"],
+          security: [],
+          parameters: [],
+          responses: {
+            "200": { description: "Setup state." },
+            "500": { description: "Database outage, reported as unconfigured." },
+          },
+          "x-response-example": JSON.stringify({ configured: true }),
+        },
+      },
+      "/org": {
+        get: {
+          summary: "Current organisation",
+          tags: ["Organisation"],
+          security: [{ bearerAuth: [] }],
+          responses: {
+            "200": { description: "The authenticated user's organisation." },
+            "401": { description: "Missing or invalid token." },
+            "404": { description: "Organisation not found." },
+          },
+          "x-response-example": JSON.stringify({
+            id: "o_kyro",
+            name: "Kyro",
+            slug: "kyro",
+            createdAt: "2026-01-10T09:00:00.000Z",
+          }),
+        },
+      },
+      "/org/members": {
+        get: {
+          summary: "List members",
+          tags: ["Organisation"],
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            {
+              name: "limit",
+              in: "query",
+              required: false,
+              description: "Max results (default 50, max 100).",
+              schema: { type: "integer", default: 50, maximum: 100 },
+            },
+            {
+              name: "offset",
+              in: "query",
+              required: false,
+              description: "Rows to skip (default 0).",
+              schema: { type: "integer", default: 0 },
+            },
+          ],
+          responses: {
+            "200": { description: "Members of the org." },
+            "401": { description: "Missing or invalid token." },
+          },
+          "x-response-example": JSON.stringify({
+            data: [
+              {
+                id: "u_1",
+                email: "owner@example.com",
+                role: "owner",
+                createdAt: "2026-01-10T09:00:00.000Z",
+              },
+              {
+                id: "u_2",
+                email: "member@example.com",
+                role: "member",
+                createdAt: "2026-01-12T10:20:00.000Z",
+              },
+            ],
+            pagination: { total: 2, limit: 50, offset: 0, hasMore: false },
+          }),
+        },
+        post: {
+          summary: "Create a member",
+          description: "Requires the owner role; members join by email + password.",
+          tags: ["Organisation"],
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["email", "password"],
+                  properties: {
+                    email: { type: "string", format: "email" },
+                    password: {
+                      type: "string",
+                      minLength: 8,
+                      maxLength: 100,
+                    },
+                    role: {
+                      type: "string",
+                      enum: ["admin", "member"],
+                      default: "member",
+                    },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "201": { description: "Member created." },
+            "400": { description: "Invalid input or email already in use." },
+            "401": { description: "Missing or invalid token." },
+            "403": { description: "Only the owner may create members." },
+          },
+          "x-response-example": JSON.stringify({
+            id: "u_3",
+            email: "new@example.com",
+            role: "member",
+          }),
+        },
+      },
+      "/org/members/{id}": {
+        delete: {
+          summary: "Remove a member",
+          description:
+            "Requires owner or admin. Owners cannot be removed (403); admins cannot remove other admins (403).",
+          tags: ["Organisation"],
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              description: "Member user UUID.",
+              schema: { type: "string", format: "uuid" },
+            },
+          ],
+          responses: {
+            "204": { description: "Member removed." },
+            "401": { description: "Missing or invalid token." },
+            "403": { description: "Owners are irremovable; admins cannot remove admins." },
+            "404": { description: "Member not found." },
+          },
+        },
+      },
+      "/keys": {
+        get: {
+          summary: "List API keys",
+          tags: ["API Keys"],
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            {
+              name: "limit",
+              in: "query",
+              required: false,
+              description: "Max results (default 50, max 100).",
+              schema: { type: "integer", default: 50, maximum: 100 },
+            },
+            {
+              name: "offset",
+              in: "query",
+              required: false,
+              description: "Rows to skip (default 0).",
+              schema: { type: "integer", default: 0 },
+            },
+          ],
+          responses: {
+            "200": { description: "The org's keys; the secret value is never returned here." },
+            "401": { description: "Missing or invalid token." },
+          },
+          "x-response-example": JSON.stringify({
+            data: [
+              {
+                id: "k_1",
+                name: "docs-exporter",
+                key_prefix: "kyro_live_abcd",
+                scopes: ["read"],
+                last_used_at: "2026-02-01T08:00:00.000Z",
+                revoked_at: null,
+                created_at: "2026-01-15T11:00:00.000Z",
+              },
+            ],
+            pagination: { total: 1, limit: 50, offset: 0, hasMore: false },
+          }),
+        },
+        post: {
+          summary: "Create an API key",
+          description:
+            "Requires owner or admin. The plaintext key is returned exactly once, at creation; later responses only carry key_prefix. Revoke with DELETE /keys/{id} (soft).",
+          tags: ["API Keys"],
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["name"],
+                  properties: {
+                    name: { type: "string", minLength: 1, maxLength: 255 },
+                    scopes: {
+                      type: "array",
+                      items: { type: "string", enum: ["read", "write"] },
+                      default: ["read"],
+                    },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "201": { description: "Key created; key is the only copy of the secret." },
+            "400": { description: "Invalid input." },
+            "401": { description: "Missing or invalid token." },
+            "403": { description: "Owner or admin only." },
+          },
+          "x-response-example": JSON.stringify({
+            id: "k_2",
+            name: "docs-exporter",
+            key_prefix: "kyro_live_wxyz",
+            scopes: ["read"],
+            created_at: "2026-02-02T09:30:00.000Z",
+            key: "kyro_live_wxyz…full…value…",
+          }),
+        },
+      },
+      "/keys/{id}": {
+        delete: {
+          summary: "Revoke an API key",
+          description:
+            "Requires owner or admin. Soft revoke: revoked_at is stamped and the row is kept for audit.",
+          tags: ["API Keys"],
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              description: "API key UUID.",
+              schema: { type: "string", format: "uuid" },
+            },
+          ],
+          responses: {
+            "200": { description: "Key revoked." },
+            "401": { description: "Missing or invalid token." },
+            "403": { description: "Owner or admin only." },
+            "404": { description: "Key unknown for the org or already revoked." },
+          },
+          "x-response-example": JSON.stringify({
+            message: "API key revoked",
+            id: "k_2",
+          }),
+        },
+      },
+      "/usage": {
+        get: {
+          summary: "Usage summary",
+          description:
+            "start_date/end_date span whole days inclusive (the end date counts that entire day); without them the window is all time.",
+          tags: ["Usage"],
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            {
+              name: "start_date",
+              in: "query",
+              required: false,
+              description: "Window start (YYYY-MM-DD).",
+              schema: { type: "string", format: "date" },
+            },
+            {
+              name: "end_date",
+              in: "query",
+              required: false,
+              description: "Window end (YYYY-MM-DD), inclusive whole day.",
+              schema: { type: "string", format: "date" },
+            },
+          ],
+          responses: {
+            "200": { description: "Aggregated usage." },
+            "401": { description: "Missing or invalid token." },
+          },
+          "x-response-example": JSON.stringify({
+            total_requests: 1520,
+            total_bytes_in: 209715200,
+            total_bytes_out: 1048576000,
+            total_storage: 52428800,
+            active_api_keys: 3,
+            storage_limit: 107374182400,
+          }),
+        },
+      },
+      "/usage/daily": {
+        get: {
+          summary: "Daily usage series, newest first",
+          description: "Defaults to the trailing 30 days when dates are omitted.",
+          tags: ["Usage"],
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            {
+              name: "start_date",
+              in: "query",
+              required: false,
+              description: "Series start (YYYY-MM-DD).",
+              schema: { type: "string", format: "date" },
+            },
+            {
+              name: "end_date",
+              in: "query",
+              required: false,
+              description: "Series end (YYYY-MM-DD), inclusive whole day.",
+              schema: { type: "string", format: "date" },
+            },
+          ],
+          responses: {
+            "200": { description: "One row per day with activity." },
+            "401": { description: "Missing or invalid token." },
+          },
+          "x-response-example": JSON.stringify([
+            {
+              date: "2026-02-02",
+              requests: "42",
+              bytes_in: 5242880,
+              bytes_out: 26214400,
+            },
+            {
+              date: "2026-02-01",
+              requests: "120",
+              bytes_in: 15728640,
+              bytes_out: 78643200,
+            },
+          ]),
+        },
+      },
+      "/webhooks": {
+        get: {
+          summary: "List webhooks, newest first",
+          tags: ["Webhooks"],
+          security: [{ bearerAuth: [] }],
+          parameters: [],
+          responses: {
+            "200": { description: "The org's webhooks (no secrets)." },
+            "401": { description: "Missing or invalid token." },
+          },
+          "x-response-example": JSON.stringify([
+            {
+              id: "wh_1",
+              url: "https://ops.example.com/hooks/kyro",
+              events: ["file.ready", "file.failed"],
+              enabled: true,
+              createdAt: "2026-01-20T08:00:00.000Z",
+            },
+          ]),
+        },
+        post: {
+          summary: "Create a webhook",
+          description:
+            "Requires owner or admin. The signing secret is returned only on creation.",
+          tags: ["Webhooks"],
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["url", "events"],
+                  properties: {
+                    url: { type: "string", format: "uri" },
+                    events: {
+                      type: "array",
+                      minItems: 1,
+                      items: {
+                        type: "string",
+                        enum: ["file.ready", "file.failed"],
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "201": { description: "Webhook created with its signing secret." },
+            "400": { description: "Invalid input." },
+            "401": { description: "Missing or invalid token." },
+            "403": { description: "Owner or admin only." },
+          },
+          "x-response-example": JSON.stringify({
+            id: "wh_2",
+            url: "https://ops.example.com/hooks/kyro",
+            events: ["file.ready"],
+            enabled: true,
+            createdAt: "2026-02-02T09:40:00.000Z",
+            secret: "9f2c…64hex…",
+          }),
+        },
+      },
+      "/webhooks/{id}": {
+        patch: {
+          summary: "Update a webhook",
+          description: "Requires owner or admin; all fields optional.",
+          tags: ["Webhooks"],
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              description: "Webhook UUID.",
+              schema: { type: "string", format: "uuid" },
+            },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  minProperties: 1,
+                  properties: {
+                    url: { type: "string", format: "uri" },
+                    events: {
+                      type: "array",
+                      minItems: 1,
+                      items: {
+                        type: "string",
+                        enum: ["file.ready", "file.failed"],
+                      },
+                    },
+                    enabled: { type: "boolean", default: true },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": { description: "Updated webhook." },
+            "400": { description: "Invalid input." },
+            "401": { description: "Missing or invalid token." },
+            "403": { description: "Owner or admin only." },
+            "404": { description: "Webhook not found in the org." },
+          },
+          "x-response-example": JSON.stringify({
+            id: "wh_2",
+            url: "https://ops.example.com/hooks/kyro",
+            events: ["file.ready"],
+            enabled: false,
+          }),
+        },
+        delete: {
+          summary: "Delete a webhook",
+          description: "Requires owner or admin; hard delete.",
+          tags: ["Webhooks"],
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              description: "Webhook UUID.",
+              schema: { type: "string", format: "uuid" },
+            },
+          ],
+          responses: {
+            "204": { description: "Webhook deleted." },
+            "401": { description: "Missing or invalid token." },
+            "403": { description: "Owner or admin only." },
+            "404": { description: "Webhook not found in the org." },
+          },
+        },
+      },
+      "/webhooks/{id}/deliveries": {
+        get: {
+          summary: "Delivery history for a webhook (latest 50)",
+          tags: ["Webhooks"],
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              description: "Webhook UUID.",
+              schema: { type: "string", format: "uuid" },
+            },
+          ],
+          responses: {
+            "200": { description: "Recent delivery attempts, newest first." },
+            "401": { description: "Missing or invalid token." },
+            "404": { description: "Webhook not found in the org." },
+          },
+          "x-response-example": JSON.stringify([
+            {
+              id: "whd_1",
+              event: "file.ready",
+              status: "delivered",
+              statusCode: 200,
+              attempts: 1,
+              lastAttemptAt: "2026-02-02T09:41:00.000Z",
+              createdAt: "2026-02-02T09:40:59.000Z",
+            },
+          ]),
+        },
+      },
+      "/webhooks/events": {
+        get: {
+          summary: "Subscribable events",
+          tags: ["Webhooks"],
+          security: [{ bearerAuth: [] }],
+          parameters: [],
+          responses: {
+            "200": { description: "Event names with human descriptions." },
+            "401": { description: "Missing or invalid token." },
+          },
+          "x-response-example": JSON.stringify({
+            events: ["file.ready", "file.failed"],
+            descriptions: {
+              "file.ready":
+                "A file is queryable — its chunks are persisted and searchable.",
+              "file.failed":
+                "A file will never become queryable in this pass. Re-run via POST /files/:id/reprocess",
+            },
+          }),
+        },
+      },
       "/files": {
         get: {
           summary: "List files",
           tags: ["Files"],
-          security: [{ apiKey: [] }],
+          security: [{ apiKey: [] }, { bearerAuth: [] }],
           "x-scope": "read",
           parameters: [
             {
@@ -49,29 +669,43 @@
               in: "query",
               required: false,
               description: "Max results (default 100, max 100).",
-              schema: { type: "integer" },
+              schema: { type: "integer", default: 100, maximum: 100 },
             },
             {
               name: "cursor",
               in: "query",
               required: false,
-              description: "Pagination cursor from previous response.",
+              description:
+                "Opaque cursor from pagination.nextCursor of the previous page (base64url of {\"createdAt\",\"id\"}).",
               schema: { type: "string" },
             },
           ],
           responses: {
-            "200": { description: "Paginated file list." },
-            "401": { description: "Missing or invalid API key." },
+            "200": {
+              description:
+                "Paginated file list, newest first. Failed rows additionally carry error.",
+            },
+            "400": { description: "Malformed or expired cursor." },
+            "401": { description: "Missing or invalid credentials." },
           },
           "x-response-example": JSON.stringify({
             data: [
               {
-                id: "f_abc123",
+                id: "f_1",
                 name: "contract.pdf",
                 mimeType: "application/pdf",
                 sizeBytes: 204800,
-                createdAt: "2025-01-15T12:00:00Z",
-                extractionStatus: "completed",
+                createdAt: "2026-02-01T12:00:00.000Z",
+                status: "ready",
+              },
+              {
+                id: "f_2",
+                name: "broken.pdf",
+                mimeType: "application/pdf",
+                sizeBytes: 4096,
+                createdAt: "2026-01-31T12:00:00.000Z",
+                status: "failed",
+                error: "PDF parse error",
               },
             ],
             pagination: { limit: 100, hasMore: false, nextCursor: null },
@@ -79,8 +713,10 @@
         },
         post: {
           summary: "Upload file",
+          description:
+            "Extractable types (PDF, DOC/DOCX, TXT) start the pipeline immediately: pending → processing → ready (or failed). CSV and JSON are stored without extraction (status \"skipped\"); any other type is rejected with 415. The deployment-wide storage cap answers 507.",
           tags: ["Files"],
-          security: [{ apiKey: [] }],
+          security: [{ apiKey: [] }, { bearerAuth: [] }],
           "x-scope": "write",
           requestBody: {
             required: true,
@@ -94,7 +730,7 @@
                       type: "string",
                       format: "binary",
                       description:
-                        "The file to upload. PDF, DOCX, and TXT are supported for text extraction; CSV and JSON are stored without extraction (status \"skipped\"); any other type is rejected with 415.",
+                        "PDF, DOCX, DOC and TXT are extracted; CSV and JSON are stored as \"skipped\"; other types are rejected with 415.",
                     },
                   },
                 },
@@ -104,27 +740,31 @@
           responses: {
             "201": {
               description:
-                "File uploaded. Text extraction queued automatically if Redis is available.",
+                "File stored; the pipeline is queued for extractable types.",
             },
-            "401": { description: "Missing or invalid API key." },
-            "403": { description: "Storage quota exceeded." },
+            "400": { description: "No file field in the multipart body." },
+            "401": { description: "Missing or invalid credentials." },
+            "403": { description: "Not write-scoped (`Required scope: write`)." },
             "413": { description: "File exceeds the 100 MB limit." },
+            "415": { description: "Unsupported file type." },
+            "507": { description: "Deployment storage limit reached." },
           },
           "x-response-example": JSON.stringify({
-            id: "f_abc123",
+            id: "f_1",
             name: "contract.pdf",
             mimeType: "application/pdf",
             sizeBytes: 204800,
-            createdAt: "2025-01-15T12:00:00Z",
-            extractionStatus: "pending",
+            createdAt: "2026-02-01T12:00:00.000Z",
+            status: "pending",
           }),
         },
       },
       "/files/{id}": {
         get: {
           summary: "Download file",
+          description: "Streams the original bytes as an attachment.",
           tags: ["Files"],
-          security: [{ apiKey: [] }],
+          security: [{ apiKey: [] }, { bearerAuth: [] }],
           "x-scope": "read",
           parameters: [
             {
@@ -136,16 +776,18 @@
             },
           ],
           responses: {
-            "200": { description: "Binary file stream." },
-            "401": { description: "Unauthorized." },
-            "404": { description: "File not found." },
+            "200": { description: "Binary file stream (attachment)." },
+            "401": { description: "Missing or invalid credentials." },
+            "404": { description: "Unknown file, or the bytes are missing on disk." },
           },
-          "x-response-example": "Binary file stream.",
+          "x-response-example": "Binary file stream (attachment).",
         },
         delete: {
           summary: "Delete file",
+          description:
+            "Hard delete — removes the record, the on-disk bytes and cascading rows (chunks, metadata, collection membership).",
           tags: ["Files"],
-          security: [{ apiKey: [] }],
+          security: [{ apiKey: [] }, { bearerAuth: [] }],
           "x-scope": "write",
           parameters: [
             {
@@ -157,51 +799,22 @@
             },
           ],
           responses: {
-            "200": { description: "File soft-deleted and removed from disk." },
-            "401": { description: "Unauthorized." },
+            "200": { description: "Deleted." },
+            "401": { description: "Missing or invalid credentials." },
+            "403": { description: "Not write-scoped." },
             "404": { description: "File not found." },
           },
           "x-response-example": JSON.stringify({
             message: "File deleted",
-            id: "f_abc123",
-          }),
-        },
-      },
-      "/files/{id}/extract": {
-        post: {
-          summary: "Trigger text extraction",
-          tags: ["Files"],
-          security: [{ apiKey: [] }],
-          "x-scope": "write",
-          parameters: [
-            {
-              name: "id",
-              in: "path",
-              required: true,
-              description: "File UUID.",
-              schema: { type: "string", format: "uuid" },
-            },
-          ],
-          responses: {
-            "202": { description: "Extraction queued (Redis available)." },
-            "200": {
-              description: "Extraction completed synchronously (no Redis).",
-            },
-            "400": { description: "File type not supported for extraction." },
-            "409": { description: "Extraction already in progress." },
-          },
-          "x-response-example": JSON.stringify({
-            fileId: "f_abc123",
-            extractionStatus: "pending",
-            message: "Extraction queued. Poll GET /files/:id/text for status.",
+            id: "f_1",
           }),
         },
       },
       "/files/{id}/text": {
         get: {
-          summary: "Get extracted text",
+          summary: "Extracted text for a file",
           tags: ["Files"],
-          security: [{ apiKey: [] }],
+          security: [{ apiKey: [] }, { bearerAuth: [] }],
           "x-scope": "read",
           parameters: [
             {
@@ -213,21 +826,24 @@
             },
           ],
           responses: {
-            "200": { description: "Extraction status and text if available." },
+            "200": { description: "Extraction state and (where present) the text." },
+            "401": { description: "Missing or invalid credentials." },
             "404": { description: "File not found." },
           },
           "x-response-example": JSON.stringify({
-            fileId: "f_abc123",
-            extractionStatus: "completed",
-            extractedText: "This agreement is entered into...",
+            fileId: "f_1",
+            status: "ready",
+            extractedText: "The payment terms are payable within 30 days…",
           }),
         },
       },
-      "/files/{id}/embed": {
+      "/files/{id}/reprocess": {
         post: {
-          summary: "Embed file chunks",
-          tags: ["Embeddings"],
-          security: [{ apiKey: [] }],
+          summary: "Re-run the pipeline for a file",
+          description:
+            "Resets the file to pending and re-runs extract → embed in one flow. 400 (with supportedTypes) for types with nothing to reprocess; 409 while a pipeline run is already in progress.",
+          tags: ["Files"],
+          security: [{ apiKey: [] }, { bearerAuth: [] }],
           "x-scope": "write",
           parameters: [
             {
@@ -239,178 +855,145 @@
             },
           ],
           responses: {
-            "200": { description: "Chunks embedded via local Ollama model." },
-            "400": {
-              description:
-                "No extracted text available — run extraction first.",
-            },
+            "202": { description: "Reprocess started." },
+            "400": { description: "Type with nothing to reprocess; supportedTypes lists accepted MIMEs." },
+            "401": { description: "Missing or invalid credentials." },
+            "403": { description: "Not write-scoped." },
             "404": { description: "File not found." },
+            "409": { description: "Pipeline already in progress; body carries the current status." },
           },
           "x-response-example": JSON.stringify({
-            fileId: "f_abc123",
-            embeddingStatus: "completed",
-            chunksCreated: 14,
+            fileId: "f_1",
+            status: "pending",
+            message: "Reprocessing started",
           }),
         },
       },
-      "/files/ask": {
-        post: {
-          summary: "Ask a question",
-          tags: ["Embeddings"],
-          security: [{ apiKey: [] }],
+      "/files/{id}/metadata": {
+        get: {
+          summary: "File metadata",
+          description: "Always a flat object (the column is jsonb, non-null).",
+          tags: ["Files"],
+          security: [{ apiKey: [] }, { bearerAuth: [] }],
           "x-scope": "read",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              description: "File UUID.",
+              schema: { type: "string", format: "uuid" },
+            },
+          ],
+          responses: {
+            "200": { description: "Flat metadata map." },
+            "401": { description: "Missing or invalid credentials." },
+            "404": { description: "File not found." },
+          },
+          "x-response-example": JSON.stringify({
+            document_type: "contract",
+            effective_date: "2026-01-01",
+          }),
+        },
+        put: {
+          summary: "Upsert file metadata",
+          description:
+            "Non-destructive merge — keys not in the body keep their values, body keys win. Values must be strings. An empty body answers {}. Remove a key with DELETE /files/{id}/metadata/{key}.",
+          tags: ["Files"],
+          security: [{ apiKey: [] }, { bearerAuth: [] }],
+          "x-scope": "write",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              description: "File UUID.",
+              schema: { type: "string", format: "uuid" },
+            },
+          ],
           requestBody: {
             required: true,
             content: {
               "application/json": {
                 schema: {
                   type: "object",
-                  required: ["question"],
-                  properties: {
-                    question: {
-                      type: "string",
-                      description:
-                        "The question to answer from your documents.",
-                    },
-                    fileIds: {
-                      type: "array",
-                      items: { type: "string", format: "uuid" },
-                      description:
-                        "Scope search to specific files. Omit to search the entire org.",
-                    },
-                    collectionId: {
-                      type: "string",
-                      format: "uuid",
-                      description:
-                        "Scope search to a collection. Mutually exclusive with fileIds.",
-                    },
-                    filters: {
-                      type: "object",
-                      description:
-                        "Metadata key/value filters to scope the search. AND across keys, OR across values.",
-                    },
-                    topK: {
-                      type: "integer",
-                      description: "Chunks to retrieve (default 8, max 20).",
-                    },
-                    stream: {
-                      type: "boolean",
-                      description:
-                        "Stream the answer as SSE events (default true).",
-                    },
-                  },
+                  additionalProperties: { type: "string" },
                 },
               },
             },
           },
           responses: {
-            "200": {
-              description:
-                "SSE stream of sources, answer chunks, and done event.",
-            },
-            "422": {
-              description: "No embedded files found matching the scope.",
-            },
+            "200": { description: "The upserted keys (the body, as stored)." },
+            "400": { description: "Body is not a flat object of string values." },
+            "401": { description: "Missing or invalid credentials." },
+            "403": { description: "Not write-scoped." },
+            "404": { description: "File not found." },
           },
-          "x-response-example": `// SSE stream:\ndata: {"type":"sources","sources":[{"fileId":"...","fileName":"contract.pdf","content":"...","rrfScore":0.031}]}\ndata: {"type":"chunk","text":"According to [1], the payment terms..."}\ndata: {"type":"done"}`,
+          "x-response-example": JSON.stringify({
+            document_type: "contract",
+          }),
         },
       },
-      "/files/semantic-search": {
-        get: {
-          summary: "Semantic search",
-          tags: ["Embeddings"],
-          security: [{ apiKey: [] }],
-          "x-scope": "read",
+      "/files/{id}/metadata/{key}": {
+        delete: {
+          summary: "Delete one metadata key",
+          description: "A missing key is a no-op; only an unknown file is an error.",
+          tags: ["Files"],
+          security: [{ apiKey: [] }, { bearerAuth: [] }],
+          "x-scope": "write",
           parameters: [
             {
-              name: "q",
-              in: "query",
+              name: "id",
+              in: "path",
               required: true,
-              description: "Search query.",
+              description: "File UUID.",
+              schema: { type: "string", format: "uuid" },
+            },
+            {
+              name: "key",
+              in: "path",
+              required: true,
+              description: "Metadata key.",
               schema: { type: "string" },
-            },
-            {
-              name: "limit",
-              in: "query",
-              required: false,
-              description: "Max chunks returned (default 10, max 50).",
-              schema: { type: "integer" },
-            },
-            {
-              name: "file_ids",
-              in: "query",
-              required: false,
-              description: "Comma-separated file UUIDs to scope the search.",
-              schema: { type: "string" },
-            },
-            {
-              name: "collection_id",
-              in: "query",
-              required: false,
-              description: "Collection UUID to scope the search.",
-              schema: { type: "string" },
-            },
-            {
-              name: "min_score",
-              in: "query",
-              required: false,
-              description: "Minimum RRF score threshold (default 0.01).",
-              schema: { type: "number" },
             },
           ],
           responses: {
-            "200": {
-              description: "Ranked chunks from hybrid BM25 + vector retrieval.",
-            },
-            "400": {
-              description: "Missing query or OLLAMA_URL not configured.",
-            },
+            "204": { description: "Key removed (or was already absent)." },
+            "401": { description: "Missing or invalid credentials." },
+            "403": { description: "Not write-scoped." },
+            "404": { description: "File not found." },
           },
-          "x-response-example": JSON.stringify({
-            data: [
-              {
-                fileId: "f_abc123",
-                fileName: "contract.pdf",
-                chunkIndex: 2,
-                content: "Payment is due within 30 days...",
-                rrfScore: 0.031,
-              },
-            ],
-            query: "payment terms",
-            limit: 10,
-            minScore: 0.01,
-          }),
         },
       },
       "/collections": {
         get: {
-          summary: "List collections",
+          summary: "List collections, newest first",
           tags: ["Collections"],
-          security: [{ apiKey: [] }],
+          security: [{ apiKey: [] }, { bearerAuth: [] }],
           "x-scope": "read",
           parameters: [],
           responses: {
-            "200": {
-              description: "Collections with embedding status summary.",
-            },
+            "200": { description: "Collections with file-count roll-ups." },
+            "401": { description: "Missing or invalid credentials." },
           },
           "x-response-example": JSON.stringify([
             {
-              id: "c_xyz",
-              name: "Q1 Contracts",
-              slug: "q1-contracts",
-              fileCount: 12,
-              embeddedCount: 11,
+              id: "c_1",
+              name: "Mergers",
+              description: "Deal documents",
+              createdAt: "2026-01-25T10:00:00.000Z",
+              updatedAt: "2026-02-01T10:00:00.000Z",
+              fileCount: 3,
+              embeddedCount: 2,
               pendingCount: 1,
               failedCount: 0,
-              createdAt: "2025-01-10T09:00:00Z",
             },
           ]),
         },
         post: {
-          summary: "Create collection",
+          summary: "Create a collection",
           tags: ["Collections"],
-          security: [{ apiKey: [] }],
+          security: [{ apiKey: [] }, { bearerAuth: [] }],
           "x-scope": "write",
           requestBody: {
             required: true,
@@ -420,14 +1003,8 @@
                   type: "object",
                   required: ["name"],
                   properties: {
-                    name: {
-                      type: "string",
-                      description: "Collection name (unique within your org).",
-                    },
-                    description: {
-                      type: "string",
-                      description: "Optional description.",
-                    },
+                    name: { type: "string", minLength: 1, maxLength: 255 },
+                    description: { type: "string", maxLength: 2000 },
                   },
                 },
               },
@@ -435,21 +1012,172 @@
           },
           responses: {
             "201": { description: "Collection created." },
+            "400": { description: "Invalid input." },
+            "401": { description: "Missing or invalid credentials." },
           },
           "x-response-example": JSON.stringify({
-            id: "c_xyz",
-            name: "Q1 Contracts",
-            slug: "q1-contracts",
-            description: null,
-            createdAt: "2025-01-10T09:00:00Z",
+            id: "c_1",
+            name: "Mergers",
+            description: "Deal documents",
+            createdAt: "2026-01-25T10:00:00.000Z",
           }),
         },
       },
-      "/collections/{id}/files": {
-        post: {
-          summary: "Add files to collection",
+      "/collections/{id}": {
+        get: {
+          summary: "Collection detail",
+          description: "Adds skippedCount and queryReady to the count roll-up.",
           tags: ["Collections"],
-          security: [{ apiKey: [] }],
+          security: [{ apiKey: [] }, { bearerAuth: [] }],
+          "x-scope": "read",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              description: "Collection UUID.",
+              schema: { type: "string", format: "uuid" },
+            },
+          ],
+          responses: {
+            "200": { description: "The collection." },
+            "401": { description: "Missing or invalid credentials." },
+            "404": { description: "Collection not found." },
+          },
+          "x-response-example": JSON.stringify({
+            id: "c_1",
+            name: "Mergers",
+            description: "Deal documents",
+            createdAt: "2026-01-25T10:00:00.000Z",
+            updatedAt: "2026-02-01T10:00:00.000Z",
+            fileCount: 3,
+            embeddedCount: 2,
+            pendingCount: 1,
+            failedCount: 0,
+            skippedCount: 0,
+            queryReady: false,
+          }),
+        },
+        patch: {
+          summary: "Update a collection",
+          description:
+            "Partial update. Renaming to the current name is a plain no-op (no slug state exists), so no conflict status exists.",
+          tags: ["Collections"],
+          security: [{ apiKey: [] }, { bearerAuth: [] }],
+          "x-scope": "write",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              description: "Collection UUID.",
+              schema: { type: "string", format: "uuid" },
+            },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  minProperties: 1,
+                  properties: {
+                    name: { type: "string", minLength: 1, maxLength: 255 },
+                    description: { type: "string", maxLength: 2000 },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": { description: "Updated collection." },
+            "400": { description: "Invalid input." },
+            "401": { description: "Missing or invalid credentials." },
+            "404": { description: "Collection not found." },
+          },
+          "x-response-example": JSON.stringify({
+            id: "c_1",
+            name: "Mergers 2026",
+            description: "Deal documents",
+            updatedAt: "2026-02-02T11:00:00.000Z",
+          }),
+        },
+        delete: {
+          summary: "Delete a collection",
+          description: "Membership rows detach; the files themselves are kept.",
+          tags: ["Collections"],
+          security: [{ apiKey: [] }, { bearerAuth: [] }],
+          "x-scope": "write",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              description: "Collection UUID.",
+              schema: { type: "string", format: "uuid" },
+            },
+          ],
+          responses: {
+            "204": { description: "Collection deleted." },
+            "401": { description: "Missing or invalid credentials." },
+            "404": { description: "Collection not found." },
+          },
+        },
+      },
+      "/collections/{id}/files": {
+        get: {
+          summary: "List a collection's files",
+          tags: ["Collections"],
+          security: [{ apiKey: [] }, { bearerAuth: [] }],
+          "x-scope": "read",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              description: "Collection UUID.",
+              schema: { type: "string", format: "uuid" },
+            },
+            {
+              name: "limit",
+              in: "query",
+              required: false,
+              description: "Max results (default 100, max 100).",
+              schema: { type: "integer", default: 100, maximum: 100 },
+            },
+            {
+              name: "offset",
+              in: "query",
+              required: false,
+              description: "Rows to skip (default 0).",
+              schema: { type: "integer", default: 0 },
+            },
+          ],
+          responses: {
+            "200": { description: "Files in the collection, newest added first." },
+            "401": { description: "Missing or invalid credentials." },
+            "404": { description: "Collection not found." },
+          },
+          "x-response-example": JSON.stringify({
+            data: [
+              {
+                id: "f_1",
+                name: "contract.pdf",
+                mimeType: "application/pdf",
+                sizeBytes: 204800,
+                status: "ready",
+                createdAt: "2026-02-01T12:00:00.000Z",
+                addedAt: "2026-02-01T12:05:00.000Z",
+              },
+            ],
+            pagination: { total: 1, limit: 100, offset: 0, hasMore: false },
+          }),
+        },
+        post: {
+          summary: "Add files to a collection",
+          description: "Adds an org-owned set of files; duplicates are ignored.",
+          tags: ["Collections"],
+          security: [{ apiKey: [] }, { bearerAuth: [] }],
           "x-scope": "write",
           parameters: [
             {
@@ -470,8 +1198,9 @@
                   properties: {
                     fileIds: {
                       type: "array",
+                      minItems: 1,
+                      maxItems: 100,
                       items: { type: "string", format: "uuid" },
-                      description: "Up to 100 file UUIDs to add.",
                     },
                   },
                 },
@@ -481,30 +1210,212 @@
           responses: {
             "200": { description: "Files added." },
             "400": {
-              description: "Some file IDs not found or not owned by your org.",
+              description:
+                "Invalid input, or some file IDs are unknown/not org-owned (then invalidFileIds lists them).",
             },
+            "401": { description: "Missing or invalid credentials." },
+            "404": { description: "Collection not found." },
           },
           "x-response-example": JSON.stringify({
             added: 3,
-            collectionId: "c_xyz",
+            collectionId: "c_1",
           }),
+        },
+      },
+      "/collections/{id}/files/{fileId}": {
+        delete: {
+          summary: "Remove a file from a collection",
+          tags: ["Collections"],
+          security: [{ apiKey: [] }, { bearerAuth: [] }],
+          "x-scope": "write",
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              description: "Collection UUID.",
+              schema: { type: "string", format: "uuid" },
+            },
+            {
+              name: "fileId",
+              in: "path",
+              required: true,
+              description: "File UUID.",
+              schema: { type: "string", format: "uuid" },
+            },
+          ],
+          responses: {
+            "204": { description: "File removed from the collection." },
+            "401": { description: "Missing or invalid credentials." },
+            "404": { description: "Collection unknown, or the file is not a member." },
+          },
+        },
+      },
+      "/search": {
+        get: {
+          summary: "Hybrid search across embedded chunks",
+          description:
+            "Combines keyword and embedding retrieval, ranked by Reciprocal Rank Fusion (rrfScore, higher = better). Scope with exactly one of collection_id or file_ids — both, or neither with a filter, is 400; unknown scopes 404; empty scopes 422. filters carries metadata filters as a URL-encoded JSON object whose values are strings or arrays of strings.",
+          tags: ["Search"],
+          security: [{ apiKey: [] }, { bearerAuth: [] }],
+          "x-scope": "read",
+          parameters: [
+            {
+              name: "q",
+              in: "query",
+              required: true,
+              description: "The query text.",
+              schema: { type: "string", minLength: 1 },
+            },
+            {
+              name: "limit",
+              in: "query",
+              required: false,
+              description: "Max results (default 10, max 50).",
+              schema: { type: "integer", default: 10, maximum: 50 },
+            },
+            {
+              name: "collection_id",
+              in: "query",
+              required: false,
+              description: "Restrict to one collection's embedded files (mutually exclusive with file_ids).",
+              schema: { type: "string", format: "uuid" },
+            },
+            {
+              name: "file_ids",
+              in: "query",
+              required: false,
+              description: "Comma-separated org file UUIDs to scope to (mutually exclusive with collection_id).",
+              schema: { type: "string" },
+            },
+            {
+              name: "filters",
+              in: "query",
+              required: false,
+              description: "URL-encoded JSON object of metadata filters (string or string[] values).",
+              schema: { type: "string" },
+            },
+          ],
+          responses: {
+            "200": { description: "Ranked chunks for the query." },
+            "400": { description: "Missing q, both scopes given, or malformed filters." },
+            "401": { description: "Missing or invalid credentials." },
+            "404": { description: "Unknown collection or no owned files among file_ids." },
+            "422": { description: "Empty collection, no filter match, or empty intersection." },
+          },
+          "x-response-example": JSON.stringify({
+            data: [
+              {
+                fileId: "f_1",
+                fileName: "contract.pdf",
+                chunkIndex: 3,
+                content: "The payment terms are payable within 30 days…",
+                rrfScore: 0.032,
+              },
+            ],
+            query: "payment terms",
+            limit: 10,
+          }),
+        },
+      },
+      "/ask": {
+        post: {
+          summary: "Answer a question from retrieved context",
+          description:
+            "Retrieves top-k chunks (same hybrid ranking as /search), builds a document-grounded prompt with citations, then either answers over Server-Sent Events (stream defaults to true — sources → chunk* → done, all named only by type on data: frames; an in-band error event keeps 200 semantics) or returns one JSON object {answer, sources} with stream: false. Scope with collectionId or fileIds (mutually exclusive), history replays prior turns, model overrides the chat model. Requires OLLAMA_URL configured, otherwise 400.",
+          tags: ["Ask"],
+          security: [{ apiKey: [] }, { bearerAuth: [] }],
+          "x-scope": "read",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["question"],
+                  properties: {
+                    question: { type: "string", minLength: 1, maxLength: 2000 },
+                    fileIds: {
+                      type: "array",
+                      maxItems: 20,
+                      items: { type: "string", format: "uuid" },
+                      description: "Scope to specific files (mutually exclusive with collectionId).",
+                    },
+                    collectionId: {
+                      type: "string",
+                      format: "uuid",
+                      description: "Scope to one collection (mutually exclusive with fileIds).",
+                    },
+                    filters: {
+                      type: "object",
+                      additionalProperties: {
+                        type: "string",
+                      },
+                      description:
+                        "Metadata filters, same shape as the /search query parameter (string or string[] values).",
+                    },
+                    topK: {
+                      type: "integer",
+                      minimum: 1,
+                      maximum: 20,
+                      default: 8,
+                    },
+                    model: {
+                      type: "string",
+                      description: "Chat model override; defaults to the deployment's configured model.",
+                    },
+                    stream: { type: "boolean", default: true },
+                    history: {
+                      type: "array",
+                      maxItems: 10,
+                      items: {
+                        type: "object",
+                        required: ["role", "content"],
+                        properties: {
+                          role: { type: "string", enum: ["user", "assistant"] },
+                          content: { type: "string", minLength: 1, maxLength: 2000 },
+                        },
+                      },
+                      description: "Prior user/assistant turns for multi-turn conversations.",
+                    },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description:
+                "Answer as an SSE stream when the body requested streaming, or one JSON object otherwise.",
+            },
+            "400": {
+              description:
+                "Invalid input, or the endpoint is disabled (OLLAMA_URL unset).",
+            },
+            "401": { description: "Missing or invalid credentials." },
+            "404": { description: "Unknown collection or no owned files among file_ids." },
+            "422": { description: "Empty collection, no filter match, or empty intersection." },
+          },
+          "x-response-example": `// SSE stream:\ndata: {"type":"sources","sources":[{"fileId":"f_1","fileName":"contract.pdf","chunkIndex":3,"content":"The payment terms…","rrfScore":0.032}]}\ndata: {"type":"chunk","text":"According to [1], the payment terms…"}\ndata: {"type":"done"}\n\n// stream: false → application/json:\n{"answer":"According to [1], payment is due in 30 days.","sources":[{"fileId":"f_1","fileName":"contract.pdf","chunkIndex":3,"content":"The payment terms…","rrfScore":0.032}]}`,
         },
       },
       "/health": {
         get: {
-          summary: "Health check",
+          summary: "Backend health",
+          description:
+            "Sits at the origin root (not under /api/v1). Reports database reachability only; degraded answers 503.",
           tags: ["Health"],
           security: [],
           parameters: [],
           responses: {
-            "200": { description: "All dependencies healthy." },
-            "503": { description: "One or more dependencies degraded." },
+            "200": { description: "Healthy." },
+            "503": { description: "Degraded (database unreachable)." },
           },
           "x-response-example": JSON.stringify({
             status: "ok",
-            database: "connected",
-            redis: "connected",
             uptime: 86400,
+            timestamp: "2026-02-02T12:00:00.000Z",
+            database: "connected",
           }),
         },
       },
@@ -566,12 +1477,29 @@
     id: string;
   }
 
-  const TAG_ORDER = ["Files", "Embeddings", "Collections", "Health"];
+  const TAG_ORDER = [
+    "Auth",
+    "Organisation",
+    "API Keys",
+    "Usage",
+    "Webhooks",
+    "Files",
+    "Collections",
+    "Search",
+    "Ask",
+    "Health",
+  ];
 
   const TAG_IDS: Record<string, string> = {
+    Auth: "auth",
+    Organisation: "organisation",
+    "API Keys": "api-keys",
+    Usage: "usage",
+    Webhooks: "webhooks",
     Files: "files",
-    Embeddings: "embeddings",
     Collections: "collections",
+    Search: "search",
+    Ask: "ask",
     Health: "health",
   };
 
@@ -617,7 +1545,7 @@
     { id: "auth", label: "Authentication" },
     { id: "rag-pipeline", label: "RAG Pipeline" },
     { id: "rag-ask", label: "↳ /ask" },
-    { id: "rag-search", label: "↳ semantic-search" },
+    { id: "rag-search", label: "↳ /search" },
     { id: "metadata-filters", label: "Metadata Filters" },
     { id: "rate-limiting", label: "Rate Limiting" },
     { id: "errors", label: "Error Codes" },
@@ -708,7 +1636,7 @@
   function generateCurl(ep: Endpoint): string {
     const authType = getAuthType(ep.op);
     const body = parseRequestBody(ep.op);
-    const baseUrl = "http://localhost:3000/api/v2";
+    const baseUrl = "http://localhost:3000/api/v1";
 
     const lines: string[] = [`curl -X ${ep.method} \\`];
     lines.push(`  "${baseUrl}${ep.path}" \\`);
@@ -747,7 +1675,7 @@
   function generateFetch(ep: Endpoint): string {
     const authType = getAuthType(ep.op);
     const body = parseRequestBody(ep.op);
-    const baseUrl = "http://localhost:3000/api/v2";
+    const baseUrl = "http://localhost:3000/api/v1";
 
     const headers: Record<string, string> = {};
     if (authType === "bearer") headers["Authorization"] = "Bearer JWT_TOKEN";
@@ -888,17 +1816,22 @@ const data = await response.json();`;
     {
       code: "422",
       label: "Unprocessable",
-      desc: "No embedded files found for the requested scope — embed files first",
+      desc: "Empty scope — the collection has no embedded files, no files match the metadata filters, or the intersection of all constraints is empty",
     },
     {
       code: "429",
       label: "Too Many Requests",
-      desc: "Rate limit exceeded — check Retry-After header",
+      desc: "Rate limit exceeded — the body carries retryAfter (seconds)",
     },
     {
       code: "500",
       label: "Internal Server Error",
       desc: "Unexpected server-side error",
+    },
+    {
+      code: "507",
+      label: "Insufficient Storage",
+      desc: "Deployment storage limit reached",
     },
   ];
 </script>
@@ -999,7 +1932,7 @@ const data = await response.json();`;
                   >{ep.method}</span
                 >
                 <span class="sidebar-path"
-                  >{ep.path.replace("/api/v2", "")}</span
+                  >{ep.path}</span
                 >
               </a>
             {/each}
@@ -1023,7 +1956,7 @@ const data = await response.json();`;
         <div class="info-grid">
           <div class="info-card">
             <span class="info-label">Default URL</span>
-            <code class="info-value">http://localhost:3000/api/v2</code>
+            <code class="info-value">http://localhost:3000/api/v1</code>
           </div>
           <div class="info-card">
             <span class="info-label">License</span>
@@ -1042,7 +1975,11 @@ const data = await response.json();`;
         </div>
 
         <div class="spec-download">
-          <a href="/openapi.yaml" target="_blank" class="spec-link">
+          <a
+            href="https://github.com/Kyroinfra/Kyro/blob/main/packages/api/openapi.yaml"
+            target="_blank"
+            class="spec-link"
+          >
             <svg
               width="13"
               height="13"
@@ -1091,9 +2028,9 @@ const data = await response.json();`;
             </div>
             <h3 class="access-title">TypeScript SDK</h3>
             <p class="access-desc">
-              The official <code>kyro-sdk</code> package. Typed methods for every
-              API operation — upload, embed, search, ask. The easiest way to integrate
-              Kyro into a Node.js or browser application.
+              The official <code>kyro-sdk</code> package. Typed methods for
+              files, collections and metadata — upload, list, tag, organize.
+              For search and ask, use the HTTP API below.
             </p>
             <a href="#sdk" class="access-link">SDK reference →</a>
           </div>
@@ -1151,9 +2088,8 @@ const data = await response.json();`;
                   <span class="code-lang">scopes</span>
                 </div>
                 <pre><code
-                    >read   — list files, search, ask questions
-write  — upload, delete, embed files
-admin  — full access including key management</code
+                    >read   — list and download files, search, ask questions
+write  — upload, delete and reprocess files; manage collections</code
                   ></pre>
               </div>
             </div>
@@ -1165,10 +2101,9 @@ admin  — full access including key management</code
               <h4>Upload and manage files</h4>
               <p class="section-desc" style="margin-bottom: 0">
                 The <strong>Files</strong> page lets you drag-and-drop uploads, track
-                extraction and embedding status per file, download originals, and
-                add files to collections. Text extraction and embedding are triggered
-                automatically — you can also re-trigger them manually from the file
-                row.
+                pipeline status per file, download originals, and
+                add files to collections. Extraction and embedding run
+                automatically — failed files can be re-run from the file row.
               </p>
             </div>
           </div>
@@ -1250,7 +2185,7 @@ admin  — full access including key management</code
           </div>
           <div class="info-card">
             <span class="info-label">Default API version</span>
-            <code class="info-value">v2</code>
+            <code class="info-value">v1</code>
           </div>
         </div>
 
@@ -1277,18 +2212,16 @@ admin  — full access including key management</code
                   `import { KyroClient } from "kyro-sdk";
 
 const kyro = new KyroClient({
-  baseURL: "http://localhost:3000/api/v2",
+  baseURL: "http://localhost:3000/api/v1",
   apiKey:  "kyro_live_...",
 });
 
-// Upload a file
+// Upload a file — extraction + embedding run automatically
 const file = await kyro.files.upload(blob, "report.pdf");
 
-// Ask a question (non-streaming)
-const { answer, sources } = await kyro.files.ask({
-  question: "What are the key findings?",
-  stream:   false,
-});`,
+// Poll until the file is queryable (files.status)
+const { status } = await kyro.files.getText(file.id);
+// status: "pending" | "processing" | "ready" | "failed" | "skipped"`,
                   "sdk-quickstart",
                 )}
             >
@@ -1303,30 +2236,28 @@ const { answer, sources } = await kyro.files.ask({
 <span class="ck">const</span> kyro = <span class="ck">new</span> <span
                 class="cs">KyroClient</span
               >({"{"} 
-  baseURL: <span class="cs">"http://localhost:3000/api/v2"</span>,
+  baseURL: <span class="cs">"http://localhost:3000/api/v1"</span>,
   apiKey:  <span class="cs">"kyro_live_..."</span>,
 {"}"});
 
-<span class="c-comment">// Upload a file</span>
+<span class="c-comment">// Upload a file — extraction + embedding run automatically</span>
 <span class="ck">const</span> file = <span class="ck">await</span
               > kyro.files.<span class="cs">upload</span>(blob, <span class="cs"
                 >"report.pdf"</span
               >);
 
-<span class="c-comment">// Ask a question (non-streaming)</span>
-<span class="ck">const</span> {"{ answer, sources }"} = <span class="ck"
-                >await</span
-              > kyro.files.<span class="cs">ask</span>({"{"} 
-  question: <span class="cs">"What are the key findings?"</span>,
-  stream:   <span class="ck">false</span>,
-{"}"});</code
+<span class="c-comment">// Poll until the file is queryable (files.status)</span>
+<span class="ck">const</span> {"{ status }"} = <span class="ck">await</span
+              > kyro.files.<span class="cs">getText</span>(file.id);
+<span class="c-comment">// status: "pending" | "processing" | "ready" | "failed" | "skipped"</span
+            ></code
             ></pre>
         </div>
 
         <h3 class="sdk-subheading" style="margin-top: 32px">
           Typical workflow
         </h3>
-        <p class="section-desc">End-to-end: upload → tag → embed → ask.</p>
+        <p class="section-desc">End-to-end: upload → tag → organize → ask.</p>
 
         <div class="code-block">
           <div class="code-toolbar">
@@ -1335,7 +2266,7 @@ const { answer, sources } = await kyro.files.ask({
               class="copy-btn"
               onclick={() =>
                 copy(
-                  `// 1. Upload
+                  `// 1. Upload — pipeline runs automatically (extract → chunk → embed)
 const file = await kyro.files.upload(pdfBlob, "agreement.pdf");
 
 // 2. Tag with metadata
@@ -1347,20 +2278,24 @@ await kyro.files.setMetadata(file.id, {
 // 3. Add to a collection
 await kyro.collections.addFiles(collectionId, { fileIds: [file.id] });
 
-// 4. Poll until embedded
-let status = (await kyro.files.getText(file.id)).extractionStatus;
-while (status !== "completed") {
+// 4. Poll until the file is queryable
+let { status } = await kyro.files.getText(file.id);
+while (status !== "ready") {
   await new Promise(r => setTimeout(r, 2000));
-  status = (await kyro.files.getText(file.id)).extractionStatus;
+  ({ status } = await kyro.files.getText(file.id));
 }
-await kyro.files.embed(file.id);
 
-// 5. Ask questions
-const { answer } = await kyro.files.ask({
-  question:     "What are the termination conditions?",
-  collectionId: collectionId,
-  stream:       false,
-});`,
+// 5. Ask — use the HTTP API (POST /ask, SSE stream)
+const res = await fetch("http://localhost:3000/api/v1/ask", {
+  method: "POST",
+  headers: { "X-Api-Key": process.env.KYRO_KEY, "Content-Type": "application/json" },
+  body: JSON.stringify({
+    question:     "What are the termination conditions?",
+    collectionId: collectionId,
+    stream:       false,
+  }),
+});
+const { answer, sources } = await res.json();`,
                   "sdk-workflow",
                 )}
             >
@@ -1368,7 +2303,7 @@ const { answer } = await kyro.files.ask({
             </button>
           </div>
           <pre><code
-              ><span class="c-comment">// 1. Upload</span>
+              ><span class="c-comment">// 1. Upload — pipeline runs automatically (extract → chunk → embed)</span>
 <span class="ck">const</span> file = <span class="ck">await</span
               > kyro.files.<span class="cs">upload</span>(pdfBlob, <span
                 class="cs">"agreement.pdf"</span
@@ -1385,28 +2320,37 @@ const { answer } = await kyro.files.ask({
 <span class="ck">await</span> kyro.collections.<span class="cs">addFiles</span
               >(collectionId, {"{"} fileIds: [file.id] {"}"});
 
-<span class="c-comment">// 4. Poll until embedded</span>
-<span class="ck">let</span> status = (<span class="ck">await</span
-              > kyro.files.<span class="cs">getText</span
-              >(file.id)).extractionStatus;
-<span class="ck">while</span> (status !== <span class="cs">"completed"</span
+<span class="c-comment">// 4. Poll until the file is queryable</span>
+<span class="ck">let</span> {"{ status }"} = <span class="ck">await</span
+              > kyro.files.<span class="cs">getText</span>(file.id);
+<span class="ck">while</span> (status !== <span class="cs">"ready"</span
               >) {"{"} 
   <span class="ck">await new</span> Promise(r => <span class="cs"
                 >setTimeout</span
               >(r, <span class="cs">2000</span>));
-  status = (<span class="ck">await</span> kyro.files.<span class="cs"
-                >getText</span
-              >(file.id)).extractionStatus;
+  ({"{ status }"} = <span class="ck">await</span> kyro.files.<span
+                class="cs">getText</span
+              >(file.id));
 {"}"}
-<span class="ck">await</span> kyro.files.<span class="cs">embed</span>(file.id);
 
-<span class="c-comment">// 5. Ask questions</span>
-<span class="ck">const</span> {"{ answer }"} = <span class="ck">await</span
-              > kyro.files.<span class="cs">ask</span>({"{"} 
-  question:     <span class="cs">"What are the termination conditions?"</span>,
-  collectionId: collectionId,
-  stream:       <span class="ck">false</span>,
-{"}"});</code
+<span class="c-comment">// 5. Ask — use the HTTP API (POST /ask, SSE stream)</span>
+<span class="ck">const</span> res = <span class="ck">await</span
+              > <span class="cs">fetch</span>(<span class="cs"
+                >"http://localhost:3000/api/v1/ask"</span
+              >, {"{"}
+  method: <span class="cs">"POST"</span>,
+  headers: {"{"} <span class="cs">"X-Api-Key"</span>: process.env.<span
+                class="ck">KYRO_KEY</span>, <span class="cs"
+                >"Content-Type"</span
+              >: <span class="cs">"application/json"</span> {"}"},
+  body: JSON.<span class="cs">stringify</span>({"{"} 
+    question:     <span class="cs">"What are the termination conditions?"</span>,
+    collectionId: collectionId,
+    stream:       <span class="ck">false</span>,
+  {"}"}),
+{"}"});
+<span class="ck">const</span> {"{ answer, sources }"} = <span class="ck">await</span
+              > res.<span class="cs">json</span>();</code
             ></pre>
         </div>
       </section>
@@ -1415,11 +2359,14 @@ const { answer } = await kyro.files.ask({
       <section id="sdk-files" class="doc-section">
         <h2 class="section-title">SDK · Files</h2>
         <p class="section-desc">
-          All file operations live on <code>kyro.files</code>.
+          All file operations live on <code>kyro.files</code>. The ingest
+          pipeline (extract → chunk → embed) runs automatically on upload —
+          failed files re-run via <code>POST /files/:id/reprocess</code>, and
+          search/ask live on the HTTP API (see below).
         </p>
 
         <div class="sdk-method-list">
-          {#each [{ name: "kyro.files.upload(blob, filename)", desc: "Upload a file. Returns the file record including its ID and initial status. PDF, DOCX and TXT are extracted; CSV and JSON are stored with status \"skipped\"; other types are rejected with 415.", example: `const file = await kyro.files.upload(blob, "contract.pdf");\n// file.id, file.status` }, { name: "kyro.files.list(limit?, cursor?)", desc: "Paginated file list. Pass pagination.nextCursor as the cursor argument to fetch the next page.", example: `const { data, pagination } = await kyro.files.list(50);\nif (pagination.hasMore) {\n  const next = await kyro.files.list(50, pagination.nextCursor);\n}` }, { name: "kyro.files.download(fileId)", desc: "Download the original file as a Blob.", example: `const blob = await kyro.files.download(fileId);` }, { name: "kyro.files.delete(fileId)", desc: "Soft-delete a file and remove it from disk.", example: `await kyro.files.delete(fileId);` }, { name: "kyro.files.getText(fileId)", desc: "Get extraction status and extracted text. Poll this after upload to know when the file is ready to embed.", example: `const { extractionStatus, extractedText } = await kyro.files.getText(fileId);\n// extractionStatus: "pending" | "processing" | "completed" | "failed" | "skipped"` }, { name: "kyro.files.triggerExtraction(fileId)", desc: "Manually trigger text extraction. Extraction runs automatically on upload when Redis is available — use this to re-trigger failed or skipped files.", example: `await kyro.files.triggerExtraction(fileId);` }, { name: "kyro.files.embed(fileId)", desc: "Chunk and embed a file via your local Ollama model. Requires extractionStatus to be 'completed' first.", example: `const { chunksCreated } = await kyro.files.embed(fileId);` }, { name: "kyro.files.setMetadata(fileId, meta)", desc: "Upsert arbitrary key-value metadata on a file. Non-destructive — keys not in the payload are left untouched.", example: `await kyro.files.setMetadata(fileId, {\n  matter_number: "M-2024-001",\n  document_type: "contract",\n});` }, { name: "kyro.files.getMetadata(fileId)", desc: "Return all metadata keys and values for a file.", example: `const meta = await kyro.files.getMetadata(fileId);` }, { name: "kyro.files.deleteMetadataKey(fileId, key)", desc: "Remove a single metadata key.", example: `await kyro.files.deleteMetadataKey(fileId, "counterparty");` }, { name: "kyro.files.search(query, limit?)", desc: "Full-text BM25 keyword search. Returns file-level results with highlighted snippets.", example: `const { data } = await kyro.files.search("indemnification clause");\n// data[i].headline — snippet with <mark> highlights` }, { name: "kyro.files.semanticSearch({ query, ... })", desc: "Hybrid BM25 + vector search with RRF. Scope to a collection, specific files, or the whole org.", example: `const { data } = await kyro.files.semanticSearch({\n  query:        "force majeure clause",\n  collectionId: collectionId,\n  limit:        10,\n});\n// data[i]: { fileId, fileName, chunkIndex, content, rrfScore }` }] as method}
+          {#each [{ name: "kyro.files.upload(blob, filename)", desc: "Upload a file. Returns the file record including its ID and initial status. PDF, DOCX, DOC and TXT are extracted; CSV and JSON are stored with status \"skipped\"; other types are rejected with 415.", example: `const file = await kyro.files.upload(blob, "contract.pdf");\n// file.id, file.status` }, { name: "kyro.files.list(limit?, cursor?)", desc: "Paginated file list. Pass pagination.nextCursor as the cursor argument to fetch the next page.", example: `const { data, pagination } = await kyro.files.list(50);\nif (pagination.hasMore) {\n  const next = await kyro.files.list(50, pagination.nextCursor);\n}` }, { name: "kyro.files.download(fileId)", desc: "Download the original file as a Blob.", example: `const blob = await kyro.files.download(fileId);` }, { name: "kyro.files.delete(fileId)", desc: "Soft-delete a file and remove it from disk.", example: `await kyro.files.delete(fileId);` }, { name: "kyro.files.getText(fileId)", desc: "Get the file's pipeline status and extracted text. Poll this after upload to know when the file is queryable.", example: `const { status, extractedText } = await kyro.files.getText(fileId);\n// status: "pending" | "processing" | "ready" | "failed" | "skipped"` }, { name: "kyro.files.setMetadata(fileId, meta)", desc: "Upsert arbitrary key-value metadata on a file. Non-destructive — keys not in the payload are left untouched.", example: `await kyro.files.setMetadata(fileId, {\n  matter_number: "M-2024-001",\n  document_type: "contract",\n});` }, { name: "kyro.files.getMetadata(fileId)", desc: "Return all metadata keys and values for a file.", example: `const meta = await kyro.files.getMetadata(fileId);` }, { name: "kyro.files.deleteMetadataKey(fileId, key)", desc: "Remove a single metadata key.", example: `await kyro.files.deleteMetadataKey(fileId, "counterparty");` }] as method}
             <div class="sdk-entry">
               <div class="sdk-entry-header">
                 <code class="sdk-sig">{method.name}</code>
@@ -1479,18 +2426,59 @@ const { answer } = await kyro.files.ask({
 
       <!-- SDK ASK & SEARCH -->
       <section id="sdk-ask" class="doc-section">
-        <h2 class="section-title">SDK · Ask & Search</h2>
+        <h2 class="section-title">Search &amp; Ask — HTTP API</h2>
+        <p class="section-desc">
+          Retrieval and question answering live on the REST surface. Both
+          accept <code>X-Api-Key</code> or <code>Authorization: Bearer</code>,
+          and share the same scope rules: <code>collectionId</code> XOR
+          <code>fileIds</code>, or org-wide when neither is given.
+        </p>
 
         <div class="sdk-method-list">
           <div class="sdk-entry">
             <div class="sdk-entry-header">
-              <code class="sdk-sig">kyro.files.ask(options)</code>
+              <code class="sdk-sig">GET /api/v1/search</code>
+            </div>
+            <p class="sdk-entry-desc">
+              Ranked chunks without a generated answer — the same hybrid
+              retrieval <code>/ask</code> uses: a <code>ts_rank</code> keyword
+              arm fused with the pgvector cosine arm via Reciprocal Rank
+              Fusion, optionally followed by cross-encoder reranking. Scope
+              with <code>collection_id</code> or <code>file_ids</code>;
+              <code>filters</code> takes a URL-encoded JSON object of metadata
+              filters.
+            </p>
+
+            <div class="code-block" style="margin-bottom: 12px">
+              <div class="code-toolbar">
+                <span class="code-lang">shell</span>
+                <button
+                  class="copy-btn"
+                  onclick={() =>
+                    copy(
+                      `curl "http://localhost:3000/api/v1/search?q=payment+terms&collection_id=c_xyz&limit=5" \\\n  -H "X-Api-Key: $API_KEY"`,
+                      "sdk-search-curl",
+                    )}
+                >
+                  {copiedId === "sdk-search-curl" ? "✓" : "copy"}
+                </button>
+              </div>
+              <pre><code
+                  >curl "http://localhost:3000/api/v1/search?q=payment+terms&collection_id=c_xyz&limit=5" \
+  -H "X-Api-Key: $API_KEY"</code
+                ></pre>
+            </div>
+          </div>
+
+          <div class="sdk-entry">
+            <div class="sdk-entry-header">
+              <code class="sdk-sig">POST /api/v1/ask</code>
             </div>
             <p class="sdk-entry-desc">
               Ask a natural language question and get an answer grounded in your
-              documents, with source citations. Set <code>stream: false</code>
-              for a single resolved value, or use <code>askStream</code> for token-by-token
-              output.
+              documents, with source citations. <code>stream: true</code>
+              (default) answers over Server-Sent Events;
+              <code>stream: false</code> returns one JSON body.
             </p>
 
             <div class="code-block" style="margin-bottom: 12px">
@@ -1500,7 +2488,7 @@ const { answer } = await kyro.files.ask({
                   class="copy-btn"
                   onclick={() =>
                     copy(
-                      `const { answer, sources } = await kyro.files.ask({\n  question:     "What is the total contract value?",\n  collectionId: collectionId,\n  stream:       false,\n});\n\n// sources[i]: { fileId, fileName, chunkIndex, content, rrfScore }`,
+                      `const res = await fetch("http://localhost:3000/api/v1/ask", {\n  method: "POST",\n  headers: { "X-Api-Key": process.env.KYRO_KEY, "Content-Type": "application/json" },\n  body: JSON.stringify({\n    question:     "What is the total contract value?",\n    collectionId: collectionId,\n    stream:       false,\n  }),\n});\nconst { answer, sources } = await res.json();\n\n// sources[i]: { fileId, fileName, chunkIndex, content, rrfScore }`,
                       "sdk-ask-nonstream",
                     )}
                 >
@@ -1508,13 +2496,25 @@ const { answer } = await kyro.files.ask({
                 </button>
               </div>
               <pre><code
-                  ><span class="ck">const</span> {"{ answer, sources }"} = <span
-                    class="ck">await</span
-                  > kyro.files.<span class="cs">ask</span>({"{"} 
-  question:     <span class="cs">"What is the total contract value?"</span>,
-  collectionId: collectionId,
-  stream:       <span class="ck">false</span>,
+                  ><span class="ck">const</span> res = <span class="ck"
+                    >await</span
+                  > <span class="cs">fetch</span>(<span class="cs"
+                    >"http://localhost:3000/api/v1/ask"</span
+                  >, {"{"}
+  method: <span class="cs">"POST"</span>,
+  headers: {"{"} <span class="cs">"X-Api-Key"</span>: process.env.<span
+                    class="ck">KYRO_KEY</span>, <span class="cs"
+                    >"Content-Type"</span
+                  >: <span class="cs">"application/json"</span> {"}"},
+  body: JSON.<span class="cs">stringify</span>({"{"} 
+    question:     <span class="cs">"What is the total contract value?"</span>,
+    collectionId: collectionId,
+    stream:       <span class="ck">false</span>,
+  {"}"}),
 {"}"});
+<span class="ck">const</span> {"{ answer, sources }"} = <span class="ck"
+                    >await</span
+                  > res.<span class="cs">json</span>();
 
 <span class="c-comment"
                     >// sources[i]: {"{ fileId, fileName, chunkIndex, content, rrfScore }"}</span
@@ -1524,12 +2524,12 @@ const { answer } = await kyro.files.ask({
 
             <div class="code-block" style="margin-bottom: 12px">
               <div class="code-toolbar">
-                <span class="code-lang">streaming</span>
+                <span class="code-lang">streaming (SSE)</span>
                 <button
                   class="copy-btn"
                   onclick={() =>
                     copy(
-                      `for await (const event of kyro.files.askStream({ question: "Summarise the risks." })) {\n  switch (event.type) {\n    case "sources": console.log(event.sources); break;\n    case "chunk":   process.stdout.write(event.text); break;\n    case "done":    console.log("\\nDone"); break;\n    case "error":   console.error(event.message); break;\n  }\n}`,
+                      `const res = await fetch("http://localhost:3000/api/v1/ask", {\n  method: "POST",\n  headers: { "X-Api-Key": process.env.KYRO_KEY, "Content-Type": "application/json" },\n  body: JSON.stringify({ question: "Summarise the risks." }),\n});\n\nfor await (const event of parseSSE(res.body)) {\n  switch (event.type) {\n    case "sources": console.log(event.sources); break;\n    case "chunk":   process.stdout.write(event.text); break;\n    case "done":    console.log("\\nDone"); break;\n    case "error":   console.error(event.message); break;\n  }\n}`,
                       "sdk-ask-stream",
                     )}
                 >
@@ -1537,13 +2537,26 @@ const { answer } = await kyro.files.ask({
                 </button>
               </div>
               <pre><code
-                  ><span class="ck">for await</span> (<span class="ck"
+                  ><span class="ck">const</span> res = <span class="ck"
+                    >await</span
+                  > <span class="cs">fetch</span>(<span class="cs"
+                    >"http://localhost:3000/api/v1/ask"</span
+                  >, {"{"}
+  method: <span class="cs">"POST"</span>,
+  headers: {"{"} <span class="cs">"X-Api-Key"</span>: process.env.<span
+                    class="ck">KYRO_KEY</span>, <span class="cs"
+                    >"Content-Type"</span
+                  >: <span class="cs">"application/json"</span> {"}"},
+  body: JSON.<span class="cs">stringify</span>({"{"} question: <span
+                    class="cs">"Summarise the risks."</span
+                  > {"}"}),
+{"}"});
+
+<span class="ck">for await</span> (<span class="ck"
                     >const</span
-                  > event <span class="ck">of</span> kyro.files.<span class="cs"
-                    >askStream</span
-                  >({"{"} question: <span class="cs"
-                    >"Summarise the risks."</span
-                  > {"}"})) {"{"} 
+                  > event <span class="ck">of</span> <span class="cs"
+                    >parseSSE</span
+                  >(res.body)) {"{"} 
   <span class="ck">switch</span> (event.type) {"{"} 
     <span class="ck">case</span> <span class="cs">"sources"</span
                   >: console.<span class="cs">log</span>(event.sources); <span
@@ -1574,7 +2587,7 @@ const { answer } = await kyro.files.ask({
                   ></thead
                 >
                 <tbody>
-                  {#each [["question", "string", "—", "The question to answer"], ["collectionId", "string", "—", "Scope to a collection. Mutually exclusive with fileIds"], ["fileIds", "string[]", "—", "Scope to specific files. Mutually exclusive with collectionId"], ["filters", "object", "—", "Metadata key-value filters. AND across keys, OR across values"], ["topK", "number", "8", "Number of chunks to retrieve (max 20)"], ["minScore", "number", "0", "Minimum RRF score threshold"], ["model", "string", "server default", "Ollama model override"], ["stream", "boolean", "true", "Whether to stream the response as SSE"]] as row}
+                  {#each [["question", "string", "—", "The question to answer (1–2000 chars)"], ["collectionId", "string", "—", "Scope to a collection. Mutually exclusive with fileIds"], ["fileIds", "string[]", "—", "Scope to specific files (max 20). Mutually exclusive with collectionId"], ["filters", "object", "—", "Metadata key-value filters. AND across keys, OR across values"], ["topK", "number", "8", "Number of chunks to retrieve (1–20)"], ["model", "string", "server default", "Ollama model override"], ["stream", "boolean", "true", "Whether to stream the response as SSE"], ["history", "array", "—", "Up to 10 prior user/assistant turns for follow-ups — replayed to the LLM, never affects retrieval"]] as row}
                     <tr
                       >{#each row as cell}<td>{cell}</td>{/each}</tr
                     >
@@ -1671,8 +2684,9 @@ const { answer } = await kyro.files.ask({
       <section id="self-hosting" class="doc-section">
         <h2 class="section-title">Self-hosting</h2>
         <p class="section-desc">
-          Kyro runs entirely on your own infrastructure. Postgres stores files
-          and metadata, Redis queues background jobs, and Ollama runs your
+          Kyro runs entirely on your own infrastructure. Postgres (with
+          pgvector) stores files, chunks and embeddings, the api runs the
+          ingest pipeline and webhook delivery in-process, and Ollama runs your
           embedding and chat models locally. Nothing leaves your network.
         </p>
 
@@ -1682,7 +2696,8 @@ const { answer } = await kyro.files.ask({
             <div class="step-body">
               <h4>Start the stack</h4>
               <p class="section-desc" style="margin-bottom: 10px">
-                One command brings up Postgres, Redis, and the Kyro API server.
+                One command brings up Postgres, nginx, and the Kyro api —
+                migrations run at api startup under a Postgres advisory lock.
               </p>
               <div class="code-block">
                 <div class="code-toolbar">
@@ -1690,12 +2705,12 @@ const { answer } = await kyro.files.ask({
                   <button
                     class="copy-btn"
                     onclick={() =>
-                      copy("docker compose up -d", "self-host-start")}
+                      copy("./scripts/prod.sh", "self-host-start")}
                   >
                     {copiedId === "self-host-start" ? "✓ copied" : "copy"}
                   </button>
                 </div>
-                <pre><code>docker compose up -d</code></pre>
+                <pre><code>./scripts/prod.sh</code></pre>
               </div>
             </div>
           </div>
@@ -1738,18 +2753,18 @@ ollama pull llama3.2</code
             <div class="step-body">
               <h4>Create an account and API key</h4>
               <p class="section-desc" style="margin-bottom: 10px">
-                Register via <code>POST /api/v2/auth/register</code>, then
-                create an API key from the dashboard or via
-                <code>POST /api/v2/keys</code>. Keys carry one of three scopes.
+                Register via <code>POST /api/v1/auth/register</code> (the first
+                registration creates your organisation and owner), then create
+                an API key from the dashboard or via
+                <code>POST /api/v1/keys</code>. Keys carry one of two scopes.
               </p>
               <div class="code-block">
                 <div class="code-toolbar">
                   <span class="code-lang">scopes</span>
                 </div>
                 <pre><code
-                    >read   — list files, search, ask questions
-write  — upload, delete, embed files
-admin  — full access including key management</code
+                    >read   — list and download files, search, ask questions
+write  — upload, delete and reprocess files; manage collections</code
                   ></pre>
               </div>
             </div>
@@ -1761,9 +2776,13 @@ admin  — full access including key management</code
       <section id="auth" class="doc-section">
         <h2 class="section-title">Authentication</h2>
         <p class="section-desc">
-          File and search endpoints use API keys. Dashboard and key-management
-          endpoints use a short-lived JWT obtained from <code>/auth/login</code
-          >.
+          One gate covers every org-scoped route: send either an
+          <code>X-Api-Key</code> header or a <code>Bearer</code> JWT. An
+          explicit <code>X-Api-Key</code> wins when both are present — it is
+          the narrower credential. Key management (<code>/auth</code>,
+          <code>/org</code>, <code>/keys</code>, <code>/usage</code>,
+          <code>/webhooks</code>) uses the short-lived JWT obtained from
+          <code>/auth/login</code>.
         </p>
 
         <div class="sdk-methods">
@@ -1833,9 +2852,12 @@ admin  — full access including key management</code
             <div class="step-body">
               <h4>Upload</h4>
               <p class="section-desc">
-                <code>POST /files</code> saves the file to disk and, if Redis is
-                running, automatically queues text extraction in the background.
-                Supported types: <strong>PDF, DOCX, TXT</strong>.
+                <code>POST /files</code> saves the file to disk and starts the
+                in-process pipeline immediately — the file moves through
+                <code>pending → processing → ready</code> (or
+                <code>failed</code>, with the reason in <code>files.error</code>).
+                Supported types: <strong>PDF, DOCX, DOC, TXT</strong>; CSV and
+                JSON are stored without extraction (<code>skipped</code>).
               </p>
             </div>
           </div>
@@ -1845,10 +2867,11 @@ admin  — full access including key management</code
             <div class="step-body">
               <h4>Extract</h4>
               <p class="section-desc">
-                The BullMQ worker pulls text from the file, splits it into
-                overlapping chunks (~1200 chars each), and stores them in
-                Postgres. Poll <code>GET /files/:id/text</code> for status.
-                Re-trigger manually with <code>POST /files/:id/extract</code>.
+                The pipeline extracts text (PDF via <code>unpdf</code>, DOCX
+                via <code>mammoth</code>), splits it into overlapping chunks
+                (~1200 chars each), and stores them in Postgres. Poll
+                <code>GET /files/:id/text</code> for status. Failed files
+                re-run with <code>POST /files/:id/reprocess</code>.
               </p>
             </div>
           </div>
@@ -1858,11 +2881,13 @@ admin  — full access including key management</code
             <div class="step-body">
               <h4>Embed</h4>
               <p class="section-desc">
-                After extraction, the worker calls your local Ollama embedding
-                model (<code>nomic-embed-text</code> by default) and stores
+                Embedding is part of the same pipeline — no manual trigger. It
+                calls your local Ollama embedding model
+                (<code>nomic-embed-text</code> by default) and stores
                 768-dimensional vectors alongside each chunk in
-                <code>pgvector</code>. Trigger manually with
-                <code>POST /files/:id/embed</code>.
+                <code>pgvector</code>. When the file becomes queryable the
+                terminal <code>file.ready</code> webhook fires (or
+                <code>file.failed</code> if anything went wrong).
               </p>
             </div>
           </div>
@@ -1882,11 +2907,11 @@ admin  — full access including key management</code
         <div class="info-grid" style="margin-bottom: 20px">
           <div class="info-card">
             <span class="info-label">Retrieval</span>
-            <code class="info-value">BM25 + pgvector → RRF</code>
+            <code class="info-value">ts_rank + pgvector → RRF</code>
           </div>
           <div class="info-card">
             <span class="info-label">Reranking</span>
-            <code class="info-value">Cross-encoder via Ollama</code>
+            <code class="info-value">Cross-encoder (opt-in)</code>
           </div>
           <div class="info-card">
             <span class="info-label">Response</span>
@@ -1905,7 +2930,7 @@ admin  — full access including key management</code
               class="copy-btn"
               onclick={() =>
                 copy(
-                  `const res = await fetch('/api/v2/files/ask', {
+                  `const res = await fetch('/api/v1/ask', {
   method: 'POST',
   headers: { 'X-Api-Key': process.env.KYRO_KEY, 'Content-Type': 'application/json' },
   body: JSON.stringify({
@@ -1930,7 +2955,7 @@ for await (const event of parseSSE(res)) {
           <pre><code
               ><span class="ck">const</span> res = <span class="ck">await</span
               > <span class="cs">fetch</span>(<span class="cs"
-                >'/api/v2/files/ask'</span
+                >'/api/v1/ask'</span
               >, {"{"}
   method: <span class="cs">'POST'</span>,
   headers: {"{"} <span class="cs">'X-Api-Key'</span>: process.env.<span
@@ -1998,15 +3023,16 @@ for await (const event of parseSSE(res)) {
 
       <!-- RAG SEARCH -->
       <section id="rag-search" class="doc-section">
-        <h2 class="section-title">/semantic-search — chunk retrieval</h2>
+        <h2 class="section-title">/search — chunk retrieval</h2>
         <p class="section-desc">
           Returns ranked chunks without generating an answer. Useful for
           building your own UI, debugging retrieval quality, or feeding results
-          into your own pipeline. Uses the same two-phase hybrid retrieval as <code
+          into your own pipeline. Uses the same hybrid retrieval as <code
             >/ask</code
-          >: BM25 keyword matching fused with pgvector cosine similarity via
-          Reciprocal Rank Fusion, optionally followed by cross-encoder
-          reranking.
+          >: a <code>ts_rank</code> keyword arm over the generated tsvector,
+          fused with pgvector cosine similarity via Reciprocal Rank Fusion,
+          optionally followed by cross-encoder reranking
+          (<code>RERANK_ENABLED</code>, off by default).
         </p>
 
         <div class="code-block">
@@ -2016,7 +3042,7 @@ for await (const event of parseSSE(res)) {
               class="copy-btn"
               onclick={() =>
                 copy(
-                  `curl "http://localhost:3000/api/v2/files/semantic-search?q=payment+terms&collection_id=c_xyz&limit=5" \\
+                  `curl "http://localhost:3000/api/v1/search?q=payment+terms&collection_id=c_xyz&limit=5" \\
   -H "X-Api-Key: $API_KEY"`,
                   "rag-search-example",
                 )}
@@ -2025,7 +3051,7 @@ for await (const event of parseSSE(res)) {
             </button>
           </div>
           <pre><code
-              >curl "http://localhost:3000/api/v2/files/semantic-search?q=payment+terms&collection_id=c_xyz&limit=5" \
+              >curl "http://localhost:3000/api/v1/search?q=payment+terms&collection_id=c_xyz&limit=5" \
   -H "X-Api-Key: $API_KEY"</code
             ></pre>
         </div>
@@ -2050,7 +3076,7 @@ for await (const event of parseSSE(res)) {
               class="copy-btn"
               onclick={() =>
                 copy(
-                  `curl -X PUT http://localhost:3000/api/v2/files/f_abc123/metadata \\
+                  `curl -X PUT http://localhost:3000/api/v1/files/3f1c2a4b-0000-0000-0000-000000000000/metadata \\
   -H "X-Api-Key: $API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"matter_number": "M-2024-001", "document_type": "contract"}'`,
@@ -2061,7 +3087,7 @@ for await (const event of parseSSE(res)) {
             </button>
           </div>
           <pre><code
-              >curl -X PUT http://localhost:3000/api/v2/files/f_abc123/metadata \
+              >curl -X PUT http://localhost:3000/api/v1/files/3f1c2a4b-0000-0000-0000-000000000000/metadata \
   -H "X-Api-Key: $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"{"}\"matter_number\": \"M-2024-001\", \"document_type\": \"contract\"{"}"}'</code
@@ -2113,10 +3139,11 @@ for await (const event of parseSSE(res)) {
       <section id="rate-limiting" class="doc-section">
         <h2 class="section-title">Rate Limiting</h2>
         <p class="section-desc">
-          The default limit is 100 requests per minute per API key, enforced in
-          Redis (falls back to in-process memory if Redis is unavailable). Both
-          limits are configurable in the server source — adjust to match your
-          infrastructure capacity.
+          The default limit is 100 requests per minute per API key, enforced by
+          an in-memory sliding window inside each api process. Replicas do not
+          share a budget — a documented trade-off of the no-Redis architecture.
+          When the window is exhausted the api answers <code>429</code> with a
+          <code>retryAfter</code> value in seconds.
         </p>
 
         <div class="rate-card">
@@ -2124,30 +3151,16 @@ for await (const event of parseSSE(res)) {
           <div class="rate-label">requests / minute (default)</div>
         </div>
 
-        <div class="table-scroll">
-          <table class="ref-table">
-            <thead>
-              <tr><th>Header</th><th>Description</th></tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><code>X-RateLimit-Limit</code></td>
-                <td>Max requests per window</td>
-              </tr>
-              <tr>
-                <td><code>X-RateLimit-Remaining</code></td>
-                <td>Requests remaining in current window</td>
-              </tr>
-              <tr>
-                <td><code>X-RateLimit-Reset</code></td>
-                <td>Unix timestamp when limit resets</td>
-              </tr>
-              <tr>
-                <td><code>Retry-After</code></td>
-                <td>Seconds to wait before retrying (on 429)</td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="code-block" style="margin-top: 20px">
+          <div class="code-toolbar">
+            <span class="code-lang">json</span>
+          </div>
+          <pre><code
+              >{`{
+  "error": "Too many requests",
+  "retryAfter": 42
+}`}</code
+            ></pre>
         </div>
       </section>
 
@@ -2155,18 +3168,32 @@ for await (const event of parseSSE(res)) {
       <section id="errors" class="doc-section">
         <h2 class="section-title">Error Codes</h2>
         <p class="section-desc">
-          All errors return a consistent JSON body. Check <code
-            >error.message</code
-          > for a human-readable description.
+          Errors come in two shapes. Route handlers answer with the simple
+          envelope; anything that reaches the central error handler returns
+          the structured envelope (<code>stack</code> appears in development
+          only).
         </p>
 
-        <div class="code-block" style="margin-bottom: 20px">
+        <div class="code-block" style="margin-bottom: 16px">
           <div class="code-toolbar">
-            <span class="code-lang">json</span>
+            <span class="code-lang">json — simple envelope</span>
           </div>
           <pre><code
               >{`{
   "error": "API key does not have write scope"
+}`}</code
+            ></pre>
+        </div>
+
+        <div class="code-block" style="margin-bottom: 20px">
+          <div class="code-toolbar">
+            <span class="code-lang">json — structured envelope</span>
+          </div>
+          <pre><code
+              >{`{
+  "error": {
+    "message": "Unsupported file type: application/zip"
+  }
 }`}</code
             ></pre>
         </div>
@@ -2199,8 +3226,9 @@ for await (const event of parseSSE(res)) {
         <h2 class="section-title">HTTP API Reference</h2>
         <p class="section-desc">
           All endpoints documented below. Authenticate file and search
-          operations with your API key in the <code>X-Api-Key</code> header.
-          Base URL defaults to <code>http://localhost:3000/api/v2</code> — replace
+          operations with your API key in the <code>X-Api-Key</code> header (a
+          <code>Bearer</code> JWT works too). Base URL defaults to
+          <code>http://localhost:3000/api/v1</code> — replace
           with whatever host you deployed Kyro on.
         </p>
         <div class="code-block">
@@ -2259,7 +3287,7 @@ for await (const event of parseSSE(res)) {
                 <span class="method-badge method-{ep.method.toLowerCase()}"
                   >{ep.method}</span
                 >
-                <code class="ep-path">{ep.path.replace("/api/v2", "")}</code>
+                <code class="ep-path">{ep.path}</code>
                 <span class="ep-summary">{ep.op.summary ?? ""}</span>
               </div>
               <div class="ep-badges">

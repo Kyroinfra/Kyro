@@ -5,5 +5,4 @@ set -e
 docker compose \
     -f compose.yml \
     --profile prod \
-    --scale api=${API_REPLICAS:-3} \
-    up -d "$@"
+    up -d --scale api=${API_REPLICAS:-3} "$@"
