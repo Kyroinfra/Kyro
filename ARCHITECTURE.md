@@ -59,7 +59,7 @@ Precedence: an explicit `X-API-Key` wins — it is the narrower credential, so i
 On the keyed surface (`/files`, `/search`, `/ask`) the chain is `authMiddleware → rateLimitMiddleware → usageLoggerMiddleware`:
 
 - **Rate limiting** — in-memory sliding window, 100 requests per key per minute (the same budget the old Redis-backed limiter used). Per process *by design*: replicas do not share a budget — a documented trade-off of the no-Redis architecture. The hits map prunes itself opportunistically past 10,000 keys.
-- **Usage logging** — a `usage_logs` row is written on the response's `finish` event (ADR-003 in `DECISIONS.md`). There is no `usage_daily` rollup table; it was dropped.
+- **Usage logging** — a `usage_logs` row is written on the response's `finish` event (ADR-003 in `DECISIONS.md`). There is no daily rollup table; it was dropped.
 
 ## Ingest pipeline (#33)
 

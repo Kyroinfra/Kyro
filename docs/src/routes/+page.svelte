@@ -216,13 +216,13 @@
       icon: "↑",
       tag: "SEARCH",
       title: "Hybrid Semantic Search",
-      desc: "BM25 keyword search fused with pgvector similarity via RRF. Finds the right chunk even when the query doesn't share exact words with the source.",
+      desc: "Keyword search (ts_rank) fused with pgvector similarity via RRF. Finds the right chunk even when the query doesn't share exact words with the source.",
     },
     {
       icon: "▤",
       tag: "INFRA",
       title: "Fully Self-Hosted",
-      desc: "One docker compose up. Postgres, Redis, Ollama, and Kyro on your own server. Your documents never leave your network.",
+      desc: "One docker compose up. Postgres, Ollama, and Kyro on your own server. Your documents never leave your network.",
     },
     {
       icon: "⊙",
@@ -236,20 +236,20 @@
     {
       n: "01",
       title: "Deploy in one command",
-      desc: "Postgres, Redis, Ollama, and Kyro running locally. No cloud accounts, no API keys, no dependencies outside your machine.",
+      desc: "Postgres, Ollama, and Kyro running locally. No cloud accounts, no API keys, no dependencies outside your machine.",
       cmd: "docker compose up -d",
     },
     {
       n: "02",
       title: "Upload your documents",
-      desc: "PDFs, DOCX, plain text. Text extraction and vector embedding run automatically in the background via BullMQ workers.",
-      cmd: "POST /api/v2/files",
+      desc: "PDFs, DOCX, plain text. Text extraction and vector embedding run automatically in the api's in-process pipeline.",
+      cmd: "POST /api/v1/files",
     },
     {
       n: "03",
       title: "Ask questions via API",
       desc: "Send a question. Get a streamed, cited answer grounded in your documents. Wire it to a chatbot, a search UI, or a CLI.",
-      cmd: "POST /api/v2/files/ask",
+      cmd: "POST /api/v1/ask",
     },
   ];
 
@@ -405,7 +405,7 @@
       <div class="hero-mobile-stats reveal" aria-label="Platform highlights">
         <div class="mobile-stat">
           <span class="mobile-stat-icon">◇</span>
-          <span class="mobile-stat-text">Vector + BM25 hybrid search</span>
+          <span class="mobile-stat-text">Vector + keyword hybrid search</span>
         </div>
         <div class="mobile-stat">
           <span class="mobile-stat-icon">▤</span>
@@ -446,27 +446,6 @@
             fill="none"
             aria-hidden="true"
           >
-            <ellipse cx="12" cy="6.5" rx="9" ry="3" fill="#D82C20" />
-            <path
-              d="M3 6.5v4c0 1.66 4.03 3 9 3s9-1.34 9-3v-4c0 1.66-4.03 3-9 3s-9-1.34-9-3z"
-              fill="#A41E11"
-            />
-            <path
-              d="M3 10.5v4c0 1.66 4.03 3 9 3s9-1.34 9-3v-4c0 1.66-4.03 3-9 3s-9-1.34-9-3z"
-              fill="#D82C20"
-            />
-          </svg>
-          <span>Redis</span>
-        </div>
-        <span class="stack-sep" aria-hidden="true">·</span>
-        <div class="stack-item">
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            aria-hidden="true"
-          >
             <path
               d="M17.13 2.55a6.46 6.46 0 0 0-1.44-.28c-.93-.06-1.7.1-2.37.4a9.3 9.3 0 0 0-1.32-.1C9.08 2.57 6.8 4.04 5.5 6.2c-.88 1.46-1.26 3.1-1.14 4.95.1 1.56.56 2.93 1.27 3.9.48.66 1.02 1.03 1.52 1.05.3.01.66-.08 1.03-.38l.06.13c.48 1.04 1.17 1.67 1.94 1.7.53.02 1.04-.27 1.48-.82.3.28.63.43.98.44.46.02.92-.22 1.3-.67.07.27.2.5.38.65.28.24.63.27.94.08.82-.5 1.42-2.08 1.6-3.32.1-.02.2-.05.3-.1.72-.3 1.3-1.07 1.65-2.1.28-.82.37-1.78.25-2.63a8.35 8.35 0 0 0-.93-2.78c.37-.22.7-.53.97-.92.51-.74.72-1.67.52-2.5-.13-.56-.43-.97-.7-1.23z"
               fill="#336791"
@@ -475,7 +454,6 @@
           </svg>
           <span>Postgres</span>
         </div>
-        <span class="stack-sep" aria-hidden="true">·</span>
         <div class="stack-item">
           <svg
             width="16"
@@ -509,37 +487,6 @@
             <path d="M8.5 12v5M15.5 12v5M8.5 17h7" stroke-linecap="round" />
           </svg>
           <span>Ollama</span>
-        </div>
-        <span class="stack-sep" aria-hidden="true">·</span>
-        <div class="stack-item">
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            aria-hidden="true"
-          >
-            <rect x="3" y="4" width="18" height="3.5" rx="1.5" fill="#E4533A" />
-            <rect
-              x="3"
-              y="10"
-              width="13"
-              height="3.5"
-              rx="1.5"
-              fill="#E4533A"
-              opacity=".65"
-            />
-            <rect
-              x="3"
-              y="16"
-              width="8"
-              height="3.5"
-              rx="1.5"
-              fill="#E4533A"
-              opacity=".35"
-            />
-          </svg>
-          <span>BullMQ</span>
         </div>
         <span class="stack-sep" aria-hidden="true">·</span>
         <div class="stack-item">
@@ -615,7 +562,7 @@
 <span class="c-kw">const</span> stream <span class="c-dim">=</span> <span
                 class="c-kw">await</span
               > <span class="c-fn">fetch</span><span class="c-brace">(</span
-              ><span class="c-str">"/api/v2/files/ask"</span><span class="c-dim"
+              ><span class="c-str">"/api/v1/ask"</span><span class="c-dim"
                 >,</span
               > <span class="c-brace">{"{"}  </span>
   method<span class="c-dim">:</span>  <span class="c-str">"POST"</span><span

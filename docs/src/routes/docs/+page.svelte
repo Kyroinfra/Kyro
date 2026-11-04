@@ -1545,7 +1545,7 @@
     { id: "auth", label: "Authentication" },
     { id: "rag-pipeline", label: "RAG Pipeline" },
     { id: "rag-ask", label: "↳ /ask" },
-    { id: "rag-search", label: "↳ semantic-search" },
+    { id: "rag-search", label: "↳ /search" },
     { id: "metadata-filters", label: "Metadata Filters" },
     { id: "rate-limiting", label: "Rate Limiting" },
     { id: "errors", label: "Error Codes" },
@@ -1816,17 +1816,22 @@ const data = await response.json();`;
     {
       code: "422",
       label: "Unprocessable",
-      desc: "No embedded files found for the requested scope — embed files first",
+      desc: "Empty scope — the collection has no embedded files, no files match the metadata filters, or the intersection of all constraints is empty",
     },
     {
       code: "429",
       label: "Too Many Requests",
-      desc: "Rate limit exceeded — check Retry-After header",
+      desc: "Rate limit exceeded — the body carries retryAfter (seconds)",
     },
     {
       code: "500",
       label: "Internal Server Error",
       desc: "Unexpected server-side error",
+    },
+    {
+      code: "507",
+      label: "Insufficient Storage",
+      desc: "Deployment storage limit reached",
     },
   ];
 </script>
@@ -1927,7 +1932,7 @@ const data = await response.json();`;
                   >{ep.method}</span
                 >
                 <span class="sidebar-path"
-                  >{ep.path.replace("/api/v2", "")}</span
+                  >{ep.path}</span
                 >
               </a>
             {/each}
@@ -1951,7 +1956,7 @@ const data = await response.json();`;
         <div class="info-grid">
           <div class="info-card">
             <span class="info-label">Default URL</span>
-            <code class="info-value">http://localhost:3000/api/v2</code>
+            <code class="info-value">http://localhost:3000/api/v1</code>
           </div>
           <div class="info-card">
             <span class="info-label">License</span>
@@ -2023,9 +2028,9 @@ const data = await response.json();`;
             </div>
             <h3 class="access-title">TypeScript SDK</h3>
             <p class="access-desc">
-              The official <code>kyro-sdk</code> package. Typed methods for every
-              API operation — upload, embed, search, ask. The easiest way to integrate
-              Kyro into a Node.js or browser application.
+              The official <code>kyro-sdk</code> package. Typed methods for
+              files, collections and metadata — upload, list, tag, organize.
+              For search and ask, use the HTTP API below.
             </p>
             <a href="#sdk" class="access-link">SDK reference →</a>
           </div>
@@ -2083,9 +2088,8 @@ const data = await response.json();`;
                   <span class="code-lang">scopes</span>
                 </div>
                 <pre><code
-                    >read   — list files, search, ask questions
-write  — upload, delete, embed files
-admin  — full access including key management</code
+                    >read   — list and download files, search, ask questions
+write  — upload, delete and reprocess files; manage collections</code
                   ></pre>
               </div>
             </div>
@@ -2097,10 +2101,9 @@ admin  — full access including key management</code
               <h4>Upload and manage files</h4>
               <p class="section-desc" style="margin-bottom: 0">
                 The <strong>Files</strong> page lets you drag-and-drop uploads, track
-                extraction and embedding status per file, download originals, and
-                add files to collections. Text extraction and embedding are triggered
-                automatically — you can also re-trigger them manually from the file
-                row.
+                pipeline status per file, download originals, and
+                add files to collections. Extraction and embedding run
+                automatically — failed files can be re-run from the file row.
               </p>
             </div>
           </div>
@@ -2182,7 +2185,7 @@ admin  — full access including key management</code
           </div>
           <div class="info-card">
             <span class="info-label">Default API version</span>
-            <code class="info-value">v2</code>
+            <code class="info-value">v1</code>
           </div>
         </div>
 
@@ -2209,18 +2212,16 @@ admin  — full access including key management</code
                   `import { KyroClient } from "kyro-sdk";
 
 const kyro = new KyroClient({
-  baseURL: "http://localhost:3000/api/v2",
+  baseURL: "http://localhost:3000/api/v1",
   apiKey:  "kyro_live_...",
 });
 
-// Upload a file
+// Upload a file — extraction + embedding run automatically
 const file = await kyro.files.upload(blob, "report.pdf");
 
-// Ask a question (non-streaming)
-const { answer, sources } = await kyro.files.ask({
-  question: "What are the key findings?",
-  stream:   false,
-});`,
+// Poll until the file is queryable (files.status)
+const { status } = await kyro.files.getText(file.id);
+// status: "pending" | "processing" | "ready" | "failed" | "skipped"`,
                   "sdk-quickstart",
                 )}
             >
@@ -2235,30 +2236,28 @@ const { answer, sources } = await kyro.files.ask({
 <span class="ck">const</span> kyro = <span class="ck">new</span> <span
                 class="cs">KyroClient</span
               >({"{"} 
-  baseURL: <span class="cs">"http://localhost:3000/api/v2"</span>,
+  baseURL: <span class="cs">"http://localhost:3000/api/v1"</span>,
   apiKey:  <span class="cs">"kyro_live_..."</span>,
 {"}"});
 
-<span class="c-comment">// Upload a file</span>
+<span class="c-comment">// Upload a file — extraction + embedding run automatically</span>
 <span class="ck">const</span> file = <span class="ck">await</span
               > kyro.files.<span class="cs">upload</span>(blob, <span class="cs"
                 >"report.pdf"</span
               >);
 
-<span class="c-comment">// Ask a question (non-streaming)</span>
-<span class="ck">const</span> {"{ answer, sources }"} = <span class="ck"
-                >await</span
-              > kyro.files.<span class="cs">ask</span>({"{"} 
-  question: <span class="cs">"What are the key findings?"</span>,
-  stream:   <span class="ck">false</span>,
-{"}"});</code
+<span class="c-comment">// Poll until the file is queryable (files.status)</span>
+<span class="ck">const</span> {"{ status }"} = <span class="ck">await</span
+              > kyro.files.<span class="cs">getText</span>(file.id);
+<span class="c-comment">// status: "pending" | "processing" | "ready" | "failed" | "skipped"</span
+            ></code
             ></pre>
         </div>
 
         <h3 class="sdk-subheading" style="margin-top: 32px">
           Typical workflow
         </h3>
-        <p class="section-desc">End-to-end: upload → tag → embed → ask.</p>
+        <p class="section-desc">End-to-end: upload → tag → organize → ask.</p>
 
         <div class="code-block">
           <div class="code-toolbar">
@@ -2267,7 +2266,7 @@ const { answer, sources } = await kyro.files.ask({
               class="copy-btn"
               onclick={() =>
                 copy(
-                  `// 1. Upload
+                  `// 1. Upload — pipeline runs automatically (extract → chunk → embed)
 const file = await kyro.files.upload(pdfBlob, "agreement.pdf");
 
 // 2. Tag with metadata
@@ -2279,20 +2278,24 @@ await kyro.files.setMetadata(file.id, {
 // 3. Add to a collection
 await kyro.collections.addFiles(collectionId, { fileIds: [file.id] });
 
-// 4. Poll until embedded
-let status = (await kyro.files.getText(file.id)).extractionStatus;
-while (status !== "completed") {
+// 4. Poll until the file is queryable
+let { status } = await kyro.files.getText(file.id);
+while (status !== "ready") {
   await new Promise(r => setTimeout(r, 2000));
-  status = (await kyro.files.getText(file.id)).extractionStatus;
+  ({ status } = await kyro.files.getText(file.id));
 }
-await kyro.files.embed(file.id);
 
-// 5. Ask questions
-const { answer } = await kyro.files.ask({
-  question:     "What are the termination conditions?",
-  collectionId: collectionId,
-  stream:       false,
-});`,
+// 5. Ask — use the HTTP API (POST /ask, SSE stream)
+const res = await fetch("http://localhost:3000/api/v1/ask", {
+  method: "POST",
+  headers: { "X-Api-Key": process.env.KYRO_KEY, "Content-Type": "application/json" },
+  body: JSON.stringify({
+    question:     "What are the termination conditions?",
+    collectionId: collectionId,
+    stream:       false,
+  }),
+});
+const { answer, sources } = await res.json();`,
                   "sdk-workflow",
                 )}
             >
@@ -2300,7 +2303,7 @@ const { answer } = await kyro.files.ask({
             </button>
           </div>
           <pre><code
-              ><span class="c-comment">// 1. Upload</span>
+              ><span class="c-comment">// 1. Upload — pipeline runs automatically (extract → chunk → embed)</span>
 <span class="ck">const</span> file = <span class="ck">await</span
               > kyro.files.<span class="cs">upload</span>(pdfBlob, <span
                 class="cs">"agreement.pdf"</span
@@ -2317,28 +2320,37 @@ const { answer } = await kyro.files.ask({
 <span class="ck">await</span> kyro.collections.<span class="cs">addFiles</span
               >(collectionId, {"{"} fileIds: [file.id] {"}"});
 
-<span class="c-comment">// 4. Poll until embedded</span>
-<span class="ck">let</span> status = (<span class="ck">await</span
-              > kyro.files.<span class="cs">getText</span
-              >(file.id)).extractionStatus;
-<span class="ck">while</span> (status !== <span class="cs">"completed"</span
+<span class="c-comment">// 4. Poll until the file is queryable</span>
+<span class="ck">let</span> {"{ status }"} = <span class="ck">await</span
+              > kyro.files.<span class="cs">getText</span>(file.id);
+<span class="ck">while</span> (status !== <span class="cs">"ready"</span
               >) {"{"} 
   <span class="ck">await new</span> Promise(r => <span class="cs"
                 >setTimeout</span
               >(r, <span class="cs">2000</span>));
-  status = (<span class="ck">await</span> kyro.files.<span class="cs"
-                >getText</span
-              >(file.id)).extractionStatus;
+  ({"{ status }"} = <span class="ck">await</span> kyro.files.<span
+                class="cs">getText</span
+              >(file.id));
 {"}"}
-<span class="ck">await</span> kyro.files.<span class="cs">embed</span>(file.id);
 
-<span class="c-comment">// 5. Ask questions</span>
-<span class="ck">const</span> {"{ answer }"} = <span class="ck">await</span
-              > kyro.files.<span class="cs">ask</span>({"{"} 
-  question:     <span class="cs">"What are the termination conditions?"</span>,
-  collectionId: collectionId,
-  stream:       <span class="ck">false</span>,
-{"}"});</code
+<span class="c-comment">// 5. Ask — use the HTTP API (POST /ask, SSE stream)</span>
+<span class="ck">const</span> res = <span class="ck">await</span
+              > <span class="cs">fetch</span>(<span class="cs"
+                >"http://localhost:3000/api/v1/ask"</span
+              >, {"{"}
+  method: <span class="cs">"POST"</span>,
+  headers: {"{"} <span class="cs">"X-Api-Key"</span>: process.env.<span
+                class="ck">KYRO_KEY</span>, <span class="cs"
+                >"Content-Type"</span
+              >: <span class="cs">"application/json"</span> {"}"},
+  body: JSON.<span class="cs">stringify</span>({"{"} 
+    question:     <span class="cs">"What are the termination conditions?"</span>,
+    collectionId: collectionId,
+    stream:       <span class="ck">false</span>,
+  {"}"}),
+{"}"});
+<span class="ck">const</span> {"{ answer, sources }"} = <span class="ck">await</span
+              > res.<span class="cs">json</span>();</code
             ></pre>
         </div>
       </section>
@@ -2347,11 +2359,14 @@ const { answer } = await kyro.files.ask({
       <section id="sdk-files" class="doc-section">
         <h2 class="section-title">SDK · Files</h2>
         <p class="section-desc">
-          All file operations live on <code>kyro.files</code>.
+          All file operations live on <code>kyro.files</code>. The ingest
+          pipeline (extract → chunk → embed) runs automatically on upload —
+          failed files re-run via <code>POST /files/:id/reprocess</code>, and
+          search/ask live on the HTTP API (see below).
         </p>
 
         <div class="sdk-method-list">
-          {#each [{ name: "kyro.files.upload(blob, filename)", desc: "Upload a file. Returns the file record including its ID and initial status. PDF, DOCX and TXT are extracted; CSV and JSON are stored with status \"skipped\"; other types are rejected with 415.", example: `const file = await kyro.files.upload(blob, "contract.pdf");\n// file.id, file.status` }, { name: "kyro.files.list(limit?, cursor?)", desc: "Paginated file list. Pass pagination.nextCursor as the cursor argument to fetch the next page.", example: `const { data, pagination } = await kyro.files.list(50);\nif (pagination.hasMore) {\n  const next = await kyro.files.list(50, pagination.nextCursor);\n}` }, { name: "kyro.files.download(fileId)", desc: "Download the original file as a Blob.", example: `const blob = await kyro.files.download(fileId);` }, { name: "kyro.files.delete(fileId)", desc: "Soft-delete a file and remove it from disk.", example: `await kyro.files.delete(fileId);` }, { name: "kyro.files.getText(fileId)", desc: "Get extraction status and extracted text. Poll this after upload to know when the file is ready to embed.", example: `const { extractionStatus, extractedText } = await kyro.files.getText(fileId);\n// extractionStatus: "pending" | "processing" | "completed" | "failed" | "skipped"` }, { name: "kyro.files.triggerExtraction(fileId)", desc: "Manually trigger text extraction. Extraction runs automatically on upload when Redis is available — use this to re-trigger failed or skipped files.", example: `await kyro.files.triggerExtraction(fileId);` }, { name: "kyro.files.embed(fileId)", desc: "Chunk and embed a file via your local Ollama model. Requires extractionStatus to be 'completed' first.", example: `const { chunksCreated } = await kyro.files.embed(fileId);` }, { name: "kyro.files.setMetadata(fileId, meta)", desc: "Upsert arbitrary key-value metadata on a file. Non-destructive — keys not in the payload are left untouched.", example: `await kyro.files.setMetadata(fileId, {\n  matter_number: "M-2024-001",\n  document_type: "contract",\n});` }, { name: "kyro.files.getMetadata(fileId)", desc: "Return all metadata keys and values for a file.", example: `const meta = await kyro.files.getMetadata(fileId);` }, { name: "kyro.files.deleteMetadataKey(fileId, key)", desc: "Remove a single metadata key.", example: `await kyro.files.deleteMetadataKey(fileId, "counterparty");` }, { name: "kyro.files.search(query, limit?)", desc: "Full-text BM25 keyword search. Returns file-level results with highlighted snippets.", example: `const { data } = await kyro.files.search("indemnification clause");\n// data[i].headline — snippet with <mark> highlights` }, { name: "kyro.files.semanticSearch({ query, ... })", desc: "Hybrid BM25 + vector search with RRF. Scope to a collection, specific files, or the whole org.", example: `const { data } = await kyro.files.semanticSearch({\n  query:        "force majeure clause",\n  collectionId: collectionId,\n  limit:        10,\n});\n// data[i]: { fileId, fileName, chunkIndex, content, rrfScore }` }] as method}
+          {#each [{ name: "kyro.files.upload(blob, filename)", desc: "Upload a file. Returns the file record including its ID and initial status. PDF, DOCX, DOC and TXT are extracted; CSV and JSON are stored with status \"skipped\"; other types are rejected with 415.", example: `const file = await kyro.files.upload(blob, "contract.pdf");\n// file.id, file.status` }, { name: "kyro.files.list(limit?, cursor?)", desc: "Paginated file list. Pass pagination.nextCursor as the cursor argument to fetch the next page.", example: `const { data, pagination } = await kyro.files.list(50);\nif (pagination.hasMore) {\n  const next = await kyro.files.list(50, pagination.nextCursor);\n}` }, { name: "kyro.files.download(fileId)", desc: "Download the original file as a Blob.", example: `const blob = await kyro.files.download(fileId);` }, { name: "kyro.files.delete(fileId)", desc: "Soft-delete a file and remove it from disk.", example: `await kyro.files.delete(fileId);` }, { name: "kyro.files.getText(fileId)", desc: "Get the file's pipeline status and extracted text. Poll this after upload to know when the file is queryable.", example: `const { status, extractedText } = await kyro.files.getText(fileId);\n// status: "pending" | "processing" | "ready" | "failed" | "skipped"` }, { name: "kyro.files.setMetadata(fileId, meta)", desc: "Upsert arbitrary key-value metadata on a file. Non-destructive — keys not in the payload are left untouched.", example: `await kyro.files.setMetadata(fileId, {\n  matter_number: "M-2024-001",\n  document_type: "contract",\n});` }, { name: "kyro.files.getMetadata(fileId)", desc: "Return all metadata keys and values for a file.", example: `const meta = await kyro.files.getMetadata(fileId);` }, { name: "kyro.files.deleteMetadataKey(fileId, key)", desc: "Remove a single metadata key.", example: `await kyro.files.deleteMetadataKey(fileId, "counterparty");` }] as method}
             <div class="sdk-entry">
               <div class="sdk-entry-header">
                 <code class="sdk-sig">{method.name}</code>
@@ -2411,18 +2426,59 @@ const { answer } = await kyro.files.ask({
 
       <!-- SDK ASK & SEARCH -->
       <section id="sdk-ask" class="doc-section">
-        <h2 class="section-title">SDK · Ask & Search</h2>
+        <h2 class="section-title">Search &amp; Ask — HTTP API</h2>
+        <p class="section-desc">
+          Retrieval and question answering live on the REST surface. Both
+          accept <code>X-Api-Key</code> or <code>Authorization: Bearer</code>,
+          and share the same scope rules: <code>collectionId</code> XOR
+          <code>fileIds</code>, or org-wide when neither is given.
+        </p>
 
         <div class="sdk-method-list">
           <div class="sdk-entry">
             <div class="sdk-entry-header">
-              <code class="sdk-sig">kyro.files.ask(options)</code>
+              <code class="sdk-sig">GET /api/v1/search</code>
+            </div>
+            <p class="sdk-entry-desc">
+              Ranked chunks without a generated answer — the same hybrid
+              retrieval <code>/ask</code> uses: a <code>ts_rank</code> keyword
+              arm fused with the pgvector cosine arm via Reciprocal Rank
+              Fusion, optionally followed by cross-encoder reranking. Scope
+              with <code>collection_id</code> or <code>file_ids</code>;
+              <code>filters</code> takes a URL-encoded JSON object of metadata
+              filters.
+            </p>
+
+            <div class="code-block" style="margin-bottom: 12px">
+              <div class="code-toolbar">
+                <span class="code-lang">shell</span>
+                <button
+                  class="copy-btn"
+                  onclick={() =>
+                    copy(
+                      `curl "http://localhost:3000/api/v1/search?q=payment+terms&collection_id=c_xyz&limit=5" \\\n  -H "X-Api-Key: $API_KEY"`,
+                      "sdk-search-curl",
+                    )}
+                >
+                  {copiedId === "sdk-search-curl" ? "✓" : "copy"}
+                </button>
+              </div>
+              <pre><code
+                  >curl "http://localhost:3000/api/v1/search?q=payment+terms&collection_id=c_xyz&limit=5" \
+  -H "X-Api-Key: $API_KEY"</code
+                ></pre>
+            </div>
+          </div>
+
+          <div class="sdk-entry">
+            <div class="sdk-entry-header">
+              <code class="sdk-sig">POST /api/v1/ask</code>
             </div>
             <p class="sdk-entry-desc">
               Ask a natural language question and get an answer grounded in your
-              documents, with source citations. Set <code>stream: false</code>
-              for a single resolved value, or use <code>askStream</code> for token-by-token
-              output.
+              documents, with source citations. <code>stream: true</code>
+              (default) answers over Server-Sent Events;
+              <code>stream: false</code> returns one JSON body.
             </p>
 
             <div class="code-block" style="margin-bottom: 12px">
@@ -2432,7 +2488,7 @@ const { answer } = await kyro.files.ask({
                   class="copy-btn"
                   onclick={() =>
                     copy(
-                      `const { answer, sources } = await kyro.files.ask({\n  question:     "What is the total contract value?",\n  collectionId: collectionId,\n  stream:       false,\n});\n\n// sources[i]: { fileId, fileName, chunkIndex, content, rrfScore }`,
+                      `const res = await fetch("http://localhost:3000/api/v1/ask", {\n  method: "POST",\n  headers: { "X-Api-Key": process.env.KYRO_KEY, "Content-Type": "application/json" },\n  body: JSON.stringify({\n    question:     "What is the total contract value?",\n    collectionId: collectionId,\n    stream:       false,\n  }),\n});\nconst { answer, sources } = await res.json();\n\n// sources[i]: { fileId, fileName, chunkIndex, content, rrfScore }`,
                       "sdk-ask-nonstream",
                     )}
                 >
@@ -2440,13 +2496,25 @@ const { answer } = await kyro.files.ask({
                 </button>
               </div>
               <pre><code
-                  ><span class="ck">const</span> {"{ answer, sources }"} = <span
-                    class="ck">await</span
-                  > kyro.files.<span class="cs">ask</span>({"{"} 
-  question:     <span class="cs">"What is the total contract value?"</span>,
-  collectionId: collectionId,
-  stream:       <span class="ck">false</span>,
+                  ><span class="ck">const</span> res = <span class="ck"
+                    >await</span
+                  > <span class="cs">fetch</span>(<span class="cs"
+                    >"http://localhost:3000/api/v1/ask"</span
+                  >, {"{"}
+  method: <span class="cs">"POST"</span>,
+  headers: {"{"} <span class="cs">"X-Api-Key"</span>: process.env.<span
+                    class="ck">KYRO_KEY</span>, <span class="cs"
+                    >"Content-Type"</span
+                  >: <span class="cs">"application/json"</span> {"}"},
+  body: JSON.<span class="cs">stringify</span>({"{"} 
+    question:     <span class="cs">"What is the total contract value?"</span>,
+    collectionId: collectionId,
+    stream:       <span class="ck">false</span>,
+  {"}"}),
 {"}"});
+<span class="ck">const</span> {"{ answer, sources }"} = <span class="ck"
+                    >await</span
+                  > res.<span class="cs">json</span>();
 
 <span class="c-comment"
                     >// sources[i]: {"{ fileId, fileName, chunkIndex, content, rrfScore }"}</span
@@ -2456,12 +2524,12 @@ const { answer } = await kyro.files.ask({
 
             <div class="code-block" style="margin-bottom: 12px">
               <div class="code-toolbar">
-                <span class="code-lang">streaming</span>
+                <span class="code-lang">streaming (SSE)</span>
                 <button
                   class="copy-btn"
                   onclick={() =>
                     copy(
-                      `for await (const event of kyro.files.askStream({ question: "Summarise the risks." })) {\n  switch (event.type) {\n    case "sources": console.log(event.sources); break;\n    case "chunk":   process.stdout.write(event.text); break;\n    case "done":    console.log("\\nDone"); break;\n    case "error":   console.error(event.message); break;\n  }\n}`,
+                      `const res = await fetch("http://localhost:3000/api/v1/ask", {\n  method: "POST",\n  headers: { "X-Api-Key": process.env.KYRO_KEY, "Content-Type": "application/json" },\n  body: JSON.stringify({ question: "Summarise the risks." }),\n});\n\nfor await (const event of parseSSE(res.body)) {\n  switch (event.type) {\n    case "sources": console.log(event.sources); break;\n    case "chunk":   process.stdout.write(event.text); break;\n    case "done":    console.log("\\nDone"); break;\n    case "error":   console.error(event.message); break;\n  }\n}`,
                       "sdk-ask-stream",
                     )}
                 >
@@ -2469,13 +2537,26 @@ const { answer } = await kyro.files.ask({
                 </button>
               </div>
               <pre><code
-                  ><span class="ck">for await</span> (<span class="ck"
+                  ><span class="ck">const</span> res = <span class="ck"
+                    >await</span
+                  > <span class="cs">fetch</span>(<span class="cs"
+                    >"http://localhost:3000/api/v1/ask"</span
+                  >, {"{"}
+  method: <span class="cs">"POST"</span>,
+  headers: {"{"} <span class="cs">"X-Api-Key"</span>: process.env.<span
+                    class="ck">KYRO_KEY</span>, <span class="cs"
+                    >"Content-Type"</span
+                  >: <span class="cs">"application/json"</span> {"}"},
+  body: JSON.<span class="cs">stringify</span>({"{"} question: <span
+                    class="cs">"Summarise the risks."</span
+                  > {"}"}),
+{"}"});
+
+<span class="ck">for await</span> (<span class="ck"
                     >const</span
-                  > event <span class="ck">of</span> kyro.files.<span class="cs"
-                    >askStream</span
-                  >({"{"} question: <span class="cs"
-                    >"Summarise the risks."</span
-                  > {"}"})) {"{"} 
+                  > event <span class="ck">of</span> <span class="cs"
+                    >parseSSE</span
+                  >(res.body)) {"{"} 
   <span class="ck">switch</span> (event.type) {"{"} 
     <span class="ck">case</span> <span class="cs">"sources"</span
                   >: console.<span class="cs">log</span>(event.sources); <span
@@ -2506,7 +2587,7 @@ const { answer } = await kyro.files.ask({
                   ></thead
                 >
                 <tbody>
-                  {#each [["question", "string", "—", "The question to answer"], ["collectionId", "string", "—", "Scope to a collection. Mutually exclusive with fileIds"], ["fileIds", "string[]", "—", "Scope to specific files. Mutually exclusive with collectionId"], ["filters", "object", "—", "Metadata key-value filters. AND across keys, OR across values"], ["topK", "number", "8", "Number of chunks to retrieve (max 20)"], ["minScore", "number", "0", "Minimum RRF score threshold"], ["model", "string", "server default", "Ollama model override"], ["stream", "boolean", "true", "Whether to stream the response as SSE"]] as row}
+                  {#each [["question", "string", "—", "The question to answer (1–2000 chars)"], ["collectionId", "string", "—", "Scope to a collection. Mutually exclusive with fileIds"], ["fileIds", "string[]", "—", "Scope to specific files (max 20). Mutually exclusive with collectionId"], ["filters", "object", "—", "Metadata key-value filters. AND across keys, OR across values"], ["topK", "number", "8", "Number of chunks to retrieve (1–20)"], ["model", "string", "server default", "Ollama model override"], ["stream", "boolean", "true", "Whether to stream the response as SSE"], ["history", "array", "—", "Up to 10 prior user/assistant turns for follow-ups — replayed to the LLM, never affects retrieval"]] as row}
                     <tr
                       >{#each row as cell}<td>{cell}</td>{/each}</tr
                     >
@@ -2603,8 +2684,9 @@ const { answer } = await kyro.files.ask({
       <section id="self-hosting" class="doc-section">
         <h2 class="section-title">Self-hosting</h2>
         <p class="section-desc">
-          Kyro runs entirely on your own infrastructure. Postgres stores files
-          and metadata, Redis queues background jobs, and Ollama runs your
+          Kyro runs entirely on your own infrastructure. Postgres (with
+          pgvector) stores files, chunks and embeddings, the api runs the
+          ingest pipeline and webhook delivery in-process, and Ollama runs your
           embedding and chat models locally. Nothing leaves your network.
         </p>
 
@@ -2614,7 +2696,8 @@ const { answer } = await kyro.files.ask({
             <div class="step-body">
               <h4>Start the stack</h4>
               <p class="section-desc" style="margin-bottom: 10px">
-                One command brings up Postgres, Redis, and the Kyro API server.
+                One command brings up Postgres, nginx, and the Kyro api —
+                migrations run at api startup under a Postgres advisory lock.
               </p>
               <div class="code-block">
                 <div class="code-toolbar">
@@ -2622,12 +2705,12 @@ const { answer } = await kyro.files.ask({
                   <button
                     class="copy-btn"
                     onclick={() =>
-                      copy("docker compose up -d", "self-host-start")}
+                      copy("./scripts/prod.sh", "self-host-start")}
                   >
                     {copiedId === "self-host-start" ? "✓ copied" : "copy"}
                   </button>
                 </div>
-                <pre><code>docker compose up -d</code></pre>
+                <pre><code>./scripts/prod.sh</code></pre>
               </div>
             </div>
           </div>
@@ -2670,18 +2753,18 @@ ollama pull llama3.2</code
             <div class="step-body">
               <h4>Create an account and API key</h4>
               <p class="section-desc" style="margin-bottom: 10px">
-                Register via <code>POST /api/v2/auth/register</code>, then
-                create an API key from the dashboard or via
-                <code>POST /api/v2/keys</code>. Keys carry one of three scopes.
+                Register via <code>POST /api/v1/auth/register</code> (the first
+                registration creates your organisation and owner), then create
+                an API key from the dashboard or via
+                <code>POST /api/v1/keys</code>. Keys carry one of two scopes.
               </p>
               <div class="code-block">
                 <div class="code-toolbar">
                   <span class="code-lang">scopes</span>
                 </div>
                 <pre><code
-                    >read   — list files, search, ask questions
-write  — upload, delete, embed files
-admin  — full access including key management</code
+                    >read   — list and download files, search, ask questions
+write  — upload, delete and reprocess files; manage collections</code
                   ></pre>
               </div>
             </div>
@@ -2693,9 +2776,13 @@ admin  — full access including key management</code
       <section id="auth" class="doc-section">
         <h2 class="section-title">Authentication</h2>
         <p class="section-desc">
-          File and search endpoints use API keys. Dashboard and key-management
-          endpoints use a short-lived JWT obtained from <code>/auth/login</code
-          >.
+          One gate covers every org-scoped route: send either an
+          <code>X-Api-Key</code> header or a <code>Bearer</code> JWT. An
+          explicit <code>X-Api-Key</code> wins when both are present — it is
+          the narrower credential. Key management (<code>/auth</code>,
+          <code>/org</code>, <code>/keys</code>, <code>/usage</code>,
+          <code>/webhooks</code>) uses the short-lived JWT obtained from
+          <code>/auth/login</code>.
         </p>
 
         <div class="sdk-methods">
@@ -2765,9 +2852,12 @@ admin  — full access including key management</code
             <div class="step-body">
               <h4>Upload</h4>
               <p class="section-desc">
-                <code>POST /files</code> saves the file to disk and, if Redis is
-                running, automatically queues text extraction in the background.
-                Supported types: <strong>PDF, DOCX, TXT</strong>.
+                <code>POST /files</code> saves the file to disk and starts the
+                in-process pipeline immediately — the file moves through
+                <code>pending → processing → ready</code> (or
+                <code>failed</code>, with the reason in <code>files.error</code>).
+                Supported types: <strong>PDF, DOCX, DOC, TXT</strong>; CSV and
+                JSON are stored without extraction (<code>skipped</code>).
               </p>
             </div>
           </div>
@@ -2777,10 +2867,11 @@ admin  — full access including key management</code
             <div class="step-body">
               <h4>Extract</h4>
               <p class="section-desc">
-                The BullMQ worker pulls text from the file, splits it into
-                overlapping chunks (~1200 chars each), and stores them in
-                Postgres. Poll <code>GET /files/:id/text</code> for status.
-                Re-trigger manually with <code>POST /files/:id/extract</code>.
+                The pipeline extracts text (PDF via <code>unpdf</code>, DOCX
+                via <code>mammoth</code>), splits it into overlapping chunks
+                (~1200 chars each), and stores them in Postgres. Poll
+                <code>GET /files/:id/text</code> for status. Failed files
+                re-run with <code>POST /files/:id/reprocess</code>.
               </p>
             </div>
           </div>
@@ -2790,11 +2881,13 @@ admin  — full access including key management</code
             <div class="step-body">
               <h4>Embed</h4>
               <p class="section-desc">
-                After extraction, the worker calls your local Ollama embedding
-                model (<code>nomic-embed-text</code> by default) and stores
+                Embedding is part of the same pipeline — no manual trigger. It
+                calls your local Ollama embedding model
+                (<code>nomic-embed-text</code> by default) and stores
                 768-dimensional vectors alongside each chunk in
-                <code>pgvector</code>. Trigger manually with
-                <code>POST /files/:id/embed</code>.
+                <code>pgvector</code>. When the file becomes queryable the
+                terminal <code>file.ready</code> webhook fires (or
+                <code>file.failed</code> if anything went wrong).
               </p>
             </div>
           </div>
@@ -2814,11 +2907,11 @@ admin  — full access including key management</code
         <div class="info-grid" style="margin-bottom: 20px">
           <div class="info-card">
             <span class="info-label">Retrieval</span>
-            <code class="info-value">BM25 + pgvector → RRF</code>
+            <code class="info-value">ts_rank + pgvector → RRF</code>
           </div>
           <div class="info-card">
             <span class="info-label">Reranking</span>
-            <code class="info-value">Cross-encoder via Ollama</code>
+            <code class="info-value">Cross-encoder (opt-in)</code>
           </div>
           <div class="info-card">
             <span class="info-label">Response</span>
@@ -2837,7 +2930,7 @@ admin  — full access including key management</code
               class="copy-btn"
               onclick={() =>
                 copy(
-                  `const res = await fetch('/api/v2/files/ask', {
+                  `const res = await fetch('/api/v1/ask', {
   method: 'POST',
   headers: { 'X-Api-Key': process.env.KYRO_KEY, 'Content-Type': 'application/json' },
   body: JSON.stringify({
@@ -2862,7 +2955,7 @@ for await (const event of parseSSE(res)) {
           <pre><code
               ><span class="ck">const</span> res = <span class="ck">await</span
               > <span class="cs">fetch</span>(<span class="cs"
-                >'/api/v2/files/ask'</span
+                >'/api/v1/ask'</span
               >, {"{"}
   method: <span class="cs">'POST'</span>,
   headers: {"{"} <span class="cs">'X-Api-Key'</span>: process.env.<span
@@ -2930,15 +3023,16 @@ for await (const event of parseSSE(res)) {
 
       <!-- RAG SEARCH -->
       <section id="rag-search" class="doc-section">
-        <h2 class="section-title">/semantic-search — chunk retrieval</h2>
+        <h2 class="section-title">/search — chunk retrieval</h2>
         <p class="section-desc">
           Returns ranked chunks without generating an answer. Useful for
           building your own UI, debugging retrieval quality, or feeding results
-          into your own pipeline. Uses the same two-phase hybrid retrieval as <code
+          into your own pipeline. Uses the same hybrid retrieval as <code
             >/ask</code
-          >: BM25 keyword matching fused with pgvector cosine similarity via
-          Reciprocal Rank Fusion, optionally followed by cross-encoder
-          reranking.
+          >: a <code>ts_rank</code> keyword arm over the generated tsvector,
+          fused with pgvector cosine similarity via Reciprocal Rank Fusion,
+          optionally followed by cross-encoder reranking
+          (<code>RERANK_ENABLED</code>, off by default).
         </p>
 
         <div class="code-block">
@@ -2948,7 +3042,7 @@ for await (const event of parseSSE(res)) {
               class="copy-btn"
               onclick={() =>
                 copy(
-                  `curl "http://localhost:3000/api/v2/files/semantic-search?q=payment+terms&collection_id=c_xyz&limit=5" \\
+                  `curl "http://localhost:3000/api/v1/search?q=payment+terms&collection_id=c_xyz&limit=5" \\
   -H "X-Api-Key: $API_KEY"`,
                   "rag-search-example",
                 )}
@@ -2957,7 +3051,7 @@ for await (const event of parseSSE(res)) {
             </button>
           </div>
           <pre><code
-              >curl "http://localhost:3000/api/v2/files/semantic-search?q=payment+terms&collection_id=c_xyz&limit=5" \
+              >curl "http://localhost:3000/api/v1/search?q=payment+terms&collection_id=c_xyz&limit=5" \
   -H "X-Api-Key: $API_KEY"</code
             ></pre>
         </div>
@@ -2982,7 +3076,7 @@ for await (const event of parseSSE(res)) {
               class="copy-btn"
               onclick={() =>
                 copy(
-                  `curl -X PUT http://localhost:3000/api/v2/files/f_abc123/metadata \\
+                  `curl -X PUT http://localhost:3000/api/v1/files/3f1c2a4b-0000-0000-0000-000000000000/metadata \\
   -H "X-Api-Key: $API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"matter_number": "M-2024-001", "document_type": "contract"}'`,
@@ -2993,7 +3087,7 @@ for await (const event of parseSSE(res)) {
             </button>
           </div>
           <pre><code
-              >curl -X PUT http://localhost:3000/api/v2/files/f_abc123/metadata \
+              >curl -X PUT http://localhost:3000/api/v1/files/3f1c2a4b-0000-0000-0000-000000000000/metadata \
   -H "X-Api-Key: $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"{"}\"matter_number\": \"M-2024-001\", \"document_type\": \"contract\"{"}"}'</code
@@ -3045,10 +3139,11 @@ for await (const event of parseSSE(res)) {
       <section id="rate-limiting" class="doc-section">
         <h2 class="section-title">Rate Limiting</h2>
         <p class="section-desc">
-          The default limit is 100 requests per minute per API key, enforced in
-          Redis (falls back to in-process memory if Redis is unavailable). Both
-          limits are configurable in the server source — adjust to match your
-          infrastructure capacity.
+          The default limit is 100 requests per minute per API key, enforced by
+          an in-memory sliding window inside each api process. Replicas do not
+          share a budget — a documented trade-off of the no-Redis architecture.
+          When the window is exhausted the api answers <code>429</code> with a
+          <code>retryAfter</code> value in seconds.
         </p>
 
         <div class="rate-card">
@@ -3056,30 +3151,16 @@ for await (const event of parseSSE(res)) {
           <div class="rate-label">requests / minute (default)</div>
         </div>
 
-        <div class="table-scroll">
-          <table class="ref-table">
-            <thead>
-              <tr><th>Header</th><th>Description</th></tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><code>X-RateLimit-Limit</code></td>
-                <td>Max requests per window</td>
-              </tr>
-              <tr>
-                <td><code>X-RateLimit-Remaining</code></td>
-                <td>Requests remaining in current window</td>
-              </tr>
-              <tr>
-                <td><code>X-RateLimit-Reset</code></td>
-                <td>Unix timestamp when limit resets</td>
-              </tr>
-              <tr>
-                <td><code>Retry-After</code></td>
-                <td>Seconds to wait before retrying (on 429)</td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="code-block" style="margin-top: 20px">
+          <div class="code-toolbar">
+            <span class="code-lang">json</span>
+          </div>
+          <pre><code
+              >{`{
+  "error": "Too many requests",
+  "retryAfter": 42
+}`}</code
+            ></pre>
         </div>
       </section>
 
@@ -3087,18 +3168,32 @@ for await (const event of parseSSE(res)) {
       <section id="errors" class="doc-section">
         <h2 class="section-title">Error Codes</h2>
         <p class="section-desc">
-          All errors return a consistent JSON body. Check <code
-            >error.message</code
-          > for a human-readable description.
+          Errors come in two shapes. Route handlers answer with the simple
+          envelope; anything that reaches the central error handler returns
+          the structured envelope (<code>stack</code> appears in development
+          only).
         </p>
 
-        <div class="code-block" style="margin-bottom: 20px">
+        <div class="code-block" style="margin-bottom: 16px">
           <div class="code-toolbar">
-            <span class="code-lang">json</span>
+            <span class="code-lang">json — simple envelope</span>
           </div>
           <pre><code
               >{`{
   "error": "API key does not have write scope"
+}`}</code
+            ></pre>
+        </div>
+
+        <div class="code-block" style="margin-bottom: 20px">
+          <div class="code-toolbar">
+            <span class="code-lang">json — structured envelope</span>
+          </div>
+          <pre><code
+              >{`{
+  "error": {
+    "message": "Unsupported file type: application/zip"
+  }
 }`}</code
             ></pre>
         </div>
@@ -3131,8 +3226,9 @@ for await (const event of parseSSE(res)) {
         <h2 class="section-title">HTTP API Reference</h2>
         <p class="section-desc">
           All endpoints documented below. Authenticate file and search
-          operations with your API key in the <code>X-Api-Key</code> header.
-          Base URL defaults to <code>http://localhost:3000/api/v2</code> — replace
+          operations with your API key in the <code>X-Api-Key</code> header (a
+          <code>Bearer</code> JWT works too). Base URL defaults to
+          <code>http://localhost:3000/api/v1</code> — replace
           with whatever host you deployed Kyro on.
         </p>
         <div class="code-block">
@@ -3191,7 +3287,7 @@ for await (const event of parseSSE(res)) {
                 <span class="method-badge method-{ep.method.toLowerCase()}"
                   >{ep.method}</span
                 >
-                <code class="ep-path">{ep.path.replace("/api/v2", "")}</code>
+                <code class="ep-path">{ep.path}</code>
                 <span class="ep-summary">{ep.op.summary ?? ""}</span>
               </div>
               <div class="ep-badges">
