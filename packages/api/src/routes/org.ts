@@ -8,8 +8,6 @@ import { inviteSchema, type InviteInput } from '../validations/auth';
 
 const router = Router();
 
-// GET / - get org details
-
 router.get('/', authMiddleware, async (req: Request, res: Response) => {
   const [org] = await db
     .select({
@@ -32,8 +30,6 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
     createdAt: org.createdAt,
   });
 });
-
-// GET /members - get org members
 
 router.get('/members', authMiddleware, async (req: Request, res: Response) => {
   const limit = Math.min(parseInt(req.query.limit as string || '50', 10), 100);
@@ -69,8 +65,6 @@ router.get('/members', authMiddleware, async (req: Request, res: Response) => {
   });
 });
 
-// POST /members - invites/creates a member with a password
-
 router.post('/members', authMiddleware, requireRole('owner'), async (req: Request, res: Response) => {
   const parsed = inviteSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -101,8 +95,6 @@ router.post('/members', authMiddleware, requireRole('owner'), async (req: Reques
     role: user.role,
   });
 });
-
-// DELETE /members/:id - delete a member
 
 router.delete('/members/:id', authMiddleware, requireRole('owner', 'admin'), async (req: Request, res: Response) => {
   const id = req.params.id as string;

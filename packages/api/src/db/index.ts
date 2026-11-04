@@ -7,7 +7,7 @@ import * as schema from './schema';
  * The one raw pg connection handle in the codebase.
  *
  * Per the Drizzle-everywhere rule (#26), ONLY the hybrid retrieval module
- * (lib/retrieval.ts — the tsvector/vector-specific query) may import this.
+ * (rag/retrieve.ts — the tsvector/vector-specific query) may import this.
  * Everyone else goes through the typed `db` below.
  */
 export const pool = new Pool({

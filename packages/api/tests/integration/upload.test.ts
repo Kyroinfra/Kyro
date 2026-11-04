@@ -97,8 +97,6 @@ beforeAll(async () => {
   app.use(errorHandler);
 });
 
-// Dummy row for the 507 test: seeded with sizeBytes at the cap so every
-// upload overflows. Lives in the mock org → cascade-cleans with it.
 afterAll(async () => {
   if (!mockOrgId) { return; } // beforeAll failed — nothing to clean
   // org deletion cascades every file row, including the seeded 507 ghost

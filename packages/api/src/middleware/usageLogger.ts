@@ -4,10 +4,8 @@ import { usageLogs } from '../db/schema';
 import type { AuthedRequest } from './auth';
 
 // 'finish' fires once the response is fully flushed, for every completion
-// shape (#31): res.json()/res.send() bodies, piped file downloads
-// (fs.createReadStream().pipe(res)) and SSE streams written with
-// res.write()/res.end() (POST /ask). The old res.send monkey-patch never
-// saw the streaming shapes and skipped them entirely.
+// shape (#31): res.json()/res.send() bodies, piped file downloads, and SSE
+// streams written with res.write()/res.end() (POST /ask).
 export function usageLoggerMiddleware(req: Request, res: Response, next: NextFunction): void {
   const startTime = Date.now();
 

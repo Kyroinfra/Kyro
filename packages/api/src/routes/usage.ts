@@ -7,8 +7,6 @@ import config from '../config';
 
 const router = Router();
 
-// GET / - get usage data
-
 /**
  * Inclusive day-window from query params (#usage display fix).
  *
@@ -53,8 +51,6 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
     return;
   }
 
-  // FIX 3: Actually read and apply start_date / end_date query params,
-  // consistent with how /usage/daily handles them.
   const timeFilter = timeWindowFromQuery(req.query);
 
   const [usageRow] = await db
@@ -90,8 +86,6 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
     storage_limit:   config.storageLimit,
   });
 });
-
-// GET /daily - get daily usage data
 
 router.get('/daily', authMiddleware, async (req: Request, res: Response) => {
   const orgId = req.user?.orgId;

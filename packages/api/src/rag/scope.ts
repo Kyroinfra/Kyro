@@ -1,15 +1,10 @@
 // rag/scope.ts — what files does this query see? (#37)
 //
-// resolveScope() is THE one scope resolver for /search and /ask. It
+// resolveScope() is THE one scope resolver for /search and /ask: it
 // intersects every provided constraint (collection membership, explicit
 // client file ids, metadata filters) and returns a uniform result shape, so
-// the two routes answer identical scope failures with identical status
-// codes.
-//
-// Why it exists (the #37 bug): /ask used to resolve filters, then the
-// collectionId/fileIds branches UNCONDITIONALLY overwrote the filter result
-// — combined `filters` + `collectionId` silently ignored the filters. One
-// resolver, one intersect, one error table; the routes cannot drift again.
+// the two routes answer identical scope failures with identical status codes
+// and cannot drift apart.
 //
 // Wire contract (both routes reply with exactly these):
 //   404  collection not found  ·  no owned files for the client fileIds
@@ -44,19 +39,11 @@ export function isScopeError(r: ScopeResult | ScopeError): r is ScopeError {
   return typeof (r as ScopeError).status === 'number';
 }
 
-// ── Metadata filters (#38) ───────────────────────────────────────────────────
-//
-// Matches a flat filter map against the file's jsonb metadata column
-// (AND across keys, OR across the multiple values of one key):
-//   { matter_number: "M-2024-001", document_type: ["contract", "amendment"] }
-//
-// Implementation: one `metadata @> $1::jsonb` comparison per (key, value),
-// all values bound as JSON text parameters — never string-assembled, so
-// values containing quotes/backslashes are matched by binding, not escaping
-// (the old EAV path ended up inlined; #37 had already bound it, #38 now
-// binds against the generated column). `@>` contains the exact scalar pair,
-// so a file must hold `key` with exactly that value — same semantics as the
-// EAV key = value match, and GIN-indexable (idx_files_metadata).
+// Metadata filters (#38): AND across keys, OR across the values of one key.
+// One `metadata @> $1::jsonb` comparison per (key, value), bound as JSON —
+// never string-assembled. `@>` matches the exact scalar pair, so the
+// semantics equal a key = value match and stay GIN-indexable
+// (idx_files_metadata).
 
 export async function resolveMetadataFilter(
   orgId:   string,
@@ -71,8 +58,8 @@ export async function resolveMetadataFilter(
   const keyConditions: SQL[] = entries.map(([key, val]) => {
     const values = Array.isArray(val) ? val : [val];
 
-    // An empty values array matches nothing (same as the empty IN list of the
-    // EAV path): `false` short-circuits the whole AND tree below.
+    // An empty values array matches nothing: `false` short-circuits the
+    // whole AND tree below.
     if (values.length === 0) {
       return sql`false`;
     }
@@ -93,8 +80,6 @@ export async function resolveMetadataFilter(
 
   return rows.map(r => r.id);
 }
-
-// ── Single-member resolvers ──────────────────────────────────────────────────
 
 async function collectionFileIds(
   collectionId: string,
@@ -125,8 +110,6 @@ async function ownedFileIds(orgId: string, ids: string[]): Promise<string[]> {
   return rows.map(r => r.id);
 }
 
-// ── The resolver ─────────────────────────────────────────────────────────────
-
 /**
  * Resolves the query scope by intersecting every provided constraint.
  *
@@ -141,7 +124,6 @@ export async function resolveScope(
 ): Promise<ScopeResult | ScopeError> {
   const constraints: string[][] = [];
 
-  // ── Metadata filters ───────────────────────────────────────────────────
   if (opts.filters && Object.keys(opts.filters).length > 0) {
     const filtered = await resolveMetadataFilter(orgId, opts.filters);
 
@@ -154,7 +136,6 @@ export async function resolveScope(
     constraints.push(filtered);
   }
 
-  // ── Collection membership ──────────────────────────────────────────────
   if (opts.collectionId) {
     const colIds = await collectionFileIds(opts.collectionId, orgId);
 
@@ -167,7 +148,6 @@ export async function resolveScope(
     constraints.push(colIds);
   }
 
-  // ── Client file ids ────────────────────────────────────────────────────
   // An explicitly-listed but foreign/nonexistent id must never turn the query
   // into an unrestricted org-wide search: narrow to what is owned, and if
   // nothing is owned reject instead.

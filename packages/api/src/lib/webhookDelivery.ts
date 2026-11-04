@@ -1,12 +1,11 @@
 /**
- * In-process webhook delivery (replaces the BullMQ 'webhook-delivery' worker
- * per the RFC #49 decision — drop Redis).
+ * In-process webhook delivery (Redis/BullMQ dropped per #49).
  *
  * Concurrency is bounded by a semaphore; a delivery retries up to 5 times
- * with exponential backoff (10s, 20s, 40s, 80s — same schedule shape the old
- * BullMQ job options used). Each attempt is recorded in webhook_deliveries
- * (status / statusCode / attempts / lastAttemptAt), so nothing is silently
- * dropped: a failed delivery ends as status 'failed' with its attempts count.
+ * with exponential backoff (10s, 20s, 40s, 80s). Each attempt is recorded in
+ * webhook_deliveries (status / statusCode / attempts / lastAttemptAt), so
+ * nothing is silently dropped: a failed delivery ends as status 'failed'
+ * with its attempts count.
  */
 import crypto from 'crypto';
 import { db } from '../db';

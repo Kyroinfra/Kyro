@@ -20,9 +20,6 @@ export function ensureOrgDirectory(orgId: string): string {
   return orgDir;
 }
 
-// (saveFile/UploadedFile were removed with #41 — multer's diskStorage writes
-// the upload straight into the org directory; nothing buffers it anymore.)
-
 export async function deleteFile(storageKey: string): Promise<void> {
   const fullPath = path.join(UPLOAD_DIR, storageKey);
   if (fs.existsSync(fullPath)) {

@@ -1,16 +1,9 @@
 // routes/index.ts — the one flat API surface, mounted at /api/v1.
 //
-// v1/v2 were flattened in #28: v2 re-mounted the same v1 routers, and
-// v1/files.ts duplicated a subset of v2's files router. There is now exactly
-// one router set and one place where middleware is assembled per family:
-//
-//   session (JWT) family — auth, org, keys, usage, webhooks: mounted bare,
-//     exactly as v1/v2 mounted them.
-//   API-key family — files, collections, search, ask: apiKeyAuth → rateLimit
-//     → usageLogger / or whatever prefix each had before the flatten
-//     (collections kept only apiKeyAuth, as v2 mounted it).
-//
-// No debug logging middlewares — removed with #28.
+// Exactly one router set; middleware is assembled per family here:
+//   session (JWT) family — auth, org, keys, usage, webhooks: mounted bare.
+//   API-key family — files, collections, search, ask: auth → rateLimit →
+//     usageLogger (collections keep only auth).
 
 import { Router } from 'express';
 import authRouter from './auth';

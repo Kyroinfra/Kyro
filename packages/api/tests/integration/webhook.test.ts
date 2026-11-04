@@ -25,8 +25,6 @@ import { dispatchWebhookEvent } from '../../src/webhooks/dispatch';
 const HAS_DB = !!process.env.TEST_DATABASE_URL;
 const suite = HAS_DB ? describe : describe.skip;
 
-// ── Stub webhook receivers ───────────────────────────────────────────────────
-
 interface StubHit {
   event:     string;
   body:      string;
@@ -66,8 +64,6 @@ function stubServer(): Promise<Stub> {
     });
   });
 }
-
-// ── Harness ──────────────────────────────────────────────────────────────────
 
 const orgId = randomUUID();
 
@@ -118,8 +114,6 @@ afterAll(async () => {
   await Promise.all(stubs.map((s) => s.close()));
   await pool.end();
 });
-
-// ── Tests ────────────────────────────────────────────────────────────────────
 
 /**
  * Deliveries land 'delivered' a microtask after the stub's response — poll

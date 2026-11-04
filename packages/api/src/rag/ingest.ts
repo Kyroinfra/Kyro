@@ -1,18 +1,10 @@
-// rag/ingest.ts — chunk → embed → persist, for one file
+// rag/ingest.ts — chunk → embed → persist, for one file.
 //
-// This is the embedding side of the ingest pipeline (extract lives in
-// lib/extractors and is orchestrated by lib/pipeline.ts; the pipeline
-// itself is restructured by #33). Responsibilities:
-//
-//   - chunk the extracted text           (rag/chunk.ts)
-//   - embed the chunks via Ollama        (rag/ollama.ts)
-//   - persist chunks + status trails in Postgres
-//   - emit the terminal file events file.ready / file.failed (#40;
-//     webhooks/dispatch.ts — the old 9-event list lives nowhere else)
-//
-// Chunk status transitions are unchanged; terminal events map to
-// file.ready / file.failed (skips of no-text/no-chunks are terminal
-// failures from the consumer's point of view — never queryable).
+// The embedding side of the ingest pipeline (extract lives in lib/extractors,
+// orchestrated by lib/pipeline.ts). Chunks via rag/chunk.ts, embeds via
+// rag/ollama.ts, persists chunks + status trails, and emits the terminal
+// file.ready / file.failed events (#40). Skips of no-text/no-chunks are
+// terminal failures from the consumer's point of view — never queryable.
 
 import { db } from '../db';
 import { fileChunks, files } from '../db/schema';
@@ -40,7 +32,6 @@ export interface EmbedFileResult {
 export async function embedFile(opts: EmbedFileOptions): Promise<EmbedFileResult> {
   const { fileId, orgId, extractedText, replace = true } = opts;
 
-  // ── Skipped: no text to embed ──────────────────────────────────────────────
   if (!extractedText?.trim()) {
     await db.update(files)
       .set({ status: 'skipped', error: null })
@@ -60,7 +51,6 @@ export async function embedFile(opts: EmbedFileOptions): Promise<EmbedFileResult
 
   const chunks = chunkText(extractedText);
 
-  // ── Skipped: text produced no chunks ──────────────────────────────────────
   if (chunks.length === 0) {
     await db.update(files)
       .set({ status: 'skipped', error: null })
@@ -74,9 +64,8 @@ export async function embedFile(opts: EmbedFileOptions): Promise<EmbedFileResult
     return { chunksCreated: 0, skipped: true };
   }
 
-  // ── Embedding: status stays 'processing' (set by the pipeline) ─────────────
-
-  // ── Embed in batches ───────────────────────────────────────────────────────
+  // Status stays 'processing' (set by the pipeline) until the terminal write
+  // below.
   const allEmbeddings: number[][] = [];
   try {
     for (let i = 0; i < chunks.length; i += EMBED_BATCH_SIZE) {
@@ -103,7 +92,6 @@ export async function embedFile(opts: EmbedFileOptions): Promise<EmbedFileResult
     throw embedErr;
   }
 
-  // ── Persist chunks ─────────────────────────────────────────────────────────
   // Embeddings are BOUND parameters: drizzle's native `vector` column maps
   // number[] → '[…]' as a parameter value (#34/#36) — no SQL is built by
   // concatenating vector literals, so the upsert stays injection-safe.
@@ -154,7 +142,7 @@ export async function embedFile(opts: EmbedFileOptions): Promise<EmbedFileResult
     throw persistErr;
   }
 
-  // ── Completed — the file is queryable ──────────────────────────────────────
+  // Ready — the file is now queryable.
   await db.update(files)
     .set({ status: 'ready', error: null })
     .where(eq(files.id, fileId));

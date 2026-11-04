@@ -2,11 +2,9 @@ import fs from 'fs';
 import { extractText, getDocumentProxy } from 'unpdf';
 
 /**
- * PDF text extraction via unpdf (modern pdfjs-dist, actively maintained).
- *
- * Replaced pdf-parse@1.1.4 (#59), whose bundled pdf.js v1.10.100 (2017)
- * hard-threw `FormatError: bad XRef entry` on cross-reference tables that
- * modern pdf.js reconstructs automatically.
+ * PDF text extraction via unpdf — modern, actively maintained pdfjs-dist.
+ * (The previous pdf-parse bundled pdf.js from 2017, which hard-threw on
+ * recoverable XRef damage modern pdf.js reconstructs automatically; #59.)
  */
 export async function extractPdf(filePath: string): Promise<string> {
   const dataBuffer = fs.readFileSync(filePath);

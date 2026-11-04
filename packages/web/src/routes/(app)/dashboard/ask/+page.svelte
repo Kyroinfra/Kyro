@@ -18,7 +18,6 @@
   let question = $state("");
   let scrollAnchor: HTMLDivElement | undefined;
 
-  // ── Scope selection ─────────────────────────────────────────────────────────
   type Scope = "org" | "collection";
   let scope = $state<Scope>("org");
   let collections = $state<Collection[]>([]);
