@@ -13,8 +13,7 @@
 //
 // Deletion note: the persistence effect is save-only; the stored key is only
 // ever removed by clearThread() (explicit "clear chat"). An effect that wiped
-// the key on empty state used to race restore and eat the whole thread
-// (regression fixed in 464fedb).
+// the key on empty state used to race restore and eat the whole thread.
 
 import { browser } from "$app/environment";
 import { askStream, type AskSource } from "$lib/api/ask";

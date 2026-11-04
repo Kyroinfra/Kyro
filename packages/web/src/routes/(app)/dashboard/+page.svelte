@@ -72,10 +72,8 @@
 
 <div class="dashboard">
 
-  <!-- Header -->
   <PageHeader command="dashboard.sh" />
 
-  <!-- ── Stats row ── -->
   <div class="section-label">// statistics</div>
   <div class="stats-grid">
 
@@ -141,10 +139,8 @@
 
   </div>
 
-  <!-- ── Panels row: keys + bandwidth ── -->
   <div class="panels-grid">
 
-    <!-- Recent API keys panel -->
     <Card padding="none">
       <div class="panel">
         <div class="panel-header">
@@ -175,7 +171,6 @@
       </div>
     </Card>
 
-    <!-- Bandwidth + storage panel -->
     <Card padding="none">
       <div class="panel">
         <div class="panel-header">
@@ -217,7 +212,6 @@
 
   </div>
 
-  <!-- ── Quick actions ── -->
   <div class="section-label">// quick actions</div>
   <div class="actions-grid">
     {#each quickActions as action}

@@ -59,7 +59,6 @@
     void loadAll();
   });
 
-  // ── Edit modal ──────────────────────────────────────────────────────────────
   let showEditModal = $state(false);
   let editName = $state("");
   let editDescription = $state("");
@@ -96,7 +95,6 @@
     }
   }
 
-  // ── Delete collection ───────────────────────────────────────────────────────
   let showDeleteConfirm = $state(false);
 
   async function handleDeleteCollection() {
@@ -111,7 +109,6 @@
     }
   }
 
-  // ── Add files modal ─────────────────────────────────────────────────────────
   let showAddFilesModal = $state(false);
   let orgFiles = $state<FileItemV2[]>([]);
   let loadingOrgFiles = $state(false);
@@ -157,7 +154,6 @@
     }
   }
 
-  // ── Remove file from collection ─────────────────────────────────────────────
   let fileToRemove = $state<CollectionFile | null>(null);
   let showRemoveConfirm = $state(false);
 
@@ -300,7 +296,6 @@
     {/if}
 </div>
 
-<!-- Edit collection modal -->
 <Modal bind:open={showEditModal} title="edit collection" onclose={() => (showEditModal = false)}>
   <div class="form-group">
     <label for="edit-name">name</label>
@@ -319,7 +314,6 @@
   </div>
 </Modal>
 
-<!-- Add files modal -->
 <Modal bind:open={showAddFilesModal} title="add files" onclose={() => (showAddFilesModal = false)}>
   {#if loadingOrgFiles}
     <p class="modal-loading">Loading files…</p>

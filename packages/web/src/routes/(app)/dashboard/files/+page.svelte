@@ -49,7 +49,6 @@
     $user?.role === "owner" || $user?.role === "admin",
   );
 
-  // ── Data loading ─────────────────────────────────────────────────────────────
   // First page loads on mount (#42) — the session cookie authenticates; no
   // key gate to pass first.
   onMount(() => {
@@ -89,11 +88,11 @@
     }
   }
 
-  // ── In-flight polling (#45) ──────────────────────────────────────────────────
   // While any listed file is pending/processing, poll every 3s and patch the
-  // new status/error in place. The patch is deliberately not a full refresh —
-  // it must not clobber load-more pagination or flash the loading spinner.
-  // Polling stops when everything is settled, on page hide, and on unmount.
+  // new status/error in place (#45). The patch is deliberately not a full
+  // refresh — it must not clobber load-more pagination or flash the loading
+  // spinner. Polling stops when everything is settled, on page hide, and on
+  // unmount.
   const POLL_INTERVAL = 3000;
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let pollBusy = false;

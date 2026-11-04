@@ -10,7 +10,6 @@
   import { toast } from "$lib/stores/toast";
   import { onMount } from "svelte";
 
-  // ── Scope selection ─────────────────────────────────────────────────────────
   // /search resolves collection_id server-side (rag/scope.ts); file_ids exist
   // in the API but stay hidden here — the raw-response pane shows exactly what
   // went over the wire, which is what this page is for.
@@ -20,7 +19,6 @@
   let selectedCollectionId = $state<string>("");
   let loadingCollections = $state(false);
 
-  // ── Query state ─────────────────────────────────────────────────────────────
   const LIMITS = [5, 10, 25, 50]; // /search caps limit at 50
   let query = $state("");
   let limit = $state(10);
