@@ -44,7 +44,7 @@ export async function runMigrationsUnderLock() {
   }
 }
 
-// Add this — without it, `node dist/db/migrate.js` does nothing
+// Direct CLI entry — without it, `node dist/db/migrate.js` does nothing.
 if (require.main === module) {
   runMigrations()
     .then(() => process.exit(0))

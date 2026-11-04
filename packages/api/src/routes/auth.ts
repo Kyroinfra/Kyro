@@ -30,7 +30,6 @@ async function findUniqueSlug(slug: string): Promise<string> {
 
   return `${slug}-${Date.now()}`;
 }
-// POST /register
 
 router.post('/register', async (req: Request, res: Response) => {
   const parsed = registerSchema.safeParse(req.body);
@@ -98,8 +97,6 @@ router.post('/register', async (req: Request, res: Response) => {
   });
 });
 
-// POST /login
-
 router.post('/login', async (req: Request, res: Response) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -145,8 +142,6 @@ router.post('/login', async (req: Request, res: Response) => {
     },
   });
 });
-
-// GET /me
 
 router.get('/me', authMiddleware, async (req: Request, res: Response) => {
   const [user] = await db

@@ -3,22 +3,14 @@
  *
  * One pipeline with one status (#33): a file's whole ingest position lives in
  * files.status (pending | processing | ready | failed | skipped) and failures
- * land in files.error — there is no jobs table. Files run through a semaphore
- * so parallel uploads never multiply extraction's RAM/CPU cost:
+ * land in files.error — there is no jobs table. A Semaphore(2) bounds parallel
+ * uploads so extraction's RAM/CPU cost never multiplies. 'ready'/'skipped' are
+ * set by rag/ingest.embedFile, and its embed failures are dispatched there
+ * (#40); extract failures dispatch here.
  *
- *   - upload (extractable MIME) → status = 'pending', pipeline fires
- *   - attempt start             → status = 'processing'
- *   - extraction ok             → text persisted; embedding takes over
- *   - embed ok                  → status = 'ready'   (rag/ingest sets it)
- *   - embed side not needed     → status = 'skipped' (RAG disabled / no text)
- *   - any failure               → status = 'failed' + files.error + file.failed
- *                                 event (#40: extract fails here, embed
- *                                 failures are dispatched by rag/ingest)
- *
- * There are no automatic retries (they were BullMQ's attempts/backoff, and
- * Redis is gone since #49) — re-run via POST /files/:id/reprocess. On process
- * restart, recoverInterruptedPipelines() marks files lost mid-run as failed so
- * nothing looks like it is "in progress" forever.
+ * No automatic retries (Redis is gone since #49) — re-run via
+ * POST /files/:id/reprocess. recoverInterruptedPipelines() at startup marks
+ * files lost mid-run as failed so nothing looks "in progress" forever.
  */
 import fs from 'node:fs';
 import { db } from '../db';
@@ -48,7 +40,6 @@ export function runPipeline(input: PipelineInput): void {
 }
 
 async function processPipeline({ fileId, storageKey, mimeType, orgId }: PipelineInput): Promise<void> {
-  // ── Attempt start ──────────────────────────────────────────────────────────
   await db.update(files)
     .set({ status: 'processing', error: null })
     .where(eq(files.id, fileId));
@@ -66,7 +57,6 @@ async function processPipeline({ fileId, storageKey, mimeType, orgId }: Pipeline
     return;
   }
 
-  // ── Step 1: Extract text ───────────────────────────────────────────────────
   let extractedText: string;
   try {
     extractedText = await extractText(mimeType, filePath);
@@ -82,7 +72,6 @@ async function processPipeline({ fileId, storageKey, mimeType, orgId }: Pipeline
 
   console.log(`Pipeline: text extraction completed for file ${fileId} (${extractedText.length} chars)`);
 
-  // ── Step 2: Embed chunks ───────────────────────────────────────────────────
   // rag/ingest.embedFile owns the terminal file status for this stage: 'ready'
   // on success, 'skipped' when there is nothing to embed, 'failed' + error when
   // the Ollama side or persistence fails (then rethrown here).

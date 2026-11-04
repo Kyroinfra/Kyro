@@ -1,15 +1,8 @@
-// rag/ollama.ts — the ONLY Ollama client in the codebase
+// rag/ollama.ts — the ONLY Ollama client in the codebase.
 //
 // Every conversation with Ollama goes through this module (per #32): one base
 // URL from config, one request helper, one error shape. Callers never build an
 // Ollama URL or parse raw HTTP.
-//
-//   embed(texts)               POST /api/embed        (one request per call;
-//                                                     the input is the batch)
-//   generate(prompt)           POST /api/generate
-//   chat(messages)             POST /api/chat         (non-streaming)
-//   chatStreaming(messages)    POST /api/chat         (streaming async
-//                                                     iterator of deltas)
 
 import config from '../config';
 
@@ -44,8 +37,6 @@ async function ollamaPost(path: string, body: unknown): Promise<Response> {
   return res;
 }
 
-// ── Embeddings ────────────────────────────────────────────────────────────────
-
 /** Embeds a batch in ONE HTTP request via Ollama's batch endpoint
  *  /api/embed (#36) — input order is preserved in the returned embeddings.
  *  Callers slice the input (rag/ingest, EMBED_BATCH_SIZE) so that one batch
@@ -66,8 +57,6 @@ export async function embed(texts: string[]): Promise<number[][]> {
   return data.embeddings;
 }
 
-// ── Generation ────────────────────────────────────────────────────────────────
-
 export async function generate(
   prompt:  string,
   model:   string,
@@ -81,8 +70,6 @@ export async function generate(
   });
   return await res.json() as { response: string };
 }
-
-// ── Chat ──────────────────────────────────────────────────────────────────────
 
 export async function chat(
   messages: ChatMessage[],
@@ -151,7 +138,7 @@ function parseOllamaLine(line: string): OllamaStreamEvent | null {
   try {
     json = JSON.parse(line) as { message?: { content?: string }; done?: boolean };
   } catch {
-    return null; // malformed line — skip (same as the original inline reader)
+    return null; // malformed line — skip
   }
 
   const delta = json.message?.content;

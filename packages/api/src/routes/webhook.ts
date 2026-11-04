@@ -8,14 +8,10 @@ import { z } from 'zod';
 
 const router = Router();
 
-// ── All subscribable events ───────────────────────────────────────────────────
-
 const WEBHOOK_EVENTS = z.enum([
     'file.ready',
     'file.failed',
 ]);
-
-// ── Request schemas ───────────────────────────────────────────────────────────
 
 const createWebhookSchema = z.object({
     url: z.string().url(),
@@ -26,9 +22,6 @@ const updateWebhookSchema = createWebhookSchema.partial().extend({
     enabled: z.boolean().optional(),
 });
 
-// ── Routes ────────────────────────────────────────────────────────────────────
-
-// List webhooks
 router.get('/', authMiddleware, async (req: Request, res: Response) => {
     const rows = await db
         .select({
@@ -75,7 +68,6 @@ router.post('/', authMiddleware, requireRole('owner', 'admin'), async (req: Requ
     res.status(201).json(row);
 });
 
-// Update webhook
 router.patch('/:id', authMiddleware, requireRole('owner', 'admin'), async (req: Request, res: Response) => {
     const parsed = updateWebhookSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -99,7 +91,6 @@ router.patch('/:id', authMiddleware, requireRole('owner', 'admin'), async (req: 
     res.json(row);
 });
 
-// Delete webhook
 router.delete('/:id', authMiddleware, requireRole('owner', 'admin'), async (req: Request, res: Response) => {
     const id = req.params.id as string;
     const [row] = await db
@@ -111,7 +102,6 @@ router.delete('/:id', authMiddleware, requireRole('owner', 'admin'), async (req:
     res.status(204).send();
 });
 
-// Delivery history for a webhook
 router.get('/:id/deliveries', authMiddleware, async (req: Request, res: Response) => {
     const id = req.params.id as string;
 

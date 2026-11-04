@@ -1,43 +1,29 @@
-// rag/rerank.ts — cross-encoder reranking using a locally hosted model via Ollama
+// rag/rerank.ts — cross-encoder reranking via a locally hosted Ollama model.
 //
 // A cross-encoder sees the query and a candidate chunk *together* in a single
-// forward pass, so it can model their interaction directly — unlike a
-// bi-encoder (used for initial retrieval) which embeds them separately and
-// compares in latent space.
-//
-// How it works:
-//   1. Caller passes the query + a list of candidate chunks (already retrieved
-//      by the BM25+vector hybrid stage).
-//   2. For each candidate we prompt the model: "On a scale of 0–10, how
-//      relevant is the following passage to the query?" and parse its numeric
-//      answer.
-//   3. Candidates are sorted by that score descending and returned.
-//
-// Latency note:
-//   Each candidate requires one Ollama call. Set RERANK_MODEL in your
-//   environment to choose the model; for most self-hosted setups candidates
-//   are scored sequentially (#35 makes reranking opt-in end to end).
+// forward pass, so it can model their interaction directly — unlike the
+// bi-encoder used for initial retrieval, which embeds them separately.
+// Each candidate costs one Ollama call, which is why reranking is opt-in
+// end to end (#35).
 
 import config from '../config';
 import { generate } from './ollama';
 
 const { rerankModel: RERANK_MODEL } = config;
 
-// How many candidates we score in flight at once when rerank runs (#35).
 // Purely serial scoring takes 2-5s (GPU) to 10-30s (CPU) PER CANDIDATE with
-// RERANK_INPUT_LIMIT up to 50 - minutes per query. A small bounded pool keeps
-// Ollama busy without pile-up: Ollama serialises model execution internally
-// anyway, so a pool of 4 saturates a single model instance without
-// backpressure blowing up its queue.
+// RERANK_INPUT_LIMIT up to 50 — minutes per query. Ollama serialises model
+// execution internally anyway, so a pool of 4 saturates a single model
+// instance without backpressure blowing up its queue (#35).
 const RERANK_CONCURRENCY = 4;
 
-// How many characters of a chunk to send to the cross-encoder.
-// Longer = more accurate but slower. 512 chars (~128 tokens) is a good default.
+// Longer context = more accurate but slower; 512 chars (~128 tokens) is a
+// good default.
 const RERANK_CONTEXT_CHARS = 512;
 
 export interface RerankCandidate {
-  // Opaque ID — anything that lets the caller identify this candidate back.
-  // Typically file_id + chunk_index joined, or any string key.
+  // Opaque ID — lets the caller identify this candidate back (typically
+  // file_id + chunk_index joined).
   id:         string;
   content:    string;
   // Any extra fields on the candidate are passed through untouched.
@@ -50,13 +36,10 @@ export interface RerankResult<T extends RerankCandidate> {
 }
 
 export interface RerankOptions {
-  // If true, errors on individual candidates are logged but do not abort the
-  // whole rerank — the failing candidate gets score 0 instead.
-  // Default: true (partial failure is better than a total outage).
+  // Default true: a failing candidate scores 0 instead of aborting the whole
+  // rerank — partial failure beats a total outage.
   tolerateErrors?: boolean;
 }
-
-// ── Internal: score one candidate ────────────────────────────────────────────
 
 async function scoreOne(query: string, content: string): Promise<number> {
   // Truncate to avoid blowing the context window of smaller models.
@@ -83,12 +66,12 @@ async function scoreOne(query: string, content: string): Promise<number> {
 
   const raw = data.response.trim();
 
-  // Parse the first integer we find in the response. If the model ignores the
-  // stop tokens and outputs extra text, this is still robust.
+  // Parse the first integer found — still robust if the model ignores the
+  // stop tokens and emits extra text.
   const match = raw.match(/\d+/);
   if (!match) {
-    // Model returned something unparseable — treat as low relevance rather
-    // than crashing. Callers can see rerankScore=0 and filter if needed.
+    // Unparseable model output — score 0 rather than crash; callers can see
+    // rerankScore=0 and filter if needed.
     console.warn(`Rerank: unparseable response "${raw}" for query "${query.slice(0, 60)}"`);
     return 0;
   }
@@ -98,15 +81,9 @@ async function scoreOne(query: string, content: string): Promise<number> {
   return clamped / 10;
 }
 
-// ── Public API ────────────────────────────────────────────────────────────────
-
 /**
  * Reranks `candidates` by relevance to `query` using a cross-encoder prompt.
  * Returns candidates sorted best-first with an added `rerankScore` field.
- *
- * @param query       The user's original search query.
- * @param candidates  Up to ~50 candidates from the hybrid retrieval stage.
- * @param opts        Optional behaviour flags.
  */
 export async function rerank<T extends RerankCandidate>(
   query:      string,
@@ -156,7 +133,8 @@ export async function rerank<T extends RerankCandidate>(
   // `tolerateErrors=true` (default) leaves score 0 rows in place of failures.
   const scored = results as RerankResult<T>[];
 
-  // Sort best-first.
+  // Sort best-first; ties preserve the input order (Array.sort is stable),
+  // i.e. RRF order.
   scored.sort((a, b) => b.rerankScore - a.rerankScore);
   return scored;
 }

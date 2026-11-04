@@ -1,6 +1,6 @@
 // db/schema.ts — the data model. pgvector via Drizzle's native `vector` type
-// (dimensions from config.EMBEDDING_DIM), the chunk tsvector is a Postgres
-// generated column (no triggers) — reflects migrations 0000..0014.
+// (dimensions from config.EMBEDDING_DIM); the chunk tsvector is a Postgres
+// generated column (no triggers).
 
 import {
   pgTable,
@@ -21,13 +21,9 @@ import {
 import { sql } from 'drizzle-orm';
 import config from '../config';
 
-// ── Custom column types ────────────────────────────────────────────────────────
-
 const tsvector = customType<{ data: string }>({
   dataType() { return 'tsvector'; },
 });
-
-// ── Tables ─────────────────────────────────────────────────────────────────────
 
 export const organisations = pgTable('organisations', {
   id:        uuid('id').defaultRandom().primaryKey(),
@@ -77,10 +73,8 @@ export const files = pgTable('files', {
   // `error` carries the failure message whenever status = 'failed'.
   status:            varchar('status', { length: 50 }).notNull().default('pending'),
   error:             text('error'),
-  // Plain jsonb object on the file (#38) — replaces the file_metadata EAV
-  // table (drop for drop: one bounded column + one GIN index instead of a
-  // table with 4 indexes). Flat string keys/values; the metadata endpoints
-  // upsert/delete keys in place.
+  // Plain jsonb object on the file (#38). Flat string keys/values; the
+  // metadata endpoints upsert/delete keys in place.
   metadata:          jsonb('metadata').notNull().default(sql`'{}'::jsonb`).$type<Record<string, string>>(),
   createdAt:         timestamp('created_at').defaultNow(),
 }, (table) => ({
@@ -88,7 +82,6 @@ export const files = pgTable('files', {
   metadataIdx:       index('idx_files_metadata').using('gin', table.metadata),
 }));
 
-// ── file_chunks ───────────────────────────────────────────────────────────────
 // One row per text chunk. Populated after text extraction completes.
 export const fileChunks = pgTable('file_chunks', {
   id:                uuid('id').defaultRandom().primaryKey(),
@@ -156,9 +149,7 @@ export const webhookDeliveries = pgTable('webhook_deliveries', {
   statusIdx:    index('idx_webhook_deliveries_status').on(table.status),
 }));
 
-// ── collections ───────────────────────────────────────────────────────────────
 // A named group of files within an org. Think: matter, project, product area.
-
 export const collections = pgTable('collections', {
   id:          uuid('id').defaultRandom().primaryKey(),
   orgId:       uuid('org_id').notNull().references(() => organisations.id, { onDelete: 'cascade' }),
@@ -171,11 +162,9 @@ export const collections = pgTable('collections', {
   orgIdIdx: index('idx_collections_org_id').on(table.orgId),
 }));
 
-// ── collection_files ──────────────────────────────────────────────────────────
 // Join table. A file can belong to multiple collections (useful for research
-// reuse — the same paper cited across multiple projects). `added_at` is the
-// audit trail; `added_by` was dropped in #39 (inserted-only, never read).
-
+// reuse — the same paper cited across multiple projects); added_at is the
+// audit trail.
 export const collectionFiles = pgTable('collection_files', {
   collectionId: uuid('collection_id').notNull().references(() => collections.id, { onDelete: 'cascade' }),
   fileId:       uuid('file_id').notNull().references(() => files.id, { onDelete: 'cascade' }),
@@ -185,5 +174,3 @@ export const collectionFiles = pgTable('collection_files', {
   fileIdIdx:       index('idx_collection_files_file_id').on(table.fileId),
   collectionIdIdx: index('idx_collection_files_collection_id').on(table.collectionId),
 }));
-
-// (file_metadata EAV deleted in #38 — metadata lives as files.metadata jsonb.)

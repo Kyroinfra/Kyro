@@ -2,27 +2,18 @@
  * Integration test: the one scope resolver for /search and /ask (#37).
  *
  * Two layers against a REAL Postgres:
- *
- *   1. resolveScope() directly — every scope rule and its uniform status:
- *      collection membership (404 unknown / 422 empty), metadata filters
- *      (422 no match), client fileIds narrowed to org-owned files (404 when
- *      nothing is owned), and the intersection of ALL provided constraints
+ *   1. resolveScope() directly — every scope rule and its uniform status
  *      (the #37 bug: /ask used to silently overwrite the filter result when
  *      a collectionId/fileIds branch ran after it).
- *
  *   2. The real GET /search and POST /ask routers via supertest — identical
  *      scope failures answer with identical status codes because both routes
- *      answer from the same resolver. Scope errors return before any retrieval
- *      happens, so these tests need no Ollama (OLLAMA_URL is a dummy needed
- *      only to switch RAG_ENABLED on so /ask reaches its scope section).
+ *      answer from the same resolver. Scope errors return before any
+ *      retrieval happens, so these tests need no Ollama.
  *
- *   The only mock is middleware/auth — auth itself is covered by #29's suites;
- *   these tests assert scope semantics, not key checks.
- *
- * Gated on TEST_DATABASE_URL, like hybridRank.test.ts: without it the suite
- * is skipped so the default jest run needs no database. Seeds a throwaway
- * org (+ a second org for foreign-file ownership checks) and cascade-deletes
- * afterwards.
+ * The only mock is middleware/auth — these tests assert scope semantics, not
+ * key checks. Gated on TEST_DATABASE_URL: without it the suite is skipped so
+ * the default jest run needs no database. Seeds a throwaway org (+ a second
+ * org for foreign-file ownership checks) and cascade-deletes afterwards.
  */
 import './_env';
 import { randomUUID } from 'node:crypto';
@@ -54,8 +45,6 @@ jest.mock('../../src/middleware/auth', () => ({
 
 const HAS_DB = !!process.env.TEST_DATABASE_URL;
 const suite = HAS_DB ? describe : describe.skip;
-
-// ── Seed constants ───────────────────────────────────────────────────────────
 
 const orgA  = randomUUID();   // the querying org
 const orgB  = randomUUID();   // holds the "foreign" file
@@ -158,8 +147,7 @@ suite('scope resolver — uniform /search + /ask scope semantics (#37)', () => {
     await pool.end();
   });
 
-  // ── Layer 1: resolveScope directly ─────────────────────────────────────
-
+  // Layer 1: resolveScope directly.
   it('no constraints → org-wide (fileIds undefined)', async () => {
     expect(await resolveScope(orgA, {})).toEqual({ fileIds: undefined });
   });
@@ -247,8 +235,7 @@ suite('scope resolver — uniform /search + /ask scope semantics (#37)', () => {
     ).toEqual({ fileIds: [fOps] });
   });
 
-  // ── Layer 2: both routes answer from the same resolver ─────────────────
-
+  // Layer 2: both routes answer from the same resolver.
   it('GET /search answers the uniform scope errors', async () => {
     // Unknown collection — was 400 before #37, now the /ask code.
     await request(app)

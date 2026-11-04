@@ -13,8 +13,6 @@ import { createFileUpload } from '../services/files';
 
 const router = Router();
 
-// ── POST / — upload a file ────────────────────────────────────────────────────
-
 router.post(
   '/',
   requireScope('write'),
@@ -97,9 +95,8 @@ router.get('/', requireScope('read'), async (req: AuthedRequest, res: Response) 
   res.json({ data, pagination: { limit, hasMore, nextCursor } });
 });
 
-// ── GET /:id/text ─────────────────────────────────────────────────────────────
-// IMPORTANT: /:id/text, /:id/metadata*, /:id/reprocess and /:id/embed must all
-// be registered BEFORE /:id, otherwise Express matches /:id first.
+// /:id/text, /:id/metadata*, /:id/reprocess must all be registered BEFORE
+// /:id, otherwise Express matches /:id first.
 
 router.get('/:id/text', requireScope('read'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
@@ -128,10 +125,8 @@ router.get('/:id/text', requireScope('read'), async (req: AuthedRequest, res: Re
   });
 });
 
-// ── POST /:id/reprocess ───────────────────────────────────────────────────────
-// Re-runs the whole pipeline (extract → embed) for an already-uploaded file.
-// A real re-run (#33): resets status to 'pending', clears the old error and
-// fires the pipeline again — there is no separate extract/embed step anymore.
+// Re-runs the whole pipeline (extract → embed) for an already-uploaded file —
+// there is no separate extract/embed step anymore (#33).
 
 router.post('/:id/reprocess', requireScope('write'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
@@ -165,7 +160,6 @@ router.post('/:id/reprocess', requireScope('write'), async (req: AuthedRequest, 
     return;
   }
 
-  // Reset: back to 'pending', old failure message gone, pipeline re-fires.
   await db
     .update(files)
     .set({ status: 'pending', error: null })
@@ -185,7 +179,6 @@ router.post('/:id/reprocess', requireScope('write'), async (req: AuthedRequest, 
   });
 });
 
-// ── GET /:id/metadata ─────────────────────────────────────────────────────────
 // Metadata is the file's own jsonb column (#38) — read it straight through.
 
 router.get('/:id/metadata', requireScope('read'), async (req: AuthedRequest, res: Response) => {
@@ -207,10 +200,9 @@ router.get('/:id/metadata', requireScope('read'), async (req: AuthedRequest, res
   res.json(row.metadata);
 });
 
-// ── PUT /:id/metadata ─────────────────────────────────────────────────────────
-// Upserts metadata keys. Non-destructive: keys not present in the body are
-// left untouched (jsonb `||` merge — the new keys win, existing keys not in
-// the body keep their values). Send { "key": null } via DELETE to remove.
+// Upserts metadata keys non-destructively: jsonb `||` merge — new keys win,
+// existing keys not in the body keep their values. Send { "key": null } via
+// DELETE to remove.
 
 router.put('/:id/metadata', requireScope('write'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
@@ -253,14 +245,12 @@ router.put('/:id/metadata', requireScope('write'), async (req: AuthedRequest, re
   res.json(parsed.data);
 });
 
-// ── DELETE /:id/metadata/:key ─────────────────────────────────────────────────
 // jsonb `-` (text) removes one key at a time; a missing key is a no-op.
 
 router.delete('/:id/metadata/:key', requireScope('write'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
   const { id, key } = req.params as { id: string; key: string };
 
-  // Verify ownership
   const [file] = await db
     .select({ id: files.id })
     .from(files)
@@ -281,12 +271,6 @@ router.delete('/:id/metadata/:key', requireScope('write'), async (req: AuthedReq
 
   res.status(204).send();
 });
-
-// ── POST /:id/embed ───────────────────────────────────────────────────────────
-// Removed (#33): there is one pipeline and one status. POST /:id/reprocess
-// re-runs extract → embed as a single flow.
-
-// ── GET /:id ──────────────────────────────────────────────────────────────────
 
 router.get('/:id', requireScope('read'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
@@ -322,8 +306,6 @@ router.get('/:id', requireScope('read'), async (req: AuthedRequest, res: Respons
 
   fs.createReadStream(filePath).pipe(res);
 });
-
-// ── DELETE /:id ───────────────────────────────────────────────────────────────
 
 router.delete('/:id', requireScope('write'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;

@@ -1,24 +1,14 @@
-// routes/search.ts — GET /search (hybrid retrieval, chunk-level)
-//
-// Replaces the v2 endpoints GET /files/semantic-search and GET /files/search:
-// rrfSearch() already fuses the full-text arm (ts_rank over chunk text) with
-// the dense vector arm, so this chunk-level endpoint subsumes both; the
-// file-level ts_rank + ts_headline route was deleted with #28 (semantics
-// per #34).
+// routes/search.ts — GET /search (hybrid retrieval, chunk-level).
 //
 // No client-side score threshold (#35): ?min_score on an RRF scale whose
 // maximum is ~0.033 was opaque to consumers, and the vector arm's distance
-// threshold (config) already bounds noise. RRF score reference:
+// threshold already bounds noise. RRF score reference:
 //   ~0.016  chunk ranked #1 in one arm only   (1 / (60+1))
 //   ~0.008  chunk ranked #60 in one arm only  (1 / (60+60))
 //   ~0.032  chunk ranked #1 in BOTH arms      (two contributions)
 //
-// Scope handling is the one resolver shared with /ask (#37): uniform status
-// codes (404 unknown collection / no owned file ids, 422 empty collection /
-// no filter match / empty intersection), client file_ids narrowed to org-
-// owned files, and metadata filters intersecting the rest. collection_id and
-// file_ids stay mutually exclusive (client-side convenience distinction, not
-// a scope rule the resolver needs).
+// Scope resolution is the one resolver shared with /ask (#37) — identical
+// status codes for identical scope failures.
 
 import { Router, type Response } from 'express';
 import { requireScope, type AuthedRequest } from '../middleware/auth';
@@ -32,8 +22,6 @@ const router = Router();
 // same shape POST /ask accepts in its body:
 //   ?filters=%7B%22document_type%22%3A%5B%22contract%22%2C%22amendment%22%5D%7D
 const filtersSchema = z.record(z.string(), z.union([z.string(), z.array(z.string())]));
-
-// ── GET / — hybrid search across chunks ──────────────────────────────────────
 
 router.get('/', requireScope('read'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
@@ -58,7 +46,6 @@ router.get('/', requireScope('read'), async (req: AuthedRequest, res: Response) 
     ? (req.query.file_ids as string).split(',').map(s => s.trim()).filter(Boolean)
     : undefined;
 
-  // ── Metadata filters (?filters=<URL-encoded JSON>, optional) ───────────
   let filters: Record<string, string | string[]> | undefined;
   const rawFilters = req.query.filters as string | undefined;
 
@@ -76,10 +63,9 @@ router.get('/', requireScope('read'), async (req: AuthedRequest, res: Response) 
     }
   }
 
-  // ── Scope: the one resolver (#37) ──────────────────────────────────────
   // `fileIds: undefined` means org-wide; every scope failure answers with
-  // the same status/message /ask would give for the same input. Empty
-  // filter lists (e.g. `?file_ids=,,`) stay org-wide — as before #37.
+  // the same status/message /ask would give for the same input. Empty filter
+  // lists (e.g. `?file_ids=,,`) stay org-wide.
   const scope = await resolveScope(orgId, {
     collectionId: hasCollectionId ? (req.query.collection_id as string) : undefined,
     fileIds:      fileIds && fileIds.length > 0 ? fileIds : undefined,
@@ -91,7 +77,6 @@ router.get('/', requireScope('read'), async (req: AuthedRequest, res: Response) 
     return;
   }
 
-  // ── Run hybrid retrieval ───────────────────────────────────────────────
   const results = await hybridSearch({
     orgId,
     query:   q,

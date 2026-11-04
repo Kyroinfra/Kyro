@@ -1,5 +1,5 @@
-// routes/collections.ts — COLLECTIONS CRUD + membership (#39: no slug state,
-// no added_by; rename-to-self is a plain update, counts from files.status)
+// routes/collections.ts — collections CRUD + membership (#39: no slug state,
+// no added_by; counts derive from files.status).
 
 import { Router, type Response } from 'express';
 import { db } from '../db';
@@ -9,8 +9,6 @@ import { requireScope, resolveUserId, type AuthedRequest } from '../middleware/a
 import { z } from 'zod';
 
 const router = Router();
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 const createCollectionSchema = z.object({
   name:        z.string().min(1).max(255),
@@ -22,8 +20,6 @@ const updateCollectionSchema = createCollectionSchema.partial();
 const addFilesSchema = z.object({
   fileIds: z.array(z.string().uuid()).min(1).max(100),
 });
-
-// ── GET / — list collections ──────────────────────────────────────────────────
 
 router.get('/', requireScope('read'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
@@ -49,8 +45,6 @@ router.get('/', requireScope('read'), async (req: AuthedRequest, res: Response) 
 
   res.json(rows);
 });
-
-// ── POST / — create collection ────────────────────────────────────────────────
 
 router.post('/', requireScope('write'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
@@ -82,8 +76,6 @@ router.post('/', requireScope('write'), async (req: AuthedRequest, res: Response
 
   res.status(201).json(collection);
 });
-
-// ── GET /:id — get collection with status summary ─────────────────────────────
 
 router.get('/:id', requireScope('read'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
@@ -120,10 +112,8 @@ router.get('/:id', requireScope('read'), async (req: AuthedRequest, res: Respons
   res.json(row);
 });
 
-// ── PATCH /:id — update collection ───────────────────────────────────────────
 // Renaming to the collection's own current name is a plain no-op update
 // (#39): no slug state exists that a self-rename could collide with.
-
 router.patch('/:id', requireScope('write'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
   const id = req.params.id as string;
@@ -161,8 +151,6 @@ router.patch('/:id', requireScope('write'), async (req: AuthedRequest, res: Resp
   res.json(updated);
 });
 
-// ── DELETE /:id ───────────────────────────────────────────────────────────────
-
 router.delete('/:id', requireScope('write'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
   const id = req.params.id as string;
@@ -179,8 +167,6 @@ router.delete('/:id', requireScope('write'), async (req: AuthedRequest, res: Res
 
   res.status(204).send();
 });
-
-// ── GET /:id/files ────────────────────────────────────────────────────────────
 
 router.get('/:id/files', requireScope('read'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
@@ -231,8 +217,6 @@ router.get('/:id/files', requireScope('read'), async (req: AuthedRequest, res: R
   });
 });
 
-// ── POST /:id/files ───────────────────────────────────────────────────────────
-
 router.post('/:id/files', requireScope('write'), async (req: AuthedRequest, res: Response) => {
   const orgId  = req.orgId!;
   const id     = req.params.id as string;
@@ -281,8 +265,6 @@ router.post('/:id/files', requireScope('write'), async (req: AuthedRequest, res:
 
   res.status(200).json({ added: ownedIds.size, collectionId: id });
 });
-
-// ── DELETE /:id/files/:fileId ─────────────────────────────────────────────────
 
 router.delete('/:id/files/:fileId', requireScope('write'), async (req: AuthedRequest, res: Response) => {
   const orgId              = req.orgId!;

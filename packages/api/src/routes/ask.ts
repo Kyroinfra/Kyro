@@ -1,17 +1,9 @@
-// routes/ask.ts — POST /ask (RAG question answering with SSE streaming)
+// routes/ask.ts — POST /ask (RAG question answering with SSE streaming).
 //
-// Supported modes (all via the same endpoint):
-//   { question, collectionId }   — search within a specific collection
-//   { question, fileIds: [...] } — search within specific files
-//   { question }                 — search across the entire org's embedded corpus
-//   + optional history: prior user/assistant turns, replayed as conversation
-//     context to the LLM (multi-turn follow-ups; retrieval stays fresh each turn)
-//
-// Everything else is owned elsewhere and this route stays the thin wire:
-//   scope rules + uniform errors → rag/scope.ts (#37, one resolver shared
-//   with /search — no per-route scope branches and no embedded-file
-//   pre-counts; retrieval itself only surfaces status='ready' files)
-//   prompt + LLM calls           → rag/ask.ts (askSchema also lives there)
+// This route stays the thin wire: scope rules + uniform errors → rag/scope.ts
+// (#37, one resolver shared with /search — no per-route scope branches and no
+// embedded-file pre-counts); prompt + LLM calls → rag/ask.ts (askSchema lives
+// there too).
 
 import { Router, type Response } from 'express';
 import { requireScope, type AuthedRequest } from '../middleware/auth';
@@ -23,8 +15,6 @@ import config from '../config';
 const router = Router();
 
 const { ragEnabled: RAG_ENABLED } = config;
-
-// ── POST / — answer a question from retrieved context ────────────────────────
 
 router.post('/', requireScope('read'), async (req: AuthedRequest, res: Response) => {
   const orgId = req.orgId!;
@@ -40,7 +30,6 @@ router.post('/', requireScope('read'), async (req: AuthedRequest, res: Response)
     return;
   }
 
-  // ── Scope: the one resolver (#37) ──────────────────────────────────────
   // `fileIds: undefined` means org-wide; every scope failure answers with
   // the same status/message /search would give for the same input.
   const scope = await resolveScope(orgId, {
@@ -54,7 +43,6 @@ router.post('/', requireScope('read'), async (req: AuthedRequest, res: Response)
     return;
   }
 
-  // ── Hybrid retrieval ───────────────────────────────────────────────────
   const sources = await hybridSearch({
     orgId,
     query:   parsed.data.question,
@@ -62,7 +50,6 @@ router.post('/', requireScope('read'), async (req: AuthedRequest, res: Response)
     limit:   parsed.data.topK,
   });
 
-  // ── Prompt + streaming response ────────────────────────────────────────
   // Prompt building, the Ollama chat calls and stream parsing live in
   // rag/ask.ts + rag/ollama.ts; this route owns only the SSE wire.
   if (parsed.data.stream) {
@@ -96,7 +83,6 @@ router.post('/', requireScope('read'), async (req: AuthedRequest, res: Response)
     return;
   }
 
-  // ── Non-streaming response ─────────────────────────────────────────────
   const answer = await answerOnce(parsed.data.question, sources, {
     model:   parsed.data.model,
     history: parsed.data.history,

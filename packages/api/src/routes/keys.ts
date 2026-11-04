@@ -13,8 +13,6 @@ const createKeySchema = z.object({
   scopes: z.array(z.enum(['read', 'write'])).default(['read']),
 });
 
-// POST / - create and returns a new API key
-
 router.post('/', authMiddleware, requireRole('owner', 'admin'), async (req: Request, res: Response) => {
   const userId = req.user?.userId;
   const orgId = req.user?.orgId;
@@ -53,8 +51,6 @@ router.post('/', authMiddleware, requireRole('owner', 'admin'), async (req: Requ
     key: raw,
   });
 });
-
-// GET / - get all keys
 
 router.get('/', authMiddleware, requireRole('owner', 'admin', 'member'), async (req: Request, res: Response) => {
   const orgId = req.user?.orgId;
@@ -103,8 +99,6 @@ router.get('/', authMiddleware, requireRole('owner', 'admin', 'member'), async (
     },
   });
 });
-
-// DELETE /:id - does not hard delete but set's revoked at
 
 router.delete('/:id', authMiddleware, requireRole('owner', 'admin'), async (req: Request, res: Response) => {
   const orgId = req.user?.orgId;

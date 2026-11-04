@@ -1,67 +1,32 @@
-// rag/retrieve.ts
-// ─────────────────────────────────────────────────────────────────────────────
-// Hybrid retrieval for file chunks (#35).
+// rag/retrieve.ts — hybrid retrieval for file chunks (#35).
 //
-//   a. Dense arm:  cosine distance via pgvector (`<=>`), HNSW-backed since #34.
-//   b. Full-text arm: ts_rank over the generated tsvector (it is NOT BM25 —
-//      ts_rank is a simpler relevance function; the name says what it is).
-//   Both arms fetch up to CANDIDATE_LIMIT rows WITH an explicit ORDER BY
-//   before LIMIT, so the kept candidate set is deterministic. Scores are
-//   fused with Reciprocal Rank Fusion (RRF k=60); ties break on file_id /
-//   chunk_index so the output order is fully deterministic.
+// Dense arm (pgvector cosine `<=>`, HNSW) + full-text arm (ts_rank over the
+// generated tsvector — not BM25), fused with Reciprocal Rank Fusion; ties
+// break on file_id/chunk_index so the output order is deterministic. Both
+// arms fetch CANDIDATE_LIMIT rows with an explicit ORDER BY before LIMIT.
+// Cross-encoder reranking is opt-in (RERANK_ENABLED, default off).
 //
-//   Cross-encoder reranking is OPT-IN (RERANK_ENABLED, default off — it makes
-//   up to RERANK_INPUT_LIMIT Ollama calls). When off, RRF order is the final
-//   answer.
-//
-// History notes worth keeping:
-//
-//   FIX 1 (2026-06-07) — Parameter index corruption: parameter indices are
-//   assigned explicitly BEFORE constructing the SQL string (the original code
-//   derived them from params.length inside the template and mutated the array
-//   mid-construction, silently breaking the full-text arm).
-//
-//   FIX 2 (2026-06-07) — Vector arm distance threshold: without it the vector
-//   arm always returns CANDIDATE_LIMIT rows and nonsense queries carried noise
-//   into RRF. The threshold is config.VECTOR_DISTANCE_THRESHOLD (#24).
-//
-//   #35 — query vector is a BOUND parameter ($n::vector). pgvector accepts
-//   the native driver string in a parameter and casts it; the old
-//   string-interpolation and the "cannot bind" comment were wrong.
-//
-// NOTE — this is the ONLY module permitted to use the raw pg handle (see the
-// comment in db/index.ts): the fusion SQL is tsvector/vector-specific and is
-// not expressible with the Drizzle query builder. Re-established as the
-// explicit whitelist by #26.
-// ─────────────────────────────────────────────────────────────────────────────
+// This is the ONLY module permitted to use the raw pg handle (see
+// db/index.ts): the fusion SQL is tsvector/vector-specific and is not
+// expressible with the Drizzle query builder (#26).
 
 import { pool } from '../db';
 import config from '../config';
 import { embed } from './ollama';
 import { rerank, type RerankCandidate } from './rerank';
 
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-// RRF constant — 60 is the value from the original RRF paper (Cormack 2009).
+// From the original RRF paper (Cormack 2009).
 const RRF_K = 60;
 
-// How many candidates each arm fetches before fusion.
 const CANDIDATE_LIMIT = 100;
 
-// How many fused candidates are passed to the cross-encoder (only when
-// reranking is enabled).
 const RERANK_INPUT_LIMIT = 50;
 
-// Cosine distance threshold for the vector arm — from config (#24).
-// pgvector's <=> returns cosine distance in [0, 2]:
-//   0.0  = identical vectors
-//   1.0  = orthogonal (no similarity)
-//   2.0  = opposite vectors
-// 0.5 (default) admits anything with any directional similarity while
-// excluding pure noise. Tighten via env without a redeploy.
+// Cosine distance threshold for the vector arm (#24). pgvector's <=> returns
+// distance in [0, 2]: 0 = identical vectors, 1 = orthogonal, 2 = opposite.
+// 0.5 admits anything with directional similarity while excluding pure
+// noise; tighten via env without a redeploy.
 const VECTOR_DISTANCE_THRESHOLD = config.vectorDistanceThreshold;
-
-// ── Shared result shape ───────────────────────────────────────────────────────
 
 export interface RetrievalResult {
   fileId:       string;
@@ -71,8 +36,6 @@ export interface RetrievalResult {
   rrfScore:     number;
   rerankScore?: number;
 }
-
-// ── Phase 1: full-text + vector → RRF ────────────────────────────────────────
 
 export interface RrfSearchOptions {
   orgId:       string;
@@ -86,39 +49,29 @@ export interface RrfSearchOptions {
  * Phase 1: retrieve candidates from both the dense (vector) and full-text
  * arms, fuse their ranks with RRF, and return up to `limit` results sorted by
  * descending RRF score (ties break by fileId/chunkIndex — deterministic).
- *
- * Parameter layout (all assigned before SQL construction):
- *   $1 — orgId (where the vector arm's chunks, the joined file and the
- *        full-text arm's chunks must belong)
- *   $2 — query embedding, bound once as ::vector (used for both the distance
- *        filter and the ORDER BY)
- *   $3 — cosine distance threshold (config, number we produced)
- *   $4 — per-arm candidate LIMIT
- *   $5 — query text (full-text arm)
- *   $6 — fileIds[] ::uuid[] (only when the filter is present)
- *   $7 — output LIMIT (only when the filter is present; $6 otherwise)
  */
 export async function rrfSearch(opts: RrfSearchOptions): Promise<RetrievalResult[]> {
   const { orgId, query, queryVector, fileIds, limit } = opts;
 
-  // ── Build params array with explicit indices BEFORE touching SQL ──────────
+  // Assign every parameter index BEFORE building the SQL string — deriving
+  // them from params.length mid-construction silently corrupts the queries.
   const params: unknown[] = [];
 
   params.push(orgId);
-  const P_ORG = params.length; // 1
+  const P_ORG = params.length;
 
-  // pgvector bind — pool/JSON-stringified plain text cast to the column type
+  // pgvector accepts the driver's string form when cast to ::vector.
   params.push(`[${queryVector.join(',')}]`);
-  const P_VECTOR = params.length; // 2
+  const P_VECTOR = params.length;
 
   params.push(VECTOR_DISTANCE_THRESHOLD);
-  const P_THRESHOLD = params.length; // 3
+  const P_THRESHOLD = params.length;
 
   params.push(CANDIDATE_LIMIT);
-  const P_CANDIDATES = params.length; // 4
+  const P_CANDIDATES = params.length;
 
   params.push(query);
-  const P_QUERY = params.length; // 5
+  const P_QUERY = params.length;
 
   let fileFilterClause = '';
   if (fileIds && fileIds.length > 0) {
@@ -218,8 +171,6 @@ interface ChunkCandidate extends RerankCandidate {
   rrfScore:   number;
 }
 
-// ── Public entry point ────────────────────────────────────────────────────────
-
 export interface HybridSearchOptions {
   orgId:    string;
   query:    string;
@@ -228,15 +179,10 @@ export interface HybridSearchOptions {
 }
 
 /**
- * Hybrid retrieval:
- *   Phase 1 — full-text + vector → RRF.
- *   Phase 2 — cross-encoder rerank of the top RERANK_INPUT_LIMIT candidates,
- *             ONLY when RERANK_ENABLED is on (default off — without it this
- *             makes up to 50 sequential-by-default Ollama LLM calls per query;
- *             bounded pools make it reasonable but never free).
- *
- * With reranking off, the RRF order is the final answer and no LLM calls are
- * made beyond the query embedding.
+ * Hybrid retrieval: phase 1 fuses full-text + vector ranks with RRF; phase 2
+ * (only when RERANK_ENABLED is on) cross-encoder-reranks the top
+ * RERANK_INPUT_LIMIT candidates. With reranking off, the RRF order is the
+ * final answer and no LLM calls are made beyond the query embedding.
  */
 export async function hybridSearch(opts: HybridSearchOptions): Promise<RetrievalResult[]> {
   const { orgId, query, fileIds, limit = 10 } = opts;

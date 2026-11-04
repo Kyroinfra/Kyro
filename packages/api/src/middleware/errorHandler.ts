@@ -12,9 +12,6 @@ export interface AppError extends Error {
  * The single error path. Express 5 forwards rejected promises from async
  * handlers here automatically; multer calls next(err) with its own errors;
  * HttpErrors thrown anywhere carry their statusCode.
- *
- * Express-4 per-route `try { … } catch { res.status(500) }` boilerplate was
- * removed in favour of this handler (#27).
  */
 export function errorHandler(
     err: unknown,

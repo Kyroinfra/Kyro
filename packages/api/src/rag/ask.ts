@@ -1,14 +1,6 @@
-// rag/ask.ts — prompt building + answer generation for POST /ask
-//
-// The route stays thin (parse → scope checks → SSE plumbing); this module owns
-// everything LLM-shaped:
-//
-//   buildChatMessages() — document-context prompt + system rules + history
-//   streamAnswer()      — async iterator over the streamed chat response
-//   answerOnce()        — non-streaming fallback returning the full answer
-//
-// The prompt text and the options passed to Ollama are byte-identical to the
-// previous inline implementation.
+// rag/ask.ts — prompt building + answer generation for POST /ask.
+// The route stays the thin SSE wire (parse → scope checks → plumbing); this
+// module owns everything LLM-shaped.
 
 import config from '../config';
 import { chat, chatStreaming, type ChatMessage } from './ollama';
@@ -17,9 +9,6 @@ import { z } from 'zod';
 
 const { chatModel: CHAT_MODEL } = config;
 
-// ── The /ask request contract ────────────────────────────────────────────────
-// Lives beside the prompt/LLM logic (the meat of the endpoint) so routes/ask.ts
-// stays the thin SSE wire; routes import it from here.
 export const askSchema = z.object({
   filters: z.record(z.string(), z.union([z.string(), z.array(z.string())])).optional(),
   question:     z.string().min(1).max(2000),
@@ -36,7 +25,6 @@ export const askSchema = z.object({
     content: z.string().min(1).max(2000),
   })).max(10).optional(),
 }).refine(
-  // Mutual exclusion — providing both is always an error
   data => !(data.fileIds && data.collectionId),
   { message: 'Provide either fileIds or collectionId, not both' },
 );
