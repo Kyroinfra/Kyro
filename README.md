@@ -73,8 +73,7 @@ Or manually:
 docker compose \
   -f compose.yml \
   --profile prod \
-  --scale api=3 \
-  up -d
+  up -d --scale api=3
 ```
 
 The API serves `/api/v1/*` at `http://localhost/api/v1`, with `/health` at the origin root. Migrations run at api startup under a Postgres advisory lock — concurrent starts (replica scale-ups, a racing restart) queue instead of colliding.
