@@ -143,9 +143,15 @@ func gitCommit() string {
 }
 
 func main() {
+	// .env in the working directory fills gaps only: a real environment
+	// variable, or an explicit -key/-url flag below, always wins over the file.
+	if err := loadDotenv(".env"); err != nil {
+		fatal("load .env: %v", err)
+	}
+
 	var (
-		baseURL   = flag.String("url", envOr("KYRO_URL", "http://localhost"), "Kyro base URL")
-		apiKey    = flag.String("key", os.Getenv("KYRO_KEY"), "Kyro API key (read+write)")
+		baseURL   = flag.String("url", "", "Kyro base URL (default: KYRO_URL, or http://localhost)")
+		apiKey    = flag.String("key", "", "Kyro API key, read+write (default: KYRO_KEY)")
 		corpus    = flag.String("corpus", "corpus", "folder with the documents")
 		questions = flag.String("questions", "questions.jsonl", "question file")
 		mode      = flag.String("mode", "", "search mode: vector | text | hybrid (empty = server default)")
@@ -157,8 +163,17 @@ func main() {
 	)
 	flag.Parse()
 
+	// The environment (including .env) backs the empty flag defaults. This is
+	// resolved after Parse rather than as a flag default so `-h` never prints
+	// the API key.
+	if *baseURL == "" {
+		*baseURL = envOr("KYRO_URL", "http://localhost")
+	}
 	if *apiKey == "" {
-		fatal("set KYRO_KEY (or pass -key): create one in the dashboard with read+write scopes")
+		*apiKey = os.Getenv("KYRO_KEY")
+	}
+	if *apiKey == "" {
+		fatal("set KYRO_KEY (in .env, the environment, or -key): create one in the dashboard with read+write scopes")
 	}
 	if *label == "" {
 		*label = *mode

@@ -41,6 +41,7 @@ Why not store "chunk number 7"? Because chunk numbers change whenever you change
 | `client.go` | Talks to Kyro: upload a file, wait until it's `ready`, search. Retries politely when rate limited. |
 | `client_test.go` | Tests the client against a fake Kyro server. |
 | `main.go` | The runner: load questions, run them, print the table, save a JSON. |
+| `env.go` | Loads `.env` (fill-gaps-only) so `go run .` needs no exports. |
 | `questions.example.jsonl` | The question file format. |
 
 ## Run it
@@ -53,12 +54,15 @@ go test ./...                      # check the scoring code first
 # 2. copy questions.example.jsonl to questions.jsonl and write your own
 # 3. create an API key (read + write) in the Kyro dashboard
 
-export KYRO_KEY=kyro_live_...
-export KYRO_URL=http://localhost        # or http://localhost:3000 in dev
+# 4. put your settings in eval/.env (gitignored), one KEY=VALUE per line:
+#      KYRO_KEY=kyro_live_...
+#      KYRO_URL=http://localhost:3000     # dev; use http://localhost in prod
 
 go run . -ingest -label baseline        # uploads the corpus, waits, then scores
 go run . -label baseline-again          # later runs skip the upload
 ```
+
+The runner loads `.env` from the working directory at startup and sets only the variables the environment doesn't already have — a real `export KYRO_KEY=...` or an explicit `-key`/`-url` flag always wins over the file.
 
 You'll get something like:
 
