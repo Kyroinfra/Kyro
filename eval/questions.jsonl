@@ -1,0 +1,12 @@
+{"id":"q1","type":"keyword","question":"Which vector database extension allows PostgreSQL to perform similarity searches?","file":"Untitled2.pdf","evidence":"PostgreSQL with the pgvector extension"}
+{"id":"q2","type":"paraphrase","question":"Why might asynchronous database replication result in outdated information?","file":"Untitled1.pdf","evidence":"temporarily stale data"}
+{"id":"q3","type":"factoid","question":"What are the three commonly used observability signals?","file":"Untitled5.pdf","evidence":"logs, metrics, and traces"}
+{"id":"q4","type":"unanswerable","question":"Which programming language was used to implement the distributed system?","unanswerable":true}
+{"id":"q5","type":"keyword","question":"What indexing algorithm organizes vectors into multiple graph layers?","file":"Untitled4.pdf","evidence":"Hierarchical Navigable Small World (HNSW)"}
+{"id":"q6","type":"paraphrase","question":"How does cache-aside retrieve data when an item is missing from the cache?","file":"Untitled5.pdf","evidence":"retrieves data from the primary storage if the cache misses"}
+{"id":"q8","type":"keyword","question":"What is the purpose of overlapping chunks in document processing?","file":"Untitled3.pdf","evidence":"preserve context across boundaries"}
+{"id":"q9","type":"paraphrase","question":"Why can microservices make application operations more complicated?","file":"Untitled4.pdf","evidence":"increase operational complexity"}
+{"id":"q10","type":"factoid","question":"What are the three similarity metrics mentioned for vector databases?","file":"Untitled2.pdf","evidence":"cosine similarity, Euclidean distance, and dot product"}
+{"id":"q11","type":"unanswerable","question":"What is the recommended CPU specification for running an HNSW index?","unanswerable":true}
+{"id":"q13","type":"keyword","question":"Which caching technologies are commonly used?","file":"Untitled5.pdf","evidence":"Redis and Memcached"}
+{"id":"q15","type":"paraphrase","question":"Why are database indexes useful when retrieving records?","file":"Untitled4.pdf","evidence":"reducing the amount of data a database must examine"}

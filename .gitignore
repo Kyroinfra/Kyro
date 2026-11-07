@@ -37,6 +37,9 @@ npm-debug.log*
 # Uploads (Phase 2+)
 uploads/
 
+# Eval runner output
+eval/results/
+
 importantNote.md
 copy.txt
 
