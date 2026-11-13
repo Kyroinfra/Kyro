@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Superseded runs on the same branch are dead weight — cancel them.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Everything that needs no infrastructure: lint, hermetic unit tests
+  # (the four integration suites self-skip without TEST_DATABASE_URL),
+  # the api type build, and the web typecheck + production build.
+  gates:
+    name: lint · unit · typecheck · builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # Version comes from packageManager in package.json — never drifts here.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24 # matches both package Dockerfiles
+          cache: pnpm
+
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: API tests (hermetic — integration suites self-skip)
+        run: pnpm --filter kyro-api test
+
+      - name: API build (tsc)
+        run: pnpm --filter kyro-api build
+
+      - name: Web typecheck (svelte-check)
+        run: pnpm --filter kyro-web check
+
+      - name: Web build (vite + adapter-node)
+        run: pnpm --filter kyro-web build
+
+  # The same jest suite with TEST_DATABASE_URL armed: the four integration
+  # suites (hybridRank, scope, upload, webhook) run against a real pgvector
+  # Postgres — the exact image compose.yml uses. They assume the migration
+  # schema exists, so migrations are applied first (same runner the API uses
+  # on boot, under its advisory lock). No secrets: the database is a runner-
+  # local service and the JWT secret only satisfies config validation.
+  integration:
+    name: api integration (real pgvector)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: kyro_test
+          POSTGRES_PASSWORD: kyro_test
+          POSTGRES_DB: kyro_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U kyro_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://kyro_test:kyro_test@localhost:5432/kyro_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply migrations to the test database
+        env:
+          DATABASE_URL: postgres://kyro_test:kyro_test@localhost:5432/kyro_test
+          JWT_SECRET: ci-only-secret-not-used-in-prod
+        run: pnpm --filter kyro-api migrate
+
+      - name: Full API test suite (86 tests incl. 22 against real pgvector)
+        run: pnpm --filter kyro-api test
