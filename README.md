@@ -356,7 +356,10 @@ Dev-only services (`compose.override.yml`): `pgadmin` (GUI at :5050) and a conta
 
 Everything below talks to `http://localhost/api/v1`. Both credentials work on every org-scoped route — `X-API-Key: <key>` or `Authorization: Bearer <jwt>` (an explicit `X-API-Key` wins when both are sent). Rate limit: 100 requests per key per minute.
 
-**1. Create the first account** — the first registration creates your organisation and its owner; afterwards signup stays locked unless `ALLOW_SIGNUP=true`:
+<details>
+<summary>1. Create the first account</summary>
+
+The first registration creates your organisation and its owner; afterwards signup stays locked unless `ALLOW_SIGNUP=true`:
 
 ```bash
 curl -X POST http://localhost/api/v1/auth/register \
@@ -365,7 +368,12 @@ curl -X POST http://localhost/api/v1/auth/register \
 # → 201 {"token":"…"}
 ```
 
-**2. Mint an API key** (owner/admin only; the plaintext `key` is returned exactly once):
+</details>
+
+<details>
+<summary>2. Mint an API key</summary>
+
+Owner/admin only. The plaintext `key` is returned exactly once:
 
 ```bash
 curl -X POST http://localhost/api/v1/keys \
@@ -375,7 +383,12 @@ curl -X POST http://localhost/api/v1/keys \
 # → 201 {"key":"kyro_live_…","key_prefix":"kyro_live_…",…}
 ```
 
-**3. Upload a file** — PDF, DOCX, DOC and TXT are extracted and embedded; CSV and JSON are stored without extraction (`skipped`); anything else is rejected with 415:
+</details>
+
+<details>
+<summary>3. Upload a file</summary>
+
+PDF, DOCX, DOC and TXT are extracted and embedded; CSV and JSON are stored without extraction (`skipped`); anything else is rejected with 415:
 
 ```bash
 curl -X POST http://localhost/api/v1/files \
@@ -383,14 +396,24 @@ curl -X POST http://localhost/api/v1/files \
   -F file=@report.pdf
 ```
 
-**4. Search** — hybrid keyword + embedding retrieval, ranked with Reciprocal Rank Fusion:
+</details>
+
+<details>
+<summary>4. Search</summary>
+
+Hybrid keyword + embedding retrieval, ranked with Reciprocal Rank Fusion:
 
 ```bash
 curl "http://localhost/api/v1/search?q=payment+terms&limit=5" \
   -H "X-API-Key: $KYRO_KEY"
 ```
 
-**5. Ask** — retrieval-grounded answers streamed over Server-Sent Events (`sources` → `chunk`* → `done`), or one JSON body with `"stream": false`:
+</details>
+
+<details>
+<summary>5. Ask</summary>
+
+Retrieval-grounded answers streamed over Server-Sent Events (`sources` → `chunk`* → `done`), or one JSON body with `"stream": false`:
 
 ```bash
 curl -N -X POST http://localhost/api/v1/ask \
@@ -399,6 +422,7 @@ curl -N -X POST http://localhost/api/v1/ask \
   -d '{"question":"What are the payment terms?","collectionId":"<uuid>"}'
 ```
 
+</details>
 ### Where to go next
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — how the system works: boot sequence, ingest pipeline, hybrid retrieval, scope resolution, webhooks, data model, configuration

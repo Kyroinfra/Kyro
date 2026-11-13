@@ -1,0 +1,6 @@
+// One JSON object per line. Lines starting with // are ignored.
+// "evidence" = a SHORT exact phrase (under ~100 chars) from the doc that answers the question.
+{"id":"q1","type":"keyword","question":"What does error code E1234 mean?","file":"example.pdf","evidence":"E1234 indicates a connection timeout"}
+{"id":"q2","type":"paraphrase","question":"How long do I have to fix a problem after being told about it?","file":"example.pdf","evidence":"within thirty (30) days of written notice"}
+{"id":"q3","type":"factoid","question":"Which company signed the agreement?","file":"example.pdf","evidence":"Acme Corporation"}
+{"id":"q4","type":"unanswerable","question":"What is the CEO's favourite colour?","unanswerable":true}
