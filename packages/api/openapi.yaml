@@ -347,17 +347,12 @@ paths:
                   pagination: { $ref: '#/components/schemas/OffsetPagination' }
         '401':
           description: Missing or invalid token.
-        '403':
-          description: Role not in owner/admin/member.
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/SimpleError' }
     post:
       summary: Create an API key
       description: |
         Requires the `owner` or `admin` role. The plaintext `key` value is
         returned exactly once, on creation; later list/read responses only
-        carry `key_prefix`. Revocate with `DELETE /keys/{id}` (soft).
+        carry `key_prefix`. Revoke with `DELETE /keys/{id}` (soft).
       tags: [API Keys]
       security: [{ bearerAuth: [] }]
       operationId: createApiKey
@@ -651,7 +646,7 @@ paths:
                   type: string
                   format: binary
                   description: >-
-                    PDF, DOCX, DOC and TXT are extracted; CSV and JSON are
+                    PDF, DOCX and TXT are extracted; CSV and JSON are
                     stored as `skipped`; any other type is rejected with 415.
       responses:
         '201':
@@ -1049,6 +1044,11 @@ paths:
               schema: { $ref: '#/components/schemas/SimpleError' }
         '401':
           description: Missing or invalid credentials.
+        '403':
+          description: Not write-scoped.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
         '404':
           description: Collection not found.
           content:
@@ -1068,6 +1068,11 @@ paths:
           description: Collection deleted.
         '401':
           description: Missing or invalid credentials.
+        '403':
+          description: Not write-scoped.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
         '404':
           description: Collection not found.
           content:
@@ -1148,6 +1153,11 @@ paths:
                     items: { type: string, format: uuid }
         '401':
           description: Missing or invalid credentials.
+        '403':
+          description: Not write-scoped.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
         '404':
           description: Collection not found.
           content:
@@ -1172,6 +1182,11 @@ paths:
           description: File removed from the collection.
         '401':
           description: Missing or invalid credentials.
+        '403':
+          description: Not write-scoped.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
         '404':
           description: Collection unknown, or the file is not a member.
           content:
@@ -1228,6 +1243,11 @@ paths:
               schema: { $ref: '#/components/schemas/SimpleError' }
         '401':
           description: Missing or invalid credentials.
+        '403':
+          description: Not read-scoped.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
         '404':
           description: Unknown collection or no owned files among `file_ids`.
           content:
@@ -1292,6 +1312,11 @@ paths:
               schema: { $ref: '#/components/schemas/SimpleError' }
         '401':
           description: Missing or invalid credentials.
+        '403':
+          description: Not read-scoped.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SimpleError' }
         '404':
           description: Unknown collection or no owned files among `file_ids`.
           content:
