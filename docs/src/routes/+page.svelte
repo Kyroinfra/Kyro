@@ -4,7 +4,7 @@
 
   const GITHUB = "https://github.com/Kyroinfra/Kyro";
   // NOTE: Remember to change this to kyro-sdk-typescript npm link
-  const NPM = "https://github.com/Kyroinfra/kyro-sdk-typescript";
+  const NPM = "https://www.npmjs.com/package/@kyroinfra/kyro";
 
   const features = [
     {
