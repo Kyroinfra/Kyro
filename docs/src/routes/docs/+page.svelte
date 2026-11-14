@@ -3625,7 +3625,7 @@ for await (const event of parseSSE(res)) {
     --red-dim: rgba(242, 107, 107, 0.1);
     --radius: 6px;
     --radius-sm: 3px;
-    --font-mono: "JetBrains Mono", "Fira Code", "SF Mono", monospace;
+    --font-mono: "Iosevka", "Fira Code", "SF Mono", monospace;
 
     --content-pad-lg: 56px;
     --content-pad-md: 32px;

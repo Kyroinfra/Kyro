@@ -310,29 +310,29 @@
   </header>
 
   <!-- ══════════════════════ TAGLINE BAR ══════════════════════ -->
-  <div class="tagbar" role="banner">
-    <span class="tagbar-item">
-      <span class="tagbar-dot" aria-hidden="true"></span>
-      Self-hosted
-    </span>
-    <span class="tagbar-sep" aria-hidden="true">·</span>
-    <span class="tagbar-item">MIT licensed</span>
-    <span class="tagbar-sep" aria-hidden="true">·</span>
-    <span class="tagbar-item">Open source</span>
-    <span class="tagbar-sep" aria-hidden="true">·</span>
-    <span class="tagbar-item tagbar-muted"
-      >No vendor lock-in. No data egress. Ever.</span
-    >
-  </div>
+  <!-- <div class="tagbar" role="banner"> -->
+  <!--   <span class="tagbar-item"> -->
+  <!--     <span class="tagbar-dot" aria-hidden="true"></span> -->
+  <!--     Self-hosted -->
+  <!--   </span> -->
+  <!--   <span class="tagbar-sep" aria-hidden="true">·</span> -->
+  <!--   <span class="tagbar-item">MIT licensed</span> -->
+  <!--   <span class="tagbar-sep" aria-hidden="true">·</span> -->
+  <!--   <span class="tagbar-item">Open source</span> -->
+  <!--   <span class="tagbar-sep" aria-hidden="true">·</span> -->
+  <!--   <span class="tagbar-item tagbar-muted" -->
+  <!--     >No vendor lock-in. No data egress. Ever.</span -->
+  <!--   > -->
+  <!-- </div> -->
 
   <main>
     <!-- ══════════════════════ HERO ══════════════════════ -->
     <section class="hero" aria-label="Hero">
       <div class="hero-left">
-        <div class="hero-badge reveal">
-          <span class="badge-dot" aria-hidden="true"></span>
-          <span>Self-hosted RAG · Runs on your infra</span>
-        </div>
+        <!-- <div class="hero-badge reveal"> -->
+        <!--   <span class="badge-dot" aria-hidden="true"></span> -->
+        <!--   <span>Self-hosted RAG · Runs on your infra</span> -->
+        <!-- </div> -->
 
         <h1 class="hero-title reveal">
           RAG without<br />the data <span class="accent">leak.</span>
