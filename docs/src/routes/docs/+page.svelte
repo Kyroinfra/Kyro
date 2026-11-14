@@ -19,11 +19,28 @@
       { url: "https://api.kyro.io/api/v1" },
     ],
     tags: [
-      { name: "Auth", description: "Registration, login, session introspection and setup status." },
-      { name: "Organisation", description: "Workspace profile and member management (owner/admin actions)." },
-      { name: "API Keys", description: "Org-scoped API keys and their scopes." },
-      { name: "Usage", description: "Aggregate and per-day request/byte metrics." },
-      { name: "Webhooks", description: "HTTP webhook subscriptions for file pipeline events." },
+      {
+        name: "Auth",
+        description:
+          "Registration, login, session introspection and setup status.",
+      },
+      {
+        name: "Organisation",
+        description:
+          "Workspace profile and member management (owner/admin actions).",
+      },
+      {
+        name: "API Keys",
+        description: "Org-scoped API keys and their scopes.",
+      },
+      {
+        name: "Usage",
+        description: "Aggregate and per-day request/byte metrics.",
+      },
+      {
+        name: "Webhooks",
+        description: "HTTP webhook subscriptions for file pipeline events.",
+      },
       {
         name: "Files",
         description: "Upload, download, delete, text, reprocess and metadata.",
@@ -32,8 +49,14 @@
         name: "Collections",
         description: "Named groups of files queried as a unit.",
       },
-      { name: "Search", description: "Hybrid (keyword + embedding) search with RRF scoring." },
-      { name: "Ask", description: "RAG question answering with SSE streaming." },
+      {
+        name: "Search",
+        description: "Hybrid (keyword + embedding) search with RRF scoring.",
+      },
+      {
+        name: "Ask",
+        description: "RAG question answering with SSE streaming.",
+      },
       {
         name: "Health",
         description: "Backend readiness of the deployment.",
@@ -67,9 +90,15 @@
             },
           },
           responses: {
-            "201": { description: "Organisation and owner created; JWT issued." },
-            "400": { description: "Invalid input or email already registered." },
-            "403": { description: "Signup locked after the first organisation." },
+            "201": {
+              description: "Organisation and owner created; JWT issued.",
+            },
+            "400": {
+              description: "Invalid input or email already registered.",
+            },
+            "403": {
+              description: "Signup locked after the first organisation.",
+            },
           },
           "x-response-example": JSON.stringify({
             token: "eyJhbGciOi…",
@@ -146,7 +175,9 @@
           parameters: [],
           responses: {
             "200": { description: "Setup state." },
-            "500": { description: "Database outage, reported as unconfigured." },
+            "500": {
+              description: "Database outage, reported as unconfigured.",
+            },
           },
           "x-response-example": JSON.stringify({ configured: true }),
         },
@@ -214,7 +245,8 @@
         },
         post: {
           summary: "Create a member",
-          description: "Requires the owner role; members join by email + password.",
+          description:
+            "Requires the owner role; members join by email + password.",
           tags: ["Organisation"],
           security: [{ bearerAuth: [] }],
           requestBody: {
@@ -273,7 +305,10 @@
           responses: {
             "204": { description: "Member removed." },
             "401": { description: "Missing or invalid token." },
-            "403": { description: "Owners are irremovable; admins cannot remove admins." },
+            "403": {
+              description:
+                "Owners are irremovable; admins cannot remove admins.",
+            },
             "404": { description: "Member not found." },
           },
         },
@@ -300,7 +335,10 @@
             },
           ],
           responses: {
-            "200": { description: "The org's keys; the secret value is never returned here." },
+            "200": {
+              description:
+                "The org's keys; the secret value is never returned here.",
+            },
             "401": { description: "Missing or invalid token." },
           },
           "x-response-example": JSON.stringify({
@@ -344,7 +382,9 @@
             },
           },
           responses: {
-            "201": { description: "Key created; key is the only copy of the secret." },
+            "201": {
+              description: "Key created; key is the only copy of the secret.",
+            },
             "400": { description: "Invalid input." },
             "401": { description: "Missing or invalid token." },
             "403": { description: "Owner or admin only." },
@@ -379,7 +419,9 @@
             "200": { description: "Key revoked." },
             "401": { description: "Missing or invalid token." },
             "403": { description: "Owner or admin only." },
-            "404": { description: "Key unknown for the org or already revoked." },
+            "404": {
+              description: "Key unknown for the org or already revoked.",
+            },
           },
           "x-response-example": JSON.stringify({
             message: "API key revoked",
@@ -427,7 +469,8 @@
       "/usage/daily": {
         get: {
           summary: "Daily usage series, newest first",
-          description: "Defaults to the trailing 30 days when dates are omitted.",
+          description:
+            "Defaults to the trailing 30 days when dates are omitted.",
           tags: ["Usage"],
           security: [{ bearerAuth: [] }],
           parameters: [
@@ -676,7 +719,7 @@
               in: "query",
               required: false,
               description:
-                "Opaque cursor from pagination.nextCursor of the previous page (base64url of {\"createdAt\",\"id\"}).",
+                'Opaque cursor from pagination.nextCursor of the previous page (base64url of {"createdAt","id"}).',
               schema: { type: "string" },
             },
           ],
@@ -714,7 +757,7 @@
         post: {
           summary: "Upload file",
           description:
-            "Extractable types (PDF, DOC/DOCX, TXT) start the pipeline immediately: pending → processing → ready (or failed). CSV and JSON are stored without extraction (status \"skipped\"); any other type is rejected with 415. The deployment-wide storage cap answers 507.",
+            'Extractable types (PDF, DOC/DOCX, TXT) start the pipeline immediately: pending → processing → ready (or failed). CSV and JSON are stored without extraction (status "skipped"); any other type is rejected with 415. The deployment-wide storage cap answers 507.',
           tags: ["Files"],
           security: [{ apiKey: [] }, { bearerAuth: [] }],
           "x-scope": "write",
@@ -730,7 +773,7 @@
                       type: "string",
                       format: "binary",
                       description:
-                        "PDF, DOCX and TXT are extracted; CSV and JSON are stored as \"skipped\"; other types are rejected with 415.",
+                        'PDF, DOCX and TXT are extracted; CSV and JSON are stored as "skipped"; other types are rejected with 415.',
                     },
                   },
                 },
@@ -744,7 +787,9 @@
             },
             "400": { description: "No file field in the multipart body." },
             "401": { description: "Missing or invalid credentials." },
-            "403": { description: "Not write-scoped (`Required scope: write`)." },
+            "403": {
+              description: "Not write-scoped (`Required scope: write`).",
+            },
             "413": { description: "File exceeds the 100 MB limit." },
             "415": { description: "Unsupported file type." },
             "507": { description: "Deployment storage limit reached." },
@@ -778,7 +823,9 @@
           responses: {
             "200": { description: "Binary file stream (attachment)." },
             "401": { description: "Missing or invalid credentials." },
-            "404": { description: "Unknown file, or the bytes are missing on disk." },
+            "404": {
+              description: "Unknown file, or the bytes are missing on disk.",
+            },
           },
           "x-response-example": "Binary file stream (attachment).",
         },
@@ -826,7 +873,9 @@
             },
           ],
           responses: {
-            "200": { description: "Extraction state and (where present) the text." },
+            "200": {
+              description: "Extraction state and (where present) the text.",
+            },
             "401": { description: "Missing or invalid credentials." },
             "404": { description: "File not found." },
           },
@@ -856,16 +905,23 @@
           ],
           responses: {
             "202": { description: "Reprocess started." },
-            "400": { description: "Type with nothing to reprocess; supportedTypes lists accepted MIMEs." },
+            "400": {
+              description:
+                "Type with nothing to reprocess; supportedTypes lists accepted MIMEs.",
+            },
             "401": { description: "Missing or invalid credentials." },
             "403": { description: "Not write-scoped." },
             "404": { description: "File not found." },
-            "409": { description: "Pipeline already in progress; body carries the current status." },
+            "409": {
+              description:
+                "Pipeline already in progress; body carries the current status.",
+            },
           },
           "x-response-example": JSON.stringify({
             fileId: "f_1",
             status: "pending",
-            message: "Reprocessing queued. Poll GET /files/:id/text for status.",
+            message:
+              "Reprocessing queued. Poll GET /files/:id/text for status.",
           }),
         },
       },
@@ -924,7 +980,9 @@
           },
           responses: {
             "200": { description: "The upserted keys (the body, as stored)." },
-            "400": { description: "Body is not a flat object of string values." },
+            "400": {
+              description: "Body is not a flat object of string values.",
+            },
             "401": { description: "Missing or invalid credentials." },
             "403": { description: "Not write-scoped." },
             "404": { description: "File not found." },
@@ -937,7 +995,8 @@
       "/files/{id}/metadata/{key}": {
         delete: {
           summary: "Delete one metadata key",
-          description: "A missing key is a no-op; only an unknown file is an error.",
+          description:
+            "A missing key is a no-op; only an unknown file is an error.",
           tags: ["Files"],
           security: [{ apiKey: [] }, { bearerAuth: [] }],
           "x-scope": "write",
@@ -1156,7 +1215,9 @@
             },
           ],
           responses: {
-            "200": { description: "Files in the collection, newest added first." },
+            "200": {
+              description: "Files in the collection, newest added first.",
+            },
             "401": { description: "Missing or invalid credentials." },
             "404": { description: "Collection not found." },
           },
@@ -1177,7 +1238,8 @@
         },
         post: {
           summary: "Add files to a collection",
-          description: "Adds an org-owned set of files; duplicates are ignored.",
+          description:
+            "Adds an org-owned set of files; duplicates are ignored.",
           tags: ["Collections"],
           security: [{ apiKey: [] }, { bearerAuth: [] }],
           "x-scope": "write",
@@ -1251,7 +1313,9 @@
             "204": { description: "File removed from the collection." },
             "401": { description: "Missing or invalid credentials." },
             "403": { description: "Not write-scoped." },
-            "404": { description: "Collection unknown, or the file is not a member." },
+            "404": {
+              description: "Collection unknown, or the file is not a member.",
+            },
           },
         },
       },
@@ -1282,31 +1346,43 @@
               name: "collection_id",
               in: "query",
               required: false,
-              description: "Restrict to one collection's embedded files (mutually exclusive with file_ids).",
+              description:
+                "Restrict to one collection's embedded files (mutually exclusive with file_ids).",
               schema: { type: "string", format: "uuid" },
             },
             {
               name: "file_ids",
               in: "query",
               required: false,
-              description: "Comma-separated org file UUIDs to scope to (mutually exclusive with collection_id).",
+              description:
+                "Comma-separated org file UUIDs to scope to (mutually exclusive with collection_id).",
               schema: { type: "string" },
             },
             {
               name: "filters",
               in: "query",
               required: false,
-              description: "URL-encoded JSON object of metadata filters (string or string[] values).",
+              description:
+                "URL-encoded JSON object of metadata filters (string or string[] values).",
               schema: { type: "string" },
             },
           ],
           responses: {
             "200": { description: "Ranked chunks for the query." },
-            "400": { description: "Missing q, both scopes given, or malformed filters." },
+            "400": {
+              description:
+                "Missing q, both scopes given, or malformed filters.",
+            },
             "401": { description: "Missing or invalid credentials." },
             "403": { description: "Not read-scoped." },
-            "404": { description: "Unknown collection or no owned files among file_ids." },
-            "422": { description: "Empty collection, no filter match, or empty intersection." },
+            "404": {
+              description:
+                "Unknown collection or no owned files among file_ids.",
+            },
+            "422": {
+              description:
+                "Empty collection, no filter match, or empty intersection.",
+            },
           },
           "x-response-example": JSON.stringify({
             data: [
@@ -1344,12 +1420,14 @@
                       type: "array",
                       maxItems: 20,
                       items: { type: "string", format: "uuid" },
-                      description: "Scope to specific files (mutually exclusive with collectionId).",
+                      description:
+                        "Scope to specific files (mutually exclusive with collectionId).",
                     },
                     collectionId: {
                       type: "string",
                       format: "uuid",
-                      description: "Scope to one collection (mutually exclusive with fileIds).",
+                      description:
+                        "Scope to one collection (mutually exclusive with fileIds).",
                     },
                     filters: {
                       type: "object",
@@ -1367,7 +1445,8 @@
                     },
                     model: {
                       type: "string",
-                      description: "Chat model override; defaults to the deployment's configured model.",
+                      description:
+                        "Chat model override; defaults to the deployment's configured model.",
                     },
                     stream: { type: "boolean", default: true },
                     history: {
@@ -1378,10 +1457,15 @@
                         required: ["role", "content"],
                         properties: {
                           role: { type: "string", enum: ["user", "assistant"] },
-                          content: { type: "string", minLength: 1, maxLength: 2000 },
+                          content: {
+                            type: "string",
+                            minLength: 1,
+                            maxLength: 2000,
+                          },
                         },
                       },
-                      description: "Prior user/assistant turns for multi-turn conversations.",
+                      description:
+                        "Prior user/assistant turns for multi-turn conversations.",
                     },
                   },
                 },
@@ -1399,8 +1483,14 @@
             },
             "401": { description: "Missing or invalid credentials." },
             "403": { description: "Not read-scoped." },
-            "404": { description: "Unknown collection or no owned files among file_ids." },
-            "422": { description: "Empty collection, no filter match, or empty intersection." },
+            "404": {
+              description:
+                "Unknown collection or no owned files among file_ids.",
+            },
+            "422": {
+              description:
+                "Empty collection, no filter match, or empty intersection.",
+            },
           },
           "x-response-example": `// SSE stream:\ndata: {"type":"sources","sources":[{"fileId":"f_1","fileName":"contract.pdf","chunkIndex":3,"content":"The payment terms…","rrfScore":0.032}]}\ndata: {"type":"chunk","text":"According to [1], the payment terms…"}\ndata: {"type":"done"}\n\n// stream: false → application/json:\n{"answer":"According to [1], payment is due in 30 days.","sources":[{"fileId":"f_1","fileName":"contract.pdf","chunkIndex":3,"content":"The payment terms…","rrfScore":0.032}]}`,
         },
@@ -1816,7 +1906,11 @@ const data = await response.json();`;
       desc: "Insufficient scope for this operation — the key lacks the required read/write scope",
     },
     { code: "404", label: "Not Found", desc: "Resource does not exist" },
-    { code: "409", label: "Conflict", desc: "The file's ingest pipeline is already running" },
+    {
+      code: "409",
+      label: "Conflict",
+      desc: "The file's ingest pipeline is already running",
+    },
     {
       code: "413",
       label: "Payload Too Large",
@@ -1950,9 +2044,7 @@ const data = await response.json();`;
                 <span class="sidebar-method method-{ep.method.toLowerCase()}"
                   >{ep.method}</span
                 >
-                <span class="sidebar-path"
-                  >{ep.path}</span
-                >
+                <span class="sidebar-path">{ep.path}</span>
               </a>
             {/each}
           </div>
@@ -2048,8 +2140,8 @@ const data = await response.json();`;
             <h3 class="access-title">TypeScript SDK</h3>
             <p class="access-desc">
               The official <code>@kyroinfra/kyro</code> package. Typed methods
-              for files, collections and metadata — upload, list, tag,
-              organize — plus client-side <code>search</code>, <code>ask</code>
+              for files, collections and metadata — upload, list, tag, organize
+              — plus client-side <code>search</code>, <code>ask</code>
               and <code>askStream</code>.
             </p>
             <a href="#sdk" class="access-link">SDK reference →</a>
@@ -2121,9 +2213,9 @@ write  — upload, delete and reprocess files; manage collections</code
               <h4>Upload and manage files</h4>
               <p class="section-desc" style="margin-bottom: 0">
                 The <strong>Files</strong> page lets you drag-and-drop uploads, track
-                pipeline status per file, download originals, and
-                add files to collections. Extraction and embedding run
-                automatically — failed files can be re-run from the file row.
+                pipeline status per file, download originals, and add files to collections.
+                Extraction and embedding run automatically — failed files can be re-run
+                from the file row.
               </p>
             </div>
           </div>
@@ -2187,8 +2279,8 @@ write  — upload, delete and reprocess files; manage collections</code
         <p class="section-desc">
           <code>@kyroinfra/kyro</code> is the official client library for
           Node.js and the browser. It wraps every HTTP endpoint with typed
-          methods, handles streaming SSE responses, and throws structured
-          errors you can catch and branch on. Current major version:
+          methods, handles streaming SSE responses, and throws structured errors
+          you can catch and branch on. Current major version:
           <strong>2.0.0</strong>.
         </p>
 
@@ -2266,17 +2358,21 @@ const { status } = await kyro.files.getText(file.id);
   apiKey:  <span class="cs">"kyro_live_..."</span>,
 {"}"});
 
-<span class="c-comment">// Upload a file — extraction + embedding run automatically</span>
+<span class="c-comment"
+                >// Upload a file — extraction + embedding run automatically</span
+              >
 <span class="ck">const</span> file = <span class="ck">await</span
               > kyro.files.<span class="cs">upload</span>(blob, <span class="cs"
                 >"report.pdf"</span
               >);
 
-<span class="c-comment">// Poll until the file is queryable (files.status)</span>
+<span class="c-comment">// Poll until the file is queryable (files.status)</span
+              >
 <span class="ck">const</span> {"{ status }"} = <span class="ck">await</span
               > kyro.files.<span class="cs">getText</span>(file.id);
-<span class="c-comment">// status: "pending" | "processing" | "ready" | "failed" | "skipped"</span
-            ></code
+<span class="c-comment"
+                >// status: "pending" | "processing" | "ready" | "failed" | "skipped"</span
+              ></code
             ></pre>
         </div>
 
@@ -2323,7 +2419,9 @@ const { answer, sources } = await kyro.ask({
             </button>
           </div>
           <pre><code
-              ><span class="c-comment">// 1. Upload — pipeline runs automatically (extract → chunk → embed)</span>
+              ><span class="c-comment"
+                >// 1. Upload — pipeline runs automatically (extract → chunk → embed)</span
+              >
 <span class="ck">const</span> file = <span class="ck">await</span
               > kyro.files.<span class="cs">upload</span>(pdfBlob, <span
                 class="cs">"agreement.pdf"</span
@@ -2348,13 +2446,14 @@ const { answer, sources } = await kyro.ask({
   <span class="ck">await new</span> Promise(r => <span class="cs"
                 >setTimeout</span
               >(r, <span class="cs">2000</span>));
-  ({"{ status }"} = <span class="ck">await</span> kyro.files.<span
-                class="cs">getText</span
+  ({"{ status }"} = <span class="ck">await</span> kyro.files.<span class="cs"
+                >getText</span
               >(file.id));
 {"}"}
 
 <span class="c-comment">// 5. Ask — grounded answer with source citations</span>
-<span class="ck">const</span> {"{ answer, sources }"} = <span class="ck">await</span
+<span class="ck">const</span> {"{ answer, sources }"} = <span class="ck"
+                >await</span
               > kyro.<span class="cs">ask</span>({"{"}
   question:     <span class="cs">"What are the termination conditions?"</span>,
   collectionId: collectionId,
@@ -2376,7 +2475,7 @@ const { answer, sources } = await kyro.ask({
         </p>
 
         <div class="sdk-method-list">
-          {#each [{ name: "kyro.files.upload(blob, filename)", desc: "Upload a file. Returns the file record including its ID and initial status. PDF, DOCX and TXT are extracted; CSV and JSON are stored with status \"skipped\"; other types are rejected with 415.", example: `const file = await kyro.files.upload(blob, "contract.pdf");\n// file.id, file.status` }, { name: "kyro.files.list(limit?, cursor?)", desc: "Paginated file list. Pass pagination.nextCursor as the cursor argument to fetch the next page.", example: `const { data, pagination } = await kyro.files.list(50);\nif (pagination.hasMore) {\n  const next = await kyro.files.list(50, pagination.nextCursor);\n}` }, { name: "kyro.files.download(fileId)", desc: "Download the original file as a Blob.", example: `const blob = await kyro.files.download(fileId);` }, { name: "kyro.files.delete(fileId)", desc: "Delete a file permanently — the record, its chunks, metadata and collection memberships, and the blob on disk all go. There is no soft-delete.", example: `await kyro.files.delete(fileId);\\n// { message: "File deleted", id }` }, { name: "kyro.files.getText(fileId)", desc: "Get the file's pipeline status and extracted text. Poll this after upload to know when the file is queryable.", example: `const { status, extractedText } = await kyro.files.getText(fileId);\n// status: "pending" | "processing" | "ready" | "failed" | "skipped"` }, { name: "kyro.files.reprocess(fileId)", desc: "Set the file back to \"pending\" and re-run the full pipeline (extract → chunk → embed). Use after a failure — or to pick up a new extractor.", example: `await kyro.files.reprocess(fileId);\n// Sets the file back to "pending" and re-runs extraction + embedding` }, { name: "kyro.files.setMetadata(fileId, meta)", desc: "Upsert arbitrary key-value metadata on a file. Non-destructive — keys not in the payload are left untouched.", example: `await kyro.files.setMetadata(fileId, {\n  matter_number: "M-2024-001",\n  document_type: "contract",\n});` }, { name: "kyro.files.getMetadata(fileId)", desc: "Return all metadata keys and values for a file.", example: `const meta = await kyro.files.getMetadata(fileId);` }, { name: "kyro.files.deleteMetadataKey(fileId, key)", desc: "Remove a single metadata key.", example: `await kyro.files.deleteMetadataKey(fileId, "counterparty");` }] as method}
+          {#each [{ name: "kyro.files.upload(blob, filename)", desc: 'Upload a file. Returns the file record including its ID and initial status. PDF, DOCX and TXT are extracted; CSV and JSON are stored with status "skipped"; other types are rejected with 415.', example: `const file = await kyro.files.upload(blob, "contract.pdf");\n// file.id, file.status` }, { name: "kyro.files.list(limit?, cursor?)", desc: "Paginated file list. Pass pagination.nextCursor as the cursor argument to fetch the next page.", example: `const { data, pagination } = await kyro.files.list(50);\nif (pagination.hasMore) {\n  const next = await kyro.files.list(50, pagination.nextCursor);\n}` }, { name: "kyro.files.download(fileId)", desc: "Download the original file as a Blob.", example: `const blob = await kyro.files.download(fileId);` }, { name: "kyro.files.delete(fileId)", desc: "Delete a file permanently — the record, its chunks, metadata and collection memberships, and the blob on disk all go. There is no soft-delete.", example: `await kyro.files.delete(fileId);\\n// { message: "File deleted", id }` }, { name: "kyro.files.getText(fileId)", desc: "Get the file's pipeline status and extracted text. Poll this after upload to know when the file is queryable.", example: `const { status, extractedText } = await kyro.files.getText(fileId);\n// status: "pending" | "processing" | "ready" | "failed" | "skipped"` }, { name: "kyro.files.reprocess(fileId)", desc: 'Set the file back to "pending" and re-run the full pipeline (extract → chunk → embed). Use after a failure — or to pick up a new extractor.', example: `await kyro.files.reprocess(fileId);\n// Sets the file back to "pending" and re-runs extraction + embedding` }, { name: "kyro.files.setMetadata(fileId, meta)", desc: "Upsert arbitrary key-value metadata on a file. Non-destructive — keys not in the payload are left untouched.", example: `await kyro.files.setMetadata(fileId, {\n  matter_number: "M-2024-001",\n  document_type: "contract",\n});` }, { name: "kyro.files.getMetadata(fileId)", desc: "Return all metadata keys and values for a file.", example: `const meta = await kyro.files.getMetadata(fileId);` }, { name: "kyro.files.deleteMetadataKey(fileId, key)", desc: "Remove a single metadata key.", example: `await kyro.files.deleteMetadataKey(fileId, "counterparty");` }] as method}
             <div class="sdk-entry">
               <div class="sdk-entry-header">
                 <code class="sdk-sig">{method.name}</code>
@@ -2441,8 +2540,8 @@ const { answer, sources } = await kyro.ask({
           Retrieval and question answering are client methods. Scope with
           <code>collectionId</code> or <code>fileIds</code> — passing both
           throws a client-side <code>TypeError</code> before any request — or
-          omit both for org-wide. <code>filters</code> (AND across keys, OR
-          across values) combines with either scope.
+          omit both for org-wide. <code>filters</code> (AND across keys, OR across
+          values) combines with either scope.
         </p>
 
         <div class="sdk-method-list">
@@ -2460,7 +2559,9 @@ const { answer, sources } = await kyro.ask({
                     onclick={() =>
                       copy(method.example, `sdk-search-ask-${method.name}`)}
                   >
-                    {copiedId === `sdk-search-ask-${method.name}` ? "✓" : "copy"}
+                    {copiedId === `sdk-search-ask-${method.name}`
+                      ? "✓"
+                      : "copy"}
                   </button>
                 </div>
                 <pre><code>{method.example}</code></pre>
@@ -2474,9 +2575,12 @@ const { answer, sources } = await kyro.ask({
       <section id="sdk-ask" class="doc-section">
         <h2 class="section-title">Search &amp; Ask — HTTP API</h2>
         <p class="section-desc">
-          Retrieval and question answering live on the REST surface. Both
-          accept <code>X-Api-Key</code> or <code>Authorization: Bearer</code>,
-          and share the same scope rules: <code>collectionId</code> XOR
+          Retrieval and question answering live on the REST surface. Both accept <code
+            >X-Api-Key</code
+          >
+          or <code>Authorization: Bearer</code>, and share the same scope rules:
+          <code>collectionId</code>
+          XOR
           <code>fileIds</code>, or org-wide when neither is given.
         </p>
 
@@ -2488,11 +2592,11 @@ const { answer, sources } = await kyro.ask({
             <p class="sdk-entry-desc">
               Ranked chunks without a generated answer — the same hybrid
               retrieval <code>/ask</code> uses: a <code>ts_rank</code> keyword
-              arm fused with the pgvector cosine arm via Reciprocal Rank
-              Fusion, optionally followed by cross-encoder reranking. Scope
-              with <code>collection_id</code> or <code>file_ids</code>;
-              <code>filters</code> takes a URL-encoded JSON object of metadata
-              filters.
+              arm fused with the pgvector cosine arm via Reciprocal Rank Fusion,
+              optionally followed by cross-encoder reranking. Scope with
+              <code>collection_id</code>
+              or <code>file_ids</code>;
+              <code>filters</code> takes a URL-encoded JSON object of metadata filters.
             </p>
 
             <div class="code-block" style="margin-bottom: 12px">
@@ -2549,9 +2653,10 @@ const { answer, sources } = await kyro.ask({
                   >, {"{"}
   method: <span class="cs">"POST"</span>,
   headers: {"{"} <span class="cs">"X-Api-Key"</span>: process.env.<span
-                    class="ck">KYRO_KEY</span>, <span class="cs"
-                    >"Content-Type"</span
-                  >: <span class="cs">"application/json"</span> {"}"},
+                    class="ck">KYRO_KEY</span
+                  >, <span class="cs">"Content-Type"</span>: <span class="cs"
+                    >"application/json"</span
+                  > {"}"},
   body: JSON.<span class="cs">stringify</span>({"{"} 
     question:     <span class="cs">"What is the total contract value?"</span>,
     collectionId: collectionId,
@@ -2590,19 +2695,18 @@ const { answer, sources } = await kyro.ask({
                   >, {"{"}
   method: <span class="cs">"POST"</span>,
   headers: {"{"} <span class="cs">"X-Api-Key"</span>: process.env.<span
-                    class="ck">KYRO_KEY</span>, <span class="cs"
-                    >"Content-Type"</span
-                  >: <span class="cs">"application/json"</span> {"}"},
-  body: JSON.<span class="cs">stringify</span>({"{"} question: <span
-                    class="cs">"Summarise the risks."</span
+                    class="ck">KYRO_KEY</span
+                  >, <span class="cs">"Content-Type"</span>: <span class="cs"
+                    >"application/json"</span
+                  > {"}"},
+  body: JSON.<span class="cs">stringify</span>({"{"} question: <span class="cs"
+                    >"Summarise the risks."</span
                   > {"}"}),
 {"}"});
 
-<span class="ck">for await</span> (<span class="ck"
-                    >const</span
-                  > event <span class="ck">of</span> <span class="cs"
-                    >parseSSE</span
-                  >(res.body)) {"{"} 
+<span class="ck">for await</span> (<span class="ck">const</span> event <span
+                    class="ck">of</span
+                  > <span class="cs">parseSSE</span>(res.body)) {"{"} 
   <span class="ck">switch</span> (event.type) {"{"} 
     <span class="ck">case</span> <span class="cs">"sources"</span
                   >: console.<span class="cs">log</span>(event.sources); <span
@@ -2689,11 +2793,11 @@ const { answer, sources } = await kyro.ask({
 {"}"} <span class="ck">catch</span> (err) {"{"}
   <span class="ck">if</span> (err <span class="ck">instanceof</span
               > KyroAuthError) {"{"}
-    <span class="c-comment">/* 401 — invalid or missing API key */</span
-              > {"}"}
+    <span class="c-comment">/* 401 — invalid or missing API key */</span> {"}"}
   <span class="ck">else if</span> (err <span class="ck">instanceof</span
               > KyroForbiddenError) {"{"}
-    <span class="c-comment">/* 403 — the API key lacks the required scope */</span
+    <span class="c-comment"
+                >/* 403 — the API key lacks the required scope */</span
               > {"}"}
   <span class="ck">else if</span> (err <span class="ck">instanceof</span
               > KyroStorageLimitError) {"{"}
@@ -2701,11 +2805,11 @@ const { answer, sources } = await kyro.ask({
               > {"}"}
   <span class="ck">else if</span> (err <span class="ck">instanceof</span
               > KyroNotFoundError) {"{"}
-    <span class="c-comment">/* 404 — file or resource not found */</span
-              > {"}"}
+    <span class="c-comment">/* 404 — file or resource not found */</span> {"}"}
   <span class="ck">else if</span> (err <span class="ck">instanceof</span
               > KyroRateLimitError) {"{"}
-    <span class="c-comment">/* 429 — slow down; err.retryAfter is the wait in seconds */</span
+    <span class="c-comment"
+                >/* 429 — slow down; err.retryAfter is the wait in seconds */</span
               >
     <span class="cs">setTimeout</span>(retry, err.retryAfter * <span class="cs"
                 >1000</span
@@ -2713,13 +2817,15 @@ const { answer, sources } = await kyro.ask({
   {"}"}
   <span class="ck">else if</span> (err <span class="ck">instanceof</span
               > KyroValidationError) {"{"}
-    <span class="c-comment">/* 400 — bad input; err.details has per-field messages */</span
+    <span class="c-comment"
+                >/* 400 — bad input; err.details has per-field messages */</span
               >
     <span class="cs">console.error</span>(err.details);
   {"}"}
   <span class="ck">else if</span> (err <span class="ck">instanceof</span
               > KyroConflictError) {"{"}
-    <span class="c-comment">/* 409 — a duplicate or conflicting resource */</span
+    <span class="c-comment"
+                >/* 409 — a duplicate or conflicting resource */</span
               > {"}"}
   <span class="ck">else if</span> (err <span class="ck">instanceof</span
               > KyroFileTooLargeError) {"{"}
@@ -2727,20 +2833,22 @@ const { answer, sources } = await kyro.ask({
               > {"}"}
   <span class="ck">else if</span> (err <span class="ck">instanceof</span
               > KyroUnsupportedMediaTypeError) {"{"}
-    <span class="c-comment">/* 415 — unsupported content type (err.data.supportedTypes) */</span
+    <span class="c-comment"
+                >/* 415 — unsupported content type (err.data.supportedTypes) */</span
               > {"}"}
   <span class="ck">else if</span> (err <span class="ck">instanceof</span
               > KyroUnprocessableError) {"{"}
-    <span class="c-comment">/* 422 — the requested scope resolves to nothing */</span
+    <span class="c-comment"
+                >/* 422 — the requested scope resolves to nothing */</span
               > {"}"}
   <span class="ck">else if</span> (err <span class="ck">instanceof</span
               > KyroServiceUnavailableError) {"{"}
-    <span class="c-comment">/* 503 — server busy or a degraded dependency */</span
+    <span class="c-comment"
+                >/* 503 — server busy or a degraded dependency */</span
               > {"}"}
   <span class="ck">else if</span> (err <span class="ck">instanceof</span
               > KyroApiError) {"{"}
-    <span class="c-comment">/* catch-all for anything unexpected */</span
-              >
+    <span class="c-comment">/* catch-all for anything unexpected */</span>
     <span class="cs">console.error</span>(err.status, err.code, err.message);
   {"}"}
 {"}"}</code
@@ -2770,8 +2878,8 @@ const { answer, sources } = await kyro.ask({
         <h2 class="section-title">Self-hosting</h2>
         <p class="section-desc">
           Kyro runs entirely on your own infrastructure. Postgres (with
-          pgvector) stores files, chunks and embeddings, the api runs the
-          ingest pipeline and webhook delivery in-process, and Ollama runs your
+          pgvector) stores files, chunks and embeddings, the api runs the ingest
+          pipeline and webhook delivery in-process, and Ollama runs your
           embedding and chat models locally. Nothing leaves your network.
         </p>
 
@@ -2781,8 +2889,8 @@ const { answer, sources } = await kyro.ask({
             <div class="step-body">
               <h4>Start the stack</h4>
               <p class="section-desc" style="margin-bottom: 10px">
-                One command brings up Postgres, nginx, the Kyro api, and the
-                web dashboard — migrations run at api startup under a Postgres
+                One command brings up Postgres, nginx, the Kyro api, and the web
+                dashboard — migrations run at api startup under a Postgres
                 advisory lock.
               </p>
               <div class="code-block">
@@ -2790,8 +2898,7 @@ const { answer, sources } = await kyro.ask({
                   <span class="code-lang">shell</span>
                   <button
                     class="copy-btn"
-                    onclick={() =>
-                      copy("./scripts/prod.sh", "self-host-start")}
+                    onclick={() => copy("./scripts/prod.sh", "self-host-start")}
                   >
                     {copiedId === "self-host-start" ? "✓ copied" : "copy"}
                   </button>
@@ -2864,8 +2971,8 @@ write  — upload, delete and reprocess files; manage collections</code
         <p class="section-desc">
           One gate covers every org-scoped route: send either an
           <code>X-Api-Key</code> header or a <code>Bearer</code> JWT. An
-          explicit <code>X-Api-Key</code> wins when both are present — it is
-          the narrower credential. Key management (<code>/auth</code>,
+          explicit <code>X-Api-Key</code> wins when both are present — it is the
+          narrower credential. Key management (<code>/auth</code>,
           <code>/org</code>, <code>/keys</code>, <code>/usage</code>,
           <code>/webhooks</code>) uses the short-lived JWT obtained from
           <code>/auth/login</code>.
@@ -2941,9 +3048,10 @@ write  — upload, delete and reprocess files; manage collections</code
                 <code>POST /files</code> saves the file to disk and starts the
                 in-process pipeline immediately — the file moves through
                 <code>pending → processing → ready</code> (or
-                <code>failed</code>, with the reason in <code>files.error</code>).
-                Supported types: <strong>PDF, DOCX, TXT</strong>; CSV and
-                JSON are stored without extraction (<code>skipped</code>).
+                <code>failed</code>, with the reason in
+                <code>files.error</code>). Supported types:
+                <strong>PDF, DOCX, TXT</strong>; CSV and JSON are stored without
+                extraction (<code>skipped</code>).
               </p>
             </div>
           </div>
@@ -2953,11 +3061,11 @@ write  — upload, delete and reprocess files; manage collections</code
             <div class="step-body">
               <h4>Extract</h4>
               <p class="section-desc">
-                The pipeline extracts text (PDF via <code>unpdf</code>, DOCX
-                via <code>mammoth</code>), splits it into overlapping chunks
-                (~1200 chars each), and stores them in Postgres. Poll
-                <code>GET /files/:id/text</code> for status. Failed files
-                re-run with <code>POST /files/:id/reprocess</code>.
+                The pipeline extracts text (PDF via <code>unpdf</code>, DOCX via
+                <code>mammoth</code>), splits it into overlapping chunks (~1200
+                chars each), and stores them in Postgres. Poll
+                <code>GET /files/:id/text</code> for status. Failed files re-run
+                with <code>POST /files/:id/reprocess</code>.
               </p>
             </div>
           </div>
@@ -2968,9 +3076,11 @@ write  — upload, delete and reprocess files; manage collections</code
               <h4>Embed</h4>
               <p class="section-desc">
                 Embedding is part of the same pipeline — no manual trigger. It
-                calls your local Ollama embedding model
-                (<code>nomic-embed-text</code> by default) and stores
-                768-dimensional vectors alongside each chunk in
+                calls your local Ollama embedding model (<code
+                  >nomic-embed-text</code
+                >
+                by default) and stores 768-dimensional vectors alongside each chunk
+                in
                 <code>pgvector</code>. When the file becomes queryable the
                 terminal <code>file.ready</code> webhook fires (or
                 <code>file.failed</code> if anything went wrong).
@@ -3117,8 +3227,9 @@ for await (const event of parseSSE(res)) {
             >/ask</code
           >: a <code>ts_rank</code> keyword arm over the generated tsvector,
           fused with pgvector cosine similarity via Reciprocal Rank Fusion,
-          optionally followed by cross-encoder reranking
-          (<code>RERANK_ENABLED</code>, off by default).
+          optionally followed by cross-encoder reranking (<code
+            >RERANK_ENABLED</code
+          >, off by default).
         </p>
 
         <div class="code-block">
@@ -3226,14 +3337,15 @@ for await (const event of parseSSE(res)) {
         <h2 class="section-title">Rate Limiting</h2>
         <p class="section-desc">
           The default limit is 100 requests per minute per API key, enforced by
-          an in-memory sliding window inside each api process. It applies to
-          the <code>files</code>, <code>search</code> and <code>ask</code>
-          routes — <code>collections</code> is not rate-limited — and
-          Bearer-JWT requests (which carry no API key) are keyed by client IP
-          instead. Replicas do not share a budget — a documented trade-off of
-          the no-Redis architecture. When the window is exhausted the api
-          answers <code>429</code> with a <code>retryAfter</code> value in
-          seconds.
+          an in-memory sliding window inside each api process. It applies to the <code
+            >files</code
+          >, <code>search</code> and <code>ask</code>
+          routes — <code>collections</code> is not rate-limited — and Bearer-JWT
+          requests (which carry no API key) are keyed by client IP instead.
+          Replicas do not share a budget — a documented trade-off of the
+          no-Redis architecture. When the window is exhausted the api answers
+          <code>429</code>
+          with a <code>retryAfter</code> value in seconds.
         </p>
 
         <div class="rate-card">
@@ -3259,9 +3371,8 @@ for await (const event of parseSSE(res)) {
         <h2 class="section-title">Error Codes</h2>
         <p class="section-desc">
           Errors come in two shapes. Route handlers answer with the simple
-          envelope; anything that reaches the central error handler returns
-          the structured envelope (<code>stack</code> appears in development
-          only).
+          envelope; anything that reaches the central error handler returns the
+          structured envelope (<code>stack</code> appears in development only).
         </p>
 
         <div class="code-block" style="margin-bottom: 16px">
@@ -3318,8 +3429,8 @@ for await (const event of parseSSE(res)) {
           All endpoints documented below. Authenticate file and search
           operations with your API key in the <code>X-Api-Key</code> header (a
           <code>Bearer</code> JWT works too). Base URL defaults to
-          <code>http://localhost:3000/api/v1</code> — replace
-          with whatever host you deployed Kyro on.
+          <code>http://localhost:3000/api/v1</code> — replace with whatever host you
+          deployed Kyro on.
         </p>
         <div class="code-block">
           <div class="code-toolbar">
@@ -3604,25 +3715,28 @@ for await (const event of parseSSE(res)) {
 
   :root {
     --bg: #080808;
-    --bg2: #0f0f0f;
-    --bg3: #151515;
-    --bg4: #1c1c1c;
-    --bg5: #242424;
+    --bg2: #0a0a0a;
+    --bg3: #111;
+    --bg4: #181818;
+    --bg5: #202020;
     --border: rgba(255, 255, 255, 0.06);
     --border2: rgba(255, 255, 255, 0.1);
     --border3: rgba(255, 255, 255, 0.16);
-    --text: #eeebe4;
-    --text-dim: #b8b4ac;
-    --text-muted: #7a7670;
-    --text-ghost: #3d3b38;
-    --green: #3dd68c;
-    --green-dim: rgba(61, 214, 140, 0.1);
-    --blue: #5b9cf6;
-    --blue-dim: rgba(91, 156, 246, 0.1);
-    --amber: #f5a623;
-    --amber-dim: rgba(245, 166, 35, 0.1);
-    --red: #f26b6b;
-    --red-dim: rgba(242, 107, 107, 0.1);
+    --text: #fff;
+    --text-dim: #b3b3b3;
+    --text-muted: #808080;
+    --text-ghost: #4d4d4d;
+
+    /* Accents keep their names and their separation, ordered by lightness */
+    --green: #fff;
+    --green-dim: rgba(255, 255, 255, 0.1);
+    --blue: #cfcfcf;
+    --blue-dim: rgba(255, 255, 255, 0.08);
+    --amber: #9d9d9d;
+    --amber-dim: rgba(255, 255, 255, 0.07);
+    --red: #8a8a8a;
+    --red-dim: rgba(255, 255, 255, 0.06);
+
     --radius: 6px;
     --radius-sm: 3px;
     --font-mono: "Iosevka", "Fira Code", "SF Mono", monospace;
