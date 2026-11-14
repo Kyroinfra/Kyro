@@ -3,7 +3,6 @@
   import GithubIcon from "$lib/components/icons/GithubIcon.svelte";
 
   const GITHUB = "https://github.com/Kyroinfra/Kyro";
-  // NOTE: Remember to change this to kyro-sdk-typescript npm link
   const NPM = "https://www.npmjs.com/package/@kyroinfra/kyro";
 
   const features = [
