@@ -75,7 +75,7 @@
       </p>
       <div class="actions">
         <a href="/docs" class="btn btn-solid">
-          <span class="label">Read the docs</span>
+          <span class="label">Read docs</span>
           <svg
             class="bird"
             viewBox="0 0 24 24"
@@ -94,8 +94,26 @@
             />
           </svg>
         </a>
-        <a href={GITHUB} class="btn" target="_blank" rel="noopener noreferrer">
-          View on GitHub
+
+        <a
+          href={GITHUB}
+          class="btn btn-star"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <svg
+            class="star"
+            viewBox="0 0 24 24"
+            width="16"
+            height="16"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+            />
+          </svg>
+          <span>Star on GitHub</span>
         </a>
       </div>
     </section>
@@ -372,6 +390,38 @@
     .label,
     .bird path {
       transition: none;
+    }
+  }
+
+  .btn-star {
+    gap: var(--space-2);
+    border: none;
+    text-decoration-line: underline;
+    text-decoration-color: #ff69b4;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 0.5rem;
+  }
+
+  .star {
+    color: var(--color-text-muted); /* grey at rest */
+    transition:
+      color 0.2s ease,
+      transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .btn-star:hover .star,
+  .btn-star:focus-visible .star {
+    color: #facc15; /* yellow */
+    transform: rotate(72deg) scale(1.25);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .star {
+      transition: color 0.2s ease;
+    }
+    .btn-star:hover .star,
+    .btn-star:focus-visible .star {
+      transform: none;
     }
   }
 
