@@ -75,7 +75,26 @@
         >. Your data stays on your server.
       </p>
       <div class="actions">
-        <a href="/docs" class="btn btn-solid">Read the docs</a>
+        <a href="/docs" class="btn btn-solid">
+          <span class="label">Read the docs</span>
+          <svg
+            class="bird"
+            viewBox="0 0 24 24"
+            width="28"
+            height="28"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.75"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path
+              pathLength="1"
+              d="M2 14 C5 6, 9 6, 12 13 C15 6, 19 6, 22 14"
+            />
+          </svg>
+        </a>
         <a href={GITHUB} class="btn" target="_blank" rel="noopener noreferrer">
           View on GitHub
         </a>
@@ -318,6 +337,43 @@
   }
   .squiggle:hover {
     text-decoration-color: var(--color-text);
+  }
+
+  .btn-solid {
+    display: inline-grid;
+    place-items: center;
+  }
+  .btn-solid > * {
+    grid-area: 1 / 1;
+  }
+
+  .label {
+    transition:
+      opacity 0.2s ease,
+      transform 0.2s ease;
+  }
+
+  .bird path {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1; /* undrawn */
+    transition: stroke-dashoffset 0.5s ease 0.1s;
+  }
+
+  .btn-solid:hover .label,
+  .btn-solid:focus-visible .label {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  .btn-solid:hover .bird path,
+  .btn-solid:focus-visible .bird path {
+    stroke-dashoffset: 0; /* draws in */
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .label,
+    .bird path {
+      transition: none;
+    }
   }
 
   @media (max-width: 640px) {
