@@ -730,7 +730,7 @@
                       type: "string",
                       format: "binary",
                       description:
-                        "PDF, DOCX, DOC and TXT are extracted; CSV and JSON are stored as \"skipped\"; other types are rejected with 415.",
+                        "PDF, DOCX and TXT are extracted; CSV and JSON are stored as \"skipped\"; other types are rejected with 415.",
                     },
                   },
                 },
@@ -865,7 +865,7 @@
           "x-response-example": JSON.stringify({
             fileId: "f_1",
             status: "pending",
-            message: "Reprocessing started",
+            message: "Reprocessing queued. Poll GET /files/:id/text for status.",
           }),
         },
       },
@@ -1093,6 +1093,7 @@
             "200": { description: "Updated collection." },
             "400": { description: "Invalid input." },
             "401": { description: "Missing or invalid credentials." },
+            "403": { description: "Not write-scoped." },
             "404": { description: "Collection not found." },
           },
           "x-response-example": JSON.stringify({
@@ -1120,6 +1121,7 @@
           responses: {
             "204": { description: "Collection deleted." },
             "401": { description: "Missing or invalid credentials." },
+            "403": { description: "Not write-scoped." },
             "404": { description: "Collection not found." },
           },
         },
@@ -1214,6 +1216,7 @@
                 "Invalid input, or some file IDs are unknown/not org-owned (then invalidFileIds lists them).",
             },
             "401": { description: "Missing or invalid credentials." },
+            "403": { description: "Not write-scoped." },
             "404": { description: "Collection not found." },
           },
           "x-response-example": JSON.stringify({
@@ -1247,6 +1250,7 @@
           responses: {
             "204": { description: "File removed from the collection." },
             "401": { description: "Missing or invalid credentials." },
+            "403": { description: "Not write-scoped." },
             "404": { description: "Collection unknown, or the file is not a member." },
           },
         },
@@ -1300,6 +1304,7 @@
             "200": { description: "Ranked chunks for the query." },
             "400": { description: "Missing q, both scopes given, or malformed filters." },
             "401": { description: "Missing or invalid credentials." },
+            "403": { description: "Not read-scoped." },
             "404": { description: "Unknown collection or no owned files among file_ids." },
             "422": { description: "Empty collection, no filter match, or empty intersection." },
           },
@@ -1393,6 +1398,7 @@
                 "Invalid input, or the endpoint is disabled (OLLAMA_URL unset).",
             },
             "401": { description: "Missing or invalid credentials." },
+            "403": { description: "Not read-scoped." },
             "404": { description: "Unknown collection or no owned files among file_ids." },
             "422": { description: "Empty collection, no filter match, or empty intersection." },
           },
@@ -1539,7 +1545,8 @@
     { id: "sdk", label: "TypeScript SDK" }, // NEW
     { id: "sdk-files", label: "↳ Files" }, // NEW
     { id: "sdk-collections", label: "↳ Collections" }, // NEW
-    { id: "sdk-ask", label: "↳ Ask & Search" }, // NEW
+    { id: "sdk-search-ask", label: "↳ Search & Ask" }, // NEW
+    { id: "sdk-ask", label: "↳ Search & Ask (HTTP)" }, // NEW
     { id: "sdk-errors", label: "↳ Error Handling" }, // NEW
     { id: "self-hosting", label: "Self-hosting" },
     { id: "auth", label: "Authentication" },
@@ -1554,8 +1561,10 @@
 
   function getAuthType(op: Operation): "bearer" | "apiKey" | "none" {
     if (!op.security || op.security.length === 0) return "none";
-    if (op.security.some((s) => "bearerAuth" in s)) return "bearer";
+    // API-key family declares both credentials; X-Api-Key is the narrower
+    // one and the primary credential for those routes (see Authentication).
     if (op.security.some((s) => "apiKey" in s)) return "apiKey";
+    if (op.security.some((s) => "bearerAuth" in s)) return "bearer";
     return "none";
   }
 
@@ -1804,14 +1813,19 @@ const data = await response.json();`;
     {
       code: "403",
       label: "Forbidden",
-      desc: "Insufficient scope or storage quota exceeded",
+      desc: "Insufficient scope for this operation — the key lacks the required read/write scope",
     },
     { code: "404", label: "Not Found", desc: "Resource does not exist" },
-    { code: "409", label: "Conflict", desc: "Operation already in progress" },
+    { code: "409", label: "Conflict", desc: "The file's ingest pipeline is already running" },
     {
       code: "413",
       label: "Payload Too Large",
       desc: "File exceeds the 100 MB size limit",
+    },
+    {
+      code: "415",
+      label: "Unsupported Media Type",
+      desc: "The file's type is neither extractable (PDF, DOCX, TXT) nor storable without extraction (CSV, JSON)",
     },
     {
       code: "422",
@@ -1827,6 +1841,11 @@ const data = await response.json();`;
       code: "500",
       label: "Internal Server Error",
       desc: "Unexpected server-side error",
+    },
+    {
+      code: "503",
+      label: "Service Unavailable",
+      desc: "A dependency is degraded — typically the database (the health endpoint answers 503 when it is unreachable)",
     },
     {
       code: "507",
@@ -1960,7 +1979,7 @@ const data = await response.json();`;
           </div>
           <div class="info-card">
             <span class="info-label">License</span>
-            <code class="info-value">MIT — free to self-host</code>
+            <code class="info-value">ISC (api) · MIT (SDK)</code>
           </div>
           <div class="info-card">
             <span class="info-label">Spec format</span>
@@ -2028,9 +2047,10 @@ const data = await response.json();`;
             </div>
             <h3 class="access-title">TypeScript SDK</h3>
             <p class="access-desc">
-              The official <code>kyro-sdk</code> package. Typed methods for
-              files, collections and metadata — upload, list, tag, organize.
-              For search and ask, use the HTTP API below.
+              The official <code>@kyroinfra/kyro</code> package. Typed methods
+              for files, collections and metadata — upload, list, tag,
+              organize — plus client-side <code>search</code>, <code>ask</code>
+              and <code>askStream</code>.
             </p>
             <a href="#sdk" class="access-link">SDK reference →</a>
           </div>
@@ -2165,15 +2185,21 @@ write  — upload, delete and reprocess files; manage collections</code
         <div class="section-eyebrow">typescript sdk</div>
         <h2 class="section-title">TypeScript SDK</h2>
         <p class="section-desc">
-          <code>kyro-sdk</code> is the official client library for Node.js and the
-          browser. It wraps every HTTP endpoint with typed methods, handles streaming
-          SSE responses, and throws structured errors you can catch and branch on.
+          <code>@kyroinfra/kyro</code> is the official client library for
+          Node.js and the browser. It wraps every HTTP endpoint with typed
+          methods, handles streaming SSE responses, and throws structured
+          errors you can catch and branch on. Current major version:
+          <strong>2.0.0</strong>.
         </p>
 
         <div class="info-grid" style="margin-bottom: 24px">
           <div class="info-card">
             <span class="info-label">Package</span>
-            <code class="info-value">kyro-sdk</code>
+            <code class="info-value">@kyroinfra/kyro</code>
+          </div>
+          <div class="info-card">
+            <span class="info-label">Latest version</span>
+            <code class="info-value">2.0.0</code>
           </div>
           <div class="info-card">
             <span class="info-label">Install</span>
@@ -2209,7 +2235,7 @@ write  — upload, delete and reprocess files; manage collections</code
               class="copy-btn"
               onclick={() =>
                 copy(
-                  `import { KyroClient } from "kyro-sdk";
+                  `import { KyroClient } from "@kyroinfra/kyro";
 
 const kyro = new KyroClient({
   baseURL: "http://localhost:3000/api/v1",
@@ -2231,7 +2257,7 @@ const { status } = await kyro.files.getText(file.id);
           <pre><code
               ><span class="ck">import</span> {"{ KyroClient }"} <span
                 class="ck">from</span
-              > <span class="cs">"kyro-sdk"</span>;
+              > <span class="cs">"@kyroinfra/kyro"</span>;
 
 <span class="ck">const</span> kyro = <span class="ck">new</span> <span
                 class="cs">KyroClient</span
@@ -2285,17 +2311,11 @@ while (status !== "ready") {
   ({ status } = await kyro.files.getText(file.id));
 }
 
-// 5. Ask — use the HTTP API (POST /ask, SSE stream)
-const res = await fetch("http://localhost:3000/api/v1/ask", {
-  method: "POST",
-  headers: { "X-Api-Key": process.env.KYRO_KEY, "Content-Type": "application/json" },
-  body: JSON.stringify({
-    question:     "What are the termination conditions?",
-    collectionId: collectionId,
-    stream:       false,
-  }),
-});
-const { answer, sources } = await res.json();`,
+// 5. Ask — grounded answer with source citations
+const { answer, sources } = await kyro.ask({
+  question:     "What are the termination conditions?",
+  collectionId: collectionId,
+});`,
                   "sdk-workflow",
                 )}
             >
@@ -2333,24 +2353,12 @@ const { answer, sources } = await res.json();`,
               >(file.id));
 {"}"}
 
-<span class="c-comment">// 5. Ask — use the HTTP API (POST /ask, SSE stream)</span>
-<span class="ck">const</span> res = <span class="ck">await</span
-              > <span class="cs">fetch</span>(<span class="cs"
-                >"http://localhost:3000/api/v1/ask"</span
-              >, {"{"}
-  method: <span class="cs">"POST"</span>,
-  headers: {"{"} <span class="cs">"X-Api-Key"</span>: process.env.<span
-                class="ck">KYRO_KEY</span>, <span class="cs"
-                >"Content-Type"</span
-              >: <span class="cs">"application/json"</span> {"}"},
-  body: JSON.<span class="cs">stringify</span>({"{"} 
-    question:     <span class="cs">"What are the termination conditions?"</span>,
-    collectionId: collectionId,
-    stream:       <span class="ck">false</span>,
-  {"}"}),
-{"}"});
+<span class="c-comment">// 5. Ask — grounded answer with source citations</span>
 <span class="ck">const</span> {"{ answer, sources }"} = <span class="ck">await</span
-              > res.<span class="cs">json</span>();</code
+              > kyro.<span class="cs">ask</span>({"{"}
+  question:     <span class="cs">"What are the termination conditions?"</span>,
+  collectionId: collectionId,
+{"}"});</code
             ></pre>
         </div>
       </section>
@@ -2361,12 +2369,14 @@ const { answer, sources } = await res.json();`,
         <p class="section-desc">
           All file operations live on <code>kyro.files</code>. The ingest
           pipeline (extract → chunk → embed) runs automatically on upload —
-          failed files re-run via <code>POST /files/:id/reprocess</code>, and
-          search/ask live on the HTTP API (see below).
+          failed files re-run via <code>kyro.files.reprocess()</code>, and
+          search/ask are client methods (<code>kyro.search</code>,
+          <code>kyro.ask</code>, <code>kyro.askStream</code> — see
+          <a href="#sdk-search-ask">SDK · Search &amp; Ask</a>).
         </p>
 
         <div class="sdk-method-list">
-          {#each [{ name: "kyro.files.upload(blob, filename)", desc: "Upload a file. Returns the file record including its ID and initial status. PDF, DOCX, DOC and TXT are extracted; CSV and JSON are stored with status \"skipped\"; other types are rejected with 415.", example: `const file = await kyro.files.upload(blob, "contract.pdf");\n// file.id, file.status` }, { name: "kyro.files.list(limit?, cursor?)", desc: "Paginated file list. Pass pagination.nextCursor as the cursor argument to fetch the next page.", example: `const { data, pagination } = await kyro.files.list(50);\nif (pagination.hasMore) {\n  const next = await kyro.files.list(50, pagination.nextCursor);\n}` }, { name: "kyro.files.download(fileId)", desc: "Download the original file as a Blob.", example: `const blob = await kyro.files.download(fileId);` }, { name: "kyro.files.delete(fileId)", desc: "Soft-delete a file and remove it from disk.", example: `await kyro.files.delete(fileId);` }, { name: "kyro.files.getText(fileId)", desc: "Get the file's pipeline status and extracted text. Poll this after upload to know when the file is queryable.", example: `const { status, extractedText } = await kyro.files.getText(fileId);\n// status: "pending" | "processing" | "ready" | "failed" | "skipped"` }, { name: "kyro.files.setMetadata(fileId, meta)", desc: "Upsert arbitrary key-value metadata on a file. Non-destructive — keys not in the payload are left untouched.", example: `await kyro.files.setMetadata(fileId, {\n  matter_number: "M-2024-001",\n  document_type: "contract",\n});` }, { name: "kyro.files.getMetadata(fileId)", desc: "Return all metadata keys and values for a file.", example: `const meta = await kyro.files.getMetadata(fileId);` }, { name: "kyro.files.deleteMetadataKey(fileId, key)", desc: "Remove a single metadata key.", example: `await kyro.files.deleteMetadataKey(fileId, "counterparty");` }] as method}
+          {#each [{ name: "kyro.files.upload(blob, filename)", desc: "Upload a file. Returns the file record including its ID and initial status. PDF, DOCX and TXT are extracted; CSV and JSON are stored with status \"skipped\"; other types are rejected with 415.", example: `const file = await kyro.files.upload(blob, "contract.pdf");\n// file.id, file.status` }, { name: "kyro.files.list(limit?, cursor?)", desc: "Paginated file list. Pass pagination.nextCursor as the cursor argument to fetch the next page.", example: `const { data, pagination } = await kyro.files.list(50);\nif (pagination.hasMore) {\n  const next = await kyro.files.list(50, pagination.nextCursor);\n}` }, { name: "kyro.files.download(fileId)", desc: "Download the original file as a Blob.", example: `const blob = await kyro.files.download(fileId);` }, { name: "kyro.files.delete(fileId)", desc: "Delete a file permanently — the record, its chunks, metadata and collection memberships, and the blob on disk all go. There is no soft-delete.", example: `await kyro.files.delete(fileId);\\n// { message: "File deleted", id }` }, { name: "kyro.files.getText(fileId)", desc: "Get the file's pipeline status and extracted text. Poll this after upload to know when the file is queryable.", example: `const { status, extractedText } = await kyro.files.getText(fileId);\n// status: "pending" | "processing" | "ready" | "failed" | "skipped"` }, { name: "kyro.files.reprocess(fileId)", desc: "Set the file back to \"pending\" and re-run the full pipeline (extract → chunk → embed). Use after a failure — or to pick up a new extractor.", example: `await kyro.files.reprocess(fileId);\n// Sets the file back to "pending" and re-runs extraction + embedding` }, { name: "kyro.files.setMetadata(fileId, meta)", desc: "Upsert arbitrary key-value metadata on a file. Non-destructive — keys not in the payload are left untouched.", example: `await kyro.files.setMetadata(fileId, {\n  matter_number: "M-2024-001",\n  document_type: "contract",\n});` }, { name: "kyro.files.getMetadata(fileId)", desc: "Return all metadata keys and values for a file.", example: `const meta = await kyro.files.getMetadata(fileId);` }, { name: "kyro.files.deleteMetadataKey(fileId, key)", desc: "Remove a single metadata key.", example: `await kyro.files.deleteMetadataKey(fileId, "counterparty");` }] as method}
             <div class="sdk-entry">
               <div class="sdk-entry-header">
                 <code class="sdk-sig">{method.name}</code>
@@ -2400,7 +2410,7 @@ const { answer, sources } = await res.json();`,
         </p>
 
         <div class="sdk-method-list">
-          {#each [{ name: "kyro.collections.create({ name, description? })", desc: "Create a new collection. Name must be unique within your org.", example: `const col = await kyro.collections.create({\n  name:        "Q4 Contracts",\n  description: "All contracts signed in Q4 2024",\n});` }, { name: "kyro.collections.list()", desc: "List all collections. Each item includes fileCount, embeddedCount, pendingCount, and failedCount.", example: `const collections = await kyro.collections.list();` }, { name: "kyro.collections.get(collectionId)", desc: "Get a collection with full status. col.queryReady is true when all files are embedded.", example: `const col = await kyro.collections.get(collectionId);\n// col.queryReady — true when ready to search` }, { name: "kyro.collections.update(collectionId, { name?, description? })", desc: "Update collection name or description.", example: `await kyro.collections.update(collectionId, { name: "Q4 Agreements" });` }, { name: "kyro.collections.delete(collectionId)", desc: "Delete a collection. Does not delete the files themselves.", example: `await kyro.collections.delete(collectionId);` }, { name: "kyro.collections.addFiles(collectionId, { fileIds })", desc: "Add up to 100 files to a collection in one call.", example: `await kyro.collections.addFiles(collectionId, {\n  fileIds: [fileId1, fileId2],\n});` }, { name: "kyro.collections.listFiles(collectionId)", desc: "List files in a collection with per-file embedding status.", example: `const { data } = await kyro.collections.listFiles(collectionId);\n// data[i].embeddingStatus` }, { name: "kyro.collections.removeFile(collectionId, fileId)", desc: "Remove a file from a collection without deleting it.", example: `await kyro.collections.removeFile(collectionId, fileId);` }] as method}
+          {#each [{ name: "kyro.collections.create({ name, description? })", desc: "Create a new collection. Name is required (1–255 chars); description is optional (up to 2000 chars). Duplicate names within an org are allowed.", example: `const col = await kyro.collections.create({\n  name:        "Q4 Contracts",\n  description: "All contracts signed in Q4 2024",\n});` }, { name: "kyro.collections.list()", desc: "List all collections. Each item includes fileCount, embeddedCount, pendingCount, and failedCount.", example: `const collections = await kyro.collections.list();` }, { name: "kyro.collections.get(collectionId)", desc: "Get a collection with full status. col.queryReady is true when all files are embedded.", example: `const col = await kyro.collections.get(collectionId);\n// col.queryReady — true when ready to search` }, { name: "kyro.collections.update(collectionId, { name?, description? })", desc: "Update collection name or description.", example: `await kyro.collections.update(collectionId, { name: "Q4 Agreements" });` }, { name: "kyro.collections.delete(collectionId)", desc: "Delete a collection. Does not delete the files themselves.", example: `await kyro.collections.delete(collectionId);` }, { name: "kyro.collections.addFiles(collectionId, { fileIds })", desc: "Add up to 100 files to a collection in one call.", example: `await kyro.collections.addFiles(collectionId, {\n  fileIds: [fileId1, fileId2],\n});` }, { name: "kyro.collections.listFiles(collectionId, limit?, offset?)", desc: "List files in a collection, offset-paginated. Each row carries the file's unified pipeline status.", example: `const { data, pagination } = await kyro.collections.listFiles(collectionId, 20, 0);\n// offset-paginated: pagination is { total, limit, offset, hasMore }\n// data[i].status — per-file pipeline status` }, { name: "kyro.collections.removeFile(collectionId, fileId)", desc: "Remove a file from a collection without deleting it.", example: `await kyro.collections.removeFile(collectionId, fileId);` }] as method}
             <div class="sdk-entry">
               <div class="sdk-entry-header">
                 <code class="sdk-sig">{method.name}</code>
@@ -2415,6 +2425,42 @@ const { answer, sources } = await res.json();`,
                       copy(method.example, `sdk-col-${method.name}`)}
                   >
                     {copiedId === `sdk-col-${method.name}` ? "✓" : "copy"}
+                  </button>
+                </div>
+                <pre><code>{method.example}</code></pre>
+              </div>
+            </div>
+          {/each}
+        </div>
+      </section>
+
+      <!-- SDK SEARCH & ASK -->
+      <section id="sdk-search-ask" class="doc-section">
+        <h2 class="section-title">SDK · Search &amp; Ask</h2>
+        <p class="section-desc">
+          Retrieval and question answering are client methods. Scope with
+          <code>collectionId</code> or <code>fileIds</code> — passing both
+          throws a client-side <code>TypeError</code> before any request — or
+          omit both for org-wide. <code>filters</code> (AND across keys, OR
+          across values) combines with either scope.
+        </p>
+
+        <div class="sdk-method-list">
+          {#each [{ name: "kyro.search({ query })", desc: "Hybrid retrieval — pgvector cosine fused with ts_rank via Reciprocal Rank Fusion (k = 60). Returns chunk-level rows ranked by rrfScore: a small number, higher is better, no minimum-score filter. limit defaults to 10; the server caps it at 50.", example: `const { data, query, limit } = await kyro.search({ query: "force majeure clause" });\n// data[i]: { fileId, fileName, chunkIndex, content, rrfScore }` }, { name: "kyro.search({ query, collectionId | fileIds })", desc: "Scope to one collection or to specific files. The two are mutually exclusive — passing both throws before any request.", example: `await kyro.search({\n  query:        "termination rights",\n  collectionId: collectionId,\n});\n\nawait kyro.search({\n  query:   "payment terms",\n  fileIds: [fileId1, fileId2],\n});` }, { name: "kyro.search({ query, filters })", desc: "Metadata filters: a single string is an exact match, an array is an OR match. AND across keys, OR across values — combinable with collectionId or fileIds.", example: `const res = await kyro.search({\n  query: "indemnification obligations",\n  filters: {\n    document_type: "contract",                     // exact match\n    matter_number: ["M-2024-001", "M-2024-002"],   // OR match\n  },\n});` }, { name: "kyro.ask({ question })", desc: "Grounded answer with source citations. topK defaults to 8 (1–20); the question is 1–2000 chars. Sources carry fileId, fileName, chunkIndex, content and rrfScore.", example: `const { answer, sources } = await kyro.ask({\n  question:     "What is the total contract value across all agreements?",\n  collectionId: collectionId,\n});\n// sources[i]: { fileId, fileName, chunkIndex, content, rrfScore }` }, { name: "kyro.ask({ question, history })", desc: "Follow-up questions: pass the last turns as history (max 10, content 1–2000 chars each). History is replayed to the LLM verbatim — read-only context that never affects retrieval.", example: `const { answer } = await kyro.ask({\n  question:     "Who are the parties?",\n  collectionId: collectionId,\n});\n\nconst followUp = await kyro.ask({\n  question:     "Which of them indemnifies the other?",\n  collectionId: collectionId,\n  history: [\n    { role: "user",      content: "Who are the parties?" },\n    { role: "assistant", content: answer },\n  ],\n});` }, { name: "kyro.askStream({ question })", desc: "Streaming variant: an async iterable of SSE events. One sources frame opens the stream, chunk frames carry the answer text, done ends it, and error arrives in-band if the LLM fails after the stream is open.", example: `for await (const event of kyro.askStream({ question: "Summarise the key risks." })) {\n  switch (event.type) {\n    case "sources": console.log("Sources:", event.sources); break;\n    case "chunk":   process.stdout.write(event.text);       break;\n    case "done":    console.log("\\nDone");                  break;\n    case "error":   console.error("Error:", event.message); break;\n  }\n}` }] as method}
+            <div class="sdk-entry">
+              <div class="sdk-entry-header">
+                <code class="sdk-sig">{method.name}</code>
+              </div>
+              <p class="sdk-entry-desc">{method.desc}</p>
+              <div class="code-block">
+                <div class="code-toolbar">
+                  <span class="code-lang">typescript</span>
+                  <button
+                    class="copy-btn"
+                    onclick={() =>
+                      copy(method.example, `sdk-search-ask-${method.name}`)}
+                  >
+                    {copiedId === `sdk-search-ask-${method.name}` ? "✓" : "copy"}
                   </button>
                 </div>
                 <pre><code>{method.example}</code></pre>
@@ -2614,7 +2660,7 @@ const { answer, sources } = await res.json();`,
               class="copy-btn"
               onclick={() =>
                 copy(
-                  `import {\n  KyroApiError,\n  KyroAuthError,\n  KyroNotFoundError,\n  KyroRateLimitError,\n  KyroQuotaError,\n  KyroValidationError,\n} from "kyro-sdk";\n\ntry {\n  await kyro.files.upload(blob, "file.pdf");\n} catch (err) {\n  if (err instanceof KyroAuthError)      { /* 401 — invalid or missing API key */ }\n  if (err instanceof KyroQuotaError)     { /* 403 — storage quota exceeded */ }\n  if (err instanceof KyroNotFoundError)  { /* 404 — resource not found */ }\n  if (err instanceof KyroRateLimitError) { /* 429 — slow down */ setTimeout(retry, err.retryAfter * 1000); }\n  if (err instanceof KyroValidationError){ /* 400 — bad input */ console.error(err.details); }\n  if (err instanceof KyroApiError)       { /* catch-all */ console.error(err.status, err.message); }\n}`,
+                  `import {\n  KyroApiError,\n  KyroAuthError,\n  KyroConflictError,\n  KyroFileTooLargeError,\n  KyroForbiddenError,\n  KyroNotFoundError,\n  KyroRateLimitError,\n  KyroServiceUnavailableError,\n  KyroStorageLimitError,\n  KyroUnprocessableError,\n  KyroUnsupportedMediaTypeError,\n  KyroValidationError,\n} from "@kyroinfra/kyro";\n\ntry {\n  await kyro.files.upload(blob, "file.pdf");\n} catch (err) {\n  if (err instanceof KyroAuthError) {\n    // 401 — invalid or missing API key\n  } else if (err instanceof KyroForbiddenError) {\n    // 403 — the API key lacks the required scope\n  } else if (err instanceof KyroStorageLimitError) {\n    // 507 — deployment storage cap reached\n  } else if (err instanceof KyroNotFoundError) {\n    // 404 — file or resource not found\n  } else if (err instanceof KyroRateLimitError) {\n    // 429 — slow down; err.retryAfter is the wait in seconds\n    if (err.retryAfter) setTimeout(retry, err.retryAfter * 1000);\n  } else if (err instanceof KyroValidationError) {\n    // 400 — bad input; err.details has per-field messages\n    console.error(err.details);\n  } else if (err instanceof KyroConflictError) {\n    // 409 — a duplicate or conflicting resource\n  } else if (err instanceof KyroFileTooLargeError) {\n    // 413 — upload exceeds the size limit\n  } else if (err instanceof KyroUnsupportedMediaTypeError) {\n    // 415 — unsupported content type (err.data.supportedTypes)\n  } else if (err instanceof KyroUnprocessableError) {\n    // 422 — the requested scope resolves to nothing\n  } else if (err instanceof KyroServiceUnavailableError) {\n    // 503 — server busy or a degraded dependency\n  } else if (err instanceof KyroApiError) {\n    // catch-all for anything unexpected\n    console.error(err.status, err.code, err.message);\n  }\n}`,
                   "sdk-errors-ex",
                 )}
             >
@@ -2623,41 +2669,80 @@ const { answer, sources } = await res.json();`,
           </div>
           <pre><code
               ><span class="ck">import</span> {"{"}
-  KyroApiError, KyroAuthError, KyroNotFoundError,
-  KyroRateLimitError, KyroQuotaError, KyroValidationError,
-{"}"} <span class="ck">from</span> <span class="cs">"kyro-sdk"</span>;
+  KyroApiError,
+  KyroAuthError,
+  KyroConflictError,
+  KyroFileTooLargeError,
+  KyroForbiddenError,
+  KyroNotFoundError,
+  KyroRateLimitError,
+  KyroServiceUnavailableError,
+  KyroStorageLimitError,
+  KyroUnprocessableError,
+  KyroUnsupportedMediaTypeError,
+  KyroValidationError,
+{"}"} <span class="ck">from</span> <span class="cs">"@kyroinfra/kyro"</span>;
 
-<span class="ck">try</span> {"{"} 
+<span class="ck">try</span> {"{"}
   <span class="ck">await</span> kyro.files.<span class="cs">upload</span
               >(blob, <span class="cs">"file.pdf"</span>);
-{"}"} <span class="ck">catch</span> (err) {"{"} 
+{"}"} <span class="ck">catch</span> (err) {"{"}
   <span class="ck">if</span> (err <span class="ck">instanceof</span
-              > KyroAuthError)       {"{"} <span class="c-comment"
-                >/* 401 — invalid or missing API key */</span
+              > KyroAuthError) {"{"}
+    <span class="c-comment">/* 401 — invalid or missing API key */</span
               > {"}"}
-  <span class="ck">if</span> (err <span class="ck">instanceof</span
-              > KyroQuotaError)      {"{"} <span class="c-comment"
-                >/* 403 — storage quota exceeded */</span
+  <span class="ck">else if</span> (err <span class="ck">instanceof</span
+              > KyroForbiddenError) {"{"}
+    <span class="c-comment">/* 403 — the API key lacks the required scope */</span
               > {"}"}
-  <span class="ck">if</span> (err <span class="ck">instanceof</span
-              > KyroNotFoundError)   {"{"} <span class="c-comment"
-                >/* 404 — resource not found */</span
+  <span class="ck">else if</span> (err <span class="ck">instanceof</span
+              > KyroStorageLimitError) {"{"}
+    <span class="c-comment">/* 507 — deployment storage cap reached */</span
               > {"}"}
-  <span class="ck">if</span> (err <span class="ck">instanceof</span
-              > KyroRateLimitError)  {"{"} <span class="c-comment"
-                >/* 429 — check err.retryAfter */</span
+  <span class="ck">else if</span> (err <span class="ck">instanceof</span
+              > KyroNotFoundError) {"{"}
+    <span class="c-comment">/* 404 — file or resource not found */</span
+              > {"}"}
+  <span class="ck">else if</span> (err <span class="ck">instanceof</span
+              > KyroRateLimitError) {"{"}
+    <span class="c-comment">/* 429 — slow down; err.retryAfter is the wait in seconds */</span
               >
     <span class="cs">setTimeout</span>(retry, err.retryAfter * <span class="cs"
                 >1000</span
-              >); {"}"}
-  <span class="ck">if</span> (err <span class="ck">instanceof</span
-              > KyroValidationError) {"{"} <span class="c-comment"
-                >/* 400 — err.details has field errors */</span
+              >);
+  {"}"}
+  <span class="ck">else if</span> (err <span class="ck">instanceof</span
+              > KyroValidationError) {"{"}
+    <span class="c-comment">/* 400 — bad input; err.details has per-field messages */</span
+              >
+    <span class="cs">console.error</span>(err.details);
+  {"}"}
+  <span class="ck">else if</span> (err <span class="ck">instanceof</span
+              > KyroConflictError) {"{"}
+    <span class="c-comment">/* 409 — a duplicate or conflicting resource */</span
               > {"}"}
-  <span class="ck">if</span> (err <span class="ck">instanceof</span
-              > KyroApiError)        {"{"} <span class="c-comment"
-                >/* catch-all */</span
+  <span class="ck">else if</span> (err <span class="ck">instanceof</span
+              > KyroFileTooLargeError) {"{"}
+    <span class="c-comment">/* 413 — upload exceeds the size limit */</span
               > {"}"}
+  <span class="ck">else if</span> (err <span class="ck">instanceof</span
+              > KyroUnsupportedMediaTypeError) {"{"}
+    <span class="c-comment">/* 415 — unsupported content type (err.data.supportedTypes) */</span
+              > {"}"}
+  <span class="ck">else if</span> (err <span class="ck">instanceof</span
+              > KyroUnprocessableError) {"{"}
+    <span class="c-comment">/* 422 — the requested scope resolves to nothing */</span
+              > {"}"}
+  <span class="ck">else if</span> (err <span class="ck">instanceof</span
+              > KyroServiceUnavailableError) {"{"}
+    <span class="c-comment">/* 503 — server busy or a degraded dependency */</span
+              > {"}"}
+  <span class="ck">else if</span> (err <span class="ck">instanceof</span
+              > KyroApiError) {"{"}
+    <span class="c-comment">/* catch-all for anything unexpected */</span
+              >
+    <span class="cs">console.error</span>(err.status, err.code, err.message);
+  {"}"}
 {"}"}</code
             ></pre>
         </div>
@@ -2670,7 +2755,7 @@ const { answer, sources } = await res.json();`,
               ></thead
             >
             <tbody>
-              {#each [["KyroAuthError", "401", "Missing or invalid API key"], ["KyroQuotaError", "403", "Storage quota exceeded"], ["KyroNotFoundError", "404", "File, collection, or resource not found"], ["KyroValidationError", "400", "Bad input — err.details has per-field messages"], ["KyroRateLimitError", "429", "Rate limit hit — err.retryAfter is seconds to wait"], ["KyroApiError", "any", "Catch-all for any other API error — err.status and err.code available"]] as row}
+              {#each [["KyroValidationError", "400", "Bad input — err.details has per-field messages"], ["KyroAuthError", "401", "Missing or invalid API key"], ["KyroForbiddenError", "403", "The API key lacks the required scope"], ["KyroNotFoundError", "404", "File, collection, or resource not found"], ["KyroConflictError", "409", "The file's ingest pipeline is already running"], ["KyroFileTooLargeError", "413", "Upload exceeds the 100 MB size limit"], ["KyroUnsupportedMediaTypeError", "415", "Unsupported content type — err.data.supportedTypes lists what is accepted"], ["KyroUnprocessableError", "422", "The requested scope resolves to nothing"], ["KyroRateLimitError", "429", "Rate limit hit — err.retryAfter is seconds to wait"], ["KyroServiceUnavailableError", "503", "Server busy or a degraded dependency"], ["KyroStorageLimitError", "507", "Deployment storage cap reached"], ["KyroApiError", "any", "Catch-all — err.status, err.code and err.message available"]] as row}
                 <tr
                   >{#each row as cell}<td>{cell}</td>{/each}</tr
                 >
@@ -2696,8 +2781,9 @@ const { answer, sources } = await res.json();`,
             <div class="step-body">
               <h4>Start the stack</h4>
               <p class="section-desc" style="margin-bottom: 10px">
-                One command brings up Postgres, nginx, and the Kyro api —
-                migrations run at api startup under a Postgres advisory lock.
+                One command brings up Postgres, nginx, the Kyro api, and the
+                web dashboard — migrations run at api startup under a Postgres
+                advisory lock.
               </p>
               <div class="code-block">
                 <div class="code-toolbar">
@@ -2856,7 +2942,7 @@ write  — upload, delete and reprocess files; manage collections</code
                 in-process pipeline immediately — the file moves through
                 <code>pending → processing → ready</code> (or
                 <code>failed</code>, with the reason in <code>files.error</code>).
-                Supported types: <strong>PDF, DOCX, DOC, TXT</strong>; CSV and
+                Supported types: <strong>PDF, DOCX, TXT</strong>; CSV and
                 JSON are stored without extraction (<code>skipped</code>).
               </p>
             </div>
@@ -3140,10 +3226,14 @@ for await (const event of parseSSE(res)) {
         <h2 class="section-title">Rate Limiting</h2>
         <p class="section-desc">
           The default limit is 100 requests per minute per API key, enforced by
-          an in-memory sliding window inside each api process. Replicas do not
-          share a budget — a documented trade-off of the no-Redis architecture.
-          When the window is exhausted the api answers <code>429</code> with a
-          <code>retryAfter</code> value in seconds.
+          an in-memory sliding window inside each api process. It applies to
+          the <code>files</code>, <code>search</code> and <code>ask</code>
+          routes — <code>collections</code> is not rate-limited — and
+          Bearer-JWT requests (which carry no API key) are keyed by client IP
+          instead. Replicas do not share a budget — a documented trade-off of
+          the no-Redis architecture. When the window is exhausted the api
+          answers <code>429</code> with a <code>retryAfter</code> value in
+          seconds.
         </p>
 
         <div class="rate-card">
